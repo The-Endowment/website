@@ -34,6 +34,7 @@ export function SiteFooter() {
         <span className="footer-links">
           <a href={links.x}>X</a>
           <a href={links.github}>Source code</a>
+          <Link href="/security">Security</Link>
           <Link href="/build">For projects</Link>
           <a href="/endowment-guide.md">Guide</a>
           <a href={links.stonkfun}>$PENIS on stonk.fun</a>

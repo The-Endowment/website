@@ -147,6 +147,13 @@ export default function Home() {
                   <a href={links.x}>@PenisEndowment</a>.
                 </span>
               </li>
+              <li>
+                <strong>Security reviewed</strong>
+                <span>
+                  Three rounds of AI-assisted adversarial review and a live launch rehearsal.{" "}
+                  <Link href="/security">See the review</Link>.
+                </span>
+              </li>
             </ul>
           </div>
         </section>
