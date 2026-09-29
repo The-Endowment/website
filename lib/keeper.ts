@@ -41,6 +41,7 @@ import {
   flagshipConfig,
   LEGACY_TOKEN_PROGRAM,
   listLandlords,
+  MAX_VAULT_DAYS_OF_BUYS,
   MIN_ATTEST_SPACING_SECS,
   MIN_DELEGATION,
   parsePool,
@@ -238,6 +239,11 @@ export async function runSweeps(k: Keeper) {
     readPool(k, config),
     listLandlords(k.rpc, k.inst.program, k.inst.config),
   ]);
+  // The contract clips sweeps so the vault never holds more than MAX_VAULT_DAYS_OF_BUYS
+  // days of buys; once it's full, a sweep moves nothing, so don't pay for one.
+  const vault = await fetchMaybeToken(k.rpc, await ata(authority, k.inst.dividendMint, k.inst.dividendTokenProgram));
+  const cap = config.params.maxBuyPerDay * BigInt(MAX_VAULT_DAYS_OF_BUYS);
+  if (vault.exists && vault.data.amount >= cap) return { skipped: "vault full (waiting for buys)", vault: vault.data.amount.toString() };
   const tokens = await Promise.all(rows.map((r) => fetchMaybeToken(k.rpc, r.record.dividendAccount)));
   const due = rows.filter((row, i) => {
     const token = tokens[i];
@@ -324,10 +330,15 @@ export async function runBuy(k: Keeper) {
   const keeperDividend = await ata(k.signer.address, k.inst.dividendMint, k.inst.dividendTokenProgram);
   const lpVault = await ata(authority, poolAccounts.lpMint, LEGACY_TOKEN_PROGRAM);
   const coinVault = await ata(authority, k.inst.coinMint, k.inst.coinTokenProgram);
-  // The flagship's vault, derived exactly as the program derives it (pinned constants).
+  // The flagship's vault, derived exactly as the program derives it (pinned constants). The
+  // program only checks it for an endowment that donates; any other passes it read-only and
+  // unchecked, so a missing flagship setting must not stop those buys.
+  const donates = config.donationBps > 0;
   const flagship = await flagshipConfig();
-  if (!flagship) throw new Error("Flagship config unknown");
-  const flagshipVault = await ata(await authorityPda(k.inst.program, flagship), k.inst.dividendMint, k.inst.dividendTokenProgram);
+  if (donates && !flagship) throw new Error("Flagship config unknown");
+  const flagshipVault = flagship
+    ? await ata(await authorityPda(k.inst.program, flagship), k.inst.dividendMint, k.inst.dividendTokenProgram)
+    : authority;
 
   const setup: Instruction[] = [
     getCreateAssociatedTokenIdempotentInstruction({
@@ -347,7 +358,7 @@ export async function runBuy(k: Keeper) {
     }),
   ];
   const buy = (minOut: bigint) =>
-    buybackIx(k.inst, config.pool, poolAccounts, k.signer, keeperDividend, flagshipVault, config.donationBps > 0, minOut);
+    buybackIx(k.inst, config.pool, poolAccounts, k.signer, keeperDividend, flagshipVault, donates, minOut);
 
   // Simulate with no minimum, reading the coin vault afterwards.
   const coinBefore = await fetchMaybeToken(k.rpc, coinVault);

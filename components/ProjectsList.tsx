@@ -59,7 +59,10 @@ export function ProjectsList() {
               <div className="muted small">{keys(e)}</div>
             </td>
             <td className="num">
-              {bpsToPercent(e.committedBps)}% <span className="muted small">of {bpsToPercent(e.activateBps)}%</span>
+              {bpsToPercent(e.committedBps)}%{" "}
+              <span className="muted small">
+                {e.activateBps > 0 ? `of ${bpsToPercent(e.activateBps)}%` : "(no threshold)"}
+              </span>
             </td>
             <td className="num">{formatTokens(BigInt(e.coinBought))}</td>
             <td className="num">{e.active ? "On" : "Off"}</td>

@@ -95,6 +95,8 @@ export const DISC = {
 export const COUNT_INTERVAL_SECS = 24 * 60 * 60;
 export const COUNT_TIMEOUT_SECS = 4 * 60 * 60;
 export const ACTIVE_MAX_AGE_SECS = 3 * 24 * 60 * 60;
+/** Match `MAX_VAULT_DAYS_OF_BUYS`: sweeps stop filling the dividend vault past this many days of buys. */
+export const MAX_VAULT_DAYS_OF_BUYS = 3;
 /** Match `REQUIRED_ATTESTATIONS` and `MIN_ATTEST_SPACING_SECS`: a landlord counts after this many spaced refresher reads. */
 export const REQUIRED_ATTESTATIONS = 3;
 export const MIN_ATTEST_SPACING_SECS = 30 * 60;
