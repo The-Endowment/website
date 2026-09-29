@@ -230,6 +230,8 @@ const configDecoder = getStructDecoder([
   ["totalLpTokens", getU64Decoder()],
   ["totalTips", getU64Decoder()],
   ["totalDonated", getU64Decoder()],
+  /** Bumped whenever the refresher changes; reads from an earlier epoch don't count (FC-R3-03). */
+  ["refresherEpoch", getU32Decoder()],
 ]);
 
 const landlordDecoder = getStructDecoder([
@@ -252,6 +254,8 @@ const landlordDecoder = getStructDecoder([
   /** Spaced refresher reads since its last count; it counts at REQUIRED_ATTESTATIONS. */
   ["attestations", getU8Decoder()],
   ["lastAttestedAt", getI64Decoder()],
+  /** The config's `refresherEpoch` when those reads were made. */
+  ["attestationEpoch", getU32Decoder()],
 ]);
 
 function hasDiscriminator(bytes: Uint8Array, disc: number[]) {
@@ -260,6 +264,18 @@ function hasDiscriminator(bytes: Uint8Array, disc: number[]) {
 
 export type EndowmentConfig = ReturnType<typeof configDecoder.decode>;
 export type LandlordRecord = ReturnType<typeof landlordDecoder.decode>;
+
+/** A landlord's refresher reads, as the program counts them: only those made under the current refresher. */
+export function attestationsOf(config: EndowmentConfig, record: LandlordRecord): number {
+  return record.attestationEpoch === config.refresherEpoch ? record.attestations : 0;
+}
+
+/** The buy allowance right now, refilled as the program refills it (`math::refill`). */
+export function refilledAllowance(config: EndowmentConfig, now: number): bigint {
+  const elapsed = BigInt(Math.max(0, now - Number(config.allowanceUpdatedAt)));
+  const refilled = config.buyAllowance + (elapsed * config.params.maxBuyPerDay) / BigInt(86_400);
+  return refilled < config.params.maxBuyPerTx ? refilled : config.params.maxBuyPerTx;
+}
 
 export function decodeConfig(bytes: Uint8Array): EndowmentConfig | null {
   return hasDiscriminator(bytes, DISC.configAccount) ? configDecoder.decode(bytes) : null;
@@ -406,11 +422,14 @@ export async function buybackIx(
   flagshipDividendVault: Address,
   /**
    * Only a donating endowment passes the flagship's vault writable (audit
-   * R2-ISO-09), and the flagship's coin mint after it (R3-MINT-03).
+   * R2-ISO-09), then the flagship's coin mint (R3-MINT-03) and config, whose
+   * vault cap limits the donation (R3-MINT-01).
    */
   donates: boolean,
+  flagshipConfigAddress: Address | null,
   minOut: bigint,
 ) {
+  if (donates && !flagshipConfigAddress) throw new Error("A donating buy needs the flagship config");
   const authority = await authorityPda(inst.program, inst.config);
   const [cpmmAuthority] = await getProgramDerivedAddress({
     programAddress: CPMM_PROGRAM,
@@ -444,7 +463,12 @@ export async function buybackIx(
       { address: inst.coinTokenProgram, role: R },
       { address: LEGACY_TOKEN_PROGRAM, role: R },
       { address: TOKEN_2022_PROGRAM_ADDRESS, role: R },
-      ...(donates ? [{ address: PROGRAM_FLAGSHIP_COIN_MINT, role: R }] : []),
+      ...(donates && flagshipConfigAddress
+        ? [
+            { address: PROGRAM_FLAGSHIP_COIN_MINT, role: R },
+            { address: flagshipConfigAddress, role: R },
+          ]
+        : []),
     ],
     getU64Encoder().encode(minOut) as Uint8Array,
   );

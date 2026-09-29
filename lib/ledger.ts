@@ -1,5 +1,5 @@
 import { type Address } from "@solana/kit";
-import { decodeConfig, fetchDecoded, listLandlords, REQUIRED_ATTESTATIONS } from "@/lib/endowment";
+import { attestationsOf, decodeConfig, fetchDecoded, listLandlords, REQUIRED_ATTESTATIONS } from "@/lib/endowment";
 import { flagshipInstance, readRpc } from "@/lib/solana";
 
 export type LedgerRow = {
@@ -47,7 +47,7 @@ export async function loadLedger(): Promise<Ledger> {
       round: Number(record.countedRound),
       countedRaw: record.countedAmount,
       recorded: (record.snapshotValid ? record.snapshot : BigInt(0)).toString(),
-      checks: Math.min(record.attestations, REQUIRED_ATTESTATIONS),
+      checks: Math.min(attestationsOf(config, record), REQUIRED_ATTESTATIONS),
       required: REQUIRED_ATTESTATIONS,
     }))
     .sort((a, b) => (b.countedRaw > a.countedRaw ? 1 : b.countedRaw < a.countedRaw ? -1 : 0))

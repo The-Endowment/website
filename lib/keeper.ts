@@ -28,6 +28,7 @@ import {
 import {
   ACTIVE_MAX_AGE_SECS,
   ata,
+  attestationsOf,
   authorityPda,
   base64ToBytes,
   beginCountIx,
@@ -47,6 +48,7 @@ import {
   parsePool,
   PROGRAM_ERRORS,
   pruneLandlordIx,
+  refilledAllowance,
   refreshLandlordsIx,
   REQUIRED_ATTESTATIONS,
   sweepIx,
@@ -325,6 +327,16 @@ export async function runBuy(k: Keeper) {
   const authority = await authorityPda(k.inst.program, k.inst.config);
   const vault = await fetchMaybeToken(k.rpc, await ata(authority, k.inst.dividendMint, k.inst.dividendTokenProgram));
   if (!vault.exists || vault.data.amount < config.params.minBuyAmount) return { skipped: "below the minimum buy" };
+  // The paced daily allowance, refilled as the program refills it: while it's
+  // below the minimum buy (or empty) the program would refuse, so skip the
+  // simulation and say when it will have refilled enough.
+  const allowance = refilledAllowance(config, now);
+  const needed = config.params.minBuyAmount > BigInt(0) ? config.params.minBuyAmount : BigInt(1);
+  if (allowance < needed) {
+    const perDay = config.params.maxBuyPerDay > BigInt(0) ? config.params.maxBuyPerDay : BigInt(1);
+    const wait = Number(((needed - allowance) * BigInt(86_400) + perDay - BigInt(1)) / perDay);
+    return { skipped: "daily allowance used", allowance: allowance.toString(), nextAttemptAfter: now + wait };
+  }
 
   const poolAccounts = await readPool(k, config);
   const keeperDividend = await ata(k.signer.address, k.inst.dividendMint, k.inst.dividendTokenProgram);
@@ -358,7 +370,7 @@ export async function runBuy(k: Keeper) {
     }),
   ];
   const buy = (minOut: bigint) =>
-    buybackIx(k.inst, config.pool, poolAccounts, k.signer, keeperDividend, flagshipVault, donates, minOut);
+    buybackIx(k.inst, config.pool, poolAccounts, k.signer, keeperDividend, flagshipVault, donates, flagship, minOut);
 
   // Simulate with no minimum, reading the coin vault afterwards.
   const coinBefore = await fetchMaybeToken(k.rpc, coinVault);
@@ -442,9 +454,12 @@ export async function runRefresh(k: Keeper, force = false) {
 
 // ---- The daily commitment count (audit M-07, KW-04, R3-RF-03) ----
 
-/** Whether the refresher may add a read to this landlord now (`count::refresh_landlords`). */
-const readDue = (l: LandlordRow, now: number) =>
-  l.record.attestations === 0 || now - Number(l.record.lastAttestedAt) >= MIN_ATTEST_SPACING_SECS;
+/**
+ * Whether the refresher may add a read to this landlord now (`count::refresh_landlords`).
+ * Reads from an earlier refresher epoch are reset, so the next read always lands.
+ */
+const readDue = (config: EndowmentConfig, l: LandlordRow, now: number) =>
+  attestationsOf(config, l.record) === 0 || now - Number(l.record.lastAttestedAt) >= MIN_ATTEST_SPACING_SECS;
 
 /**
  * Run the daily count, resumably, within one invocation's time budget. When a
@@ -484,7 +499,9 @@ export async function runCount(k: Keeper) {
     );
   let pending = await expected();
   // Top up landlords still short of their reads (R3-RF-03), then re-read them.
-  const short = pending.filter((l) => l.record.attestations < REQUIRED_ATTESTATIONS && readDue(l, nowSecs()));
+  const short = pending.filter(
+    (l) => attestationsOf(config, l.record) < REQUIRED_ATTESTATIONS && readDue(config, l, nowSecs()),
+  );
   if (isRefresher && short.length > 0 && !refresh) {
     refresh = await refreshPass(k, deadline - 25_000, short);
     pending = await expected();
