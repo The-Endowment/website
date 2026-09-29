@@ -25,6 +25,9 @@ function keys(e: EndowmentSummary) {
   if (e.pendingChange) out.push("change pending");
   if (e.noRefresher) out.push("no refresher");
   else if (e.refresherIsCreator) out.push("creator checks the count");
+  else out.push(e.renounced ? "refresher checks the count (can resign)" : "refresher checks the count");
+  out.push(`price band ±${bpsToPercent(e.priceBandBps)}%`);
+  if (e.mintAuthorities.length > 0) out.push(`${e.mintAuthorities.join(", ")} (can pause buys)`);
   return out.join(" · ");
 }
 
@@ -53,7 +56,7 @@ export function ProjectsList() {
               </a>
               {e.flagship && <span className="flagship">flagship</span>}
               {e.flagshipLookalike && <span className="tag">not the $PENIS Endowment</span>}
-              {!e.flagship && <div className="muted small">{keys(e)}</div>}
+              <div className="muted small">{keys(e)}</div>
             </td>
             <td className="num">
               {bpsToPercent(e.committedBps)}% <span className="muted small">of {bpsToPercent(e.activateBps)}%</span>

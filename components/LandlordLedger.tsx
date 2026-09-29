@@ -46,7 +46,7 @@ export function LandlordLedger() {
               <th>Wallet</th>
               <th className="num">Counted</th>
               <th className="num">Recorded $PENIS</th>
-              <th className="num">Checked since</th>
+              <th className="num">Checks</th>
             </tr>
           </thead>
           <tbody>
@@ -62,15 +62,17 @@ export function LandlordLedger() {
                   {r.round > 0 && r.round !== ledger.round && <span className="tag">#{r.round}</span>}
                 </td>
                 <td className="num">{formatTokens(BigInt(r.recorded))}</td>
-                <td className="num">{r.attested ? "Yes" : "Not yet"}</td>
+                <td className="num">
+                  {r.checks} of {r.required}
+                </td>
               </tr>
             ))}
           </tbody>
         </table>
         <p className="muted small">
           Counted: what the wallet counted for when it was last read. Recorded: the most its next count can credit, which
-          only goes down between counts. Checked since: read by the endowment&rsquo;s refresher since its last count,
-          which a wallet needs in order to count.
+          only goes down between counts. Checks: reads by the endowment&rsquo;s refresher since the last count, at
+          least 30 minutes apart. A wallet counts once it has {ledger.rows[0]?.required ?? 3}.
         </p>
       </div>
     </section>

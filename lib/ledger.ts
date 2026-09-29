@@ -1,5 +1,5 @@
 import { type Address } from "@solana/kit";
-import { decodeConfig, fetchDecoded, listLandlords } from "@/lib/endowment";
+import { decodeConfig, fetchDecoded, listLandlords, REQUIRED_ATTESTATIONS } from "@/lib/endowment";
 import { flagshipInstance, readRpc } from "@/lib/solana";
 
 export type LedgerRow = {
@@ -9,8 +9,9 @@ export type LedgerRow = {
   counted: string;
   /** Its recorded $PENIS: the most its next count can credit (lowered by any refresh since). */
   recorded: string;
-  /** Read by the endowment's refresher since its last count: required to count. */
-  attested: boolean;
+  /** Checks by the endowment's refresher since its last count; it counts once this reaches `required`. */
+  checks: number;
+  required: number;
 };
 
 export type Ledger =
@@ -46,7 +47,8 @@ export async function loadLedger(): Promise<Ledger> {
       round: Number(record.countedRound),
       countedRaw: record.countedAmount,
       recorded: (record.snapshotValid ? record.snapshot : BigInt(0)).toString(),
-      attested: record.attested,
+      checks: Math.min(record.attestations, REQUIRED_ATTESTATIONS),
+      required: REQUIRED_ATTESTATIONS,
     }))
     .sort((a, b) => (b.countedRaw > a.countedRaw ? 1 : b.countedRaw < a.countedRaw ? -1 : 0))
     .map(({ countedRaw, ...r }) => ({ ...r, counted: countedRaw.toString() }));

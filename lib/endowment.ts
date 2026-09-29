@@ -86,14 +86,35 @@ export const DISC = {
   countLandlords: [16, 55, 45, 27, 207, 59, 13, 48],
   finishCount: [226, 69, 229, 200, 228, 181, 186, 170],
   refreshLandlords: [29, 213, 34, 6, 109, 63, 210, 36],
+  resignRefresher: [91, 64, 75, 203, 145, 81, 19, 146],
   configAccount: [155, 12, 170, 224, 30, 250, 204, 130],
   landlordAccount: [84, 167, 79, 195, 204, 84, 46, 152],
 };
 
 /** Match `COUNT_INTERVAL_SECS`, `COUNT_TIMEOUT_SECS` and `ACTIVE_MAX_AGE_SECS` in the program's constants. */
 export const COUNT_INTERVAL_SECS = 24 * 60 * 60;
-export const COUNT_TIMEOUT_SECS = 2 * 60 * 60;
+export const COUNT_TIMEOUT_SECS = 4 * 60 * 60;
 export const ACTIVE_MAX_AGE_SECS = 3 * 24 * 60 * 60;
+/** Match `REQUIRED_ATTESTATIONS` and `MIN_ATTEST_SPACING_SECS`: a landlord counts after this many spaced refresher reads. */
+export const REQUIRED_ATTESTATIONS = 3;
+export const MIN_ATTEST_SPACING_SECS = 30 * 60;
+
+/** The program's error codes the keeper reports by name (anchor: 6000 + index in `EndowmentError`). */
+export const PROGRAM_ERRORS: Record<number, string> = {
+  6008: "NothingToBuy",
+  6011: "PriceImpactTooHigh",
+  6012: "SlippageExceeded",
+  6013: "BuyTooSoon",
+  6028: "FeeTooHigh",
+  6029: "TransferHookEnabled",
+  6030: "TwapUnavailable",
+  6031: "PriceAboveTwap",
+  6032: "PoolSwapDisabled",
+  6041: "VaultFrozen",
+  6048: "PriceBelowTwap",
+  6049: "FloorAboveQuote",
+  6050: "NotAttested",
+};
 /** Match `MIN_DELEGATION` (u64::MAX / 2). */
 export const MIN_DELEGATION = BigInt("9223372036854775807");
 export const DEFAULT_ADDRESS = address("11111111111111111111111111111111");
@@ -143,6 +164,7 @@ const paramsDecoder = getStructDecoder([
   ["maxBuyPerTx", getU64Decoder()],
   ["maxBuyPerDay", getU64Decoder()],
   ["maxPriceImpactBps", getU16Decoder()],
+  ["maxTwapDeviationBps", getU16Decoder()],
   ["minBuyAmount", getU64Decoder()],
   ["minBuyIntervalSecs", getI64Decoder()],
   ["tipBps", getU16Decoder()],
@@ -225,7 +247,9 @@ const landlordDecoder = getStructDecoder([
   ["countedAmount", getU64Decoder()],
   ["snapshot", getU64Decoder()],
   ["snapshotValid", getBooleanDecoder()],
-  ["attested", getBooleanDecoder()],
+  /** Spaced refresher reads since its last count; it counts at REQUIRED_ATTESTATIONS. */
+  ["attestations", getU8Decoder()],
+  ["lastAttestedAt", getI64Decoder()],
 ]);
 
 function hasDiscriminator(bytes: Uint8Array, disc: number[]) {
@@ -378,7 +402,10 @@ export async function buybackIx(
   caller: TransactionSigner,
   callerDividendAccount: Address,
   flagshipDividendVault: Address,
-  /** Only a donating endowment passes the flagship's vault writable (audit R2-ISO-09). */
+  /**
+   * Only a donating endowment passes the flagship's vault writable (audit
+   * R2-ISO-09), and the flagship's coin mint after it (R3-MINT-03).
+   */
   donates: boolean,
   minOut: bigint,
 ) {
@@ -415,6 +442,7 @@ export async function buybackIx(
       { address: inst.coinTokenProgram, role: R },
       { address: LEGACY_TOKEN_PROGRAM, role: R },
       { address: TOKEN_2022_PROGRAM_ADDRESS, role: R },
+      ...(donates ? [{ address: PROGRAM_FLAGSHIP_COIN_MINT, role: R }] : []),
     ],
     getU64Encoder().encode(minOut) as Uint8Array,
   );
@@ -449,7 +477,8 @@ export function finishCountIx(inst: Instance) {
 
 /**
  * Decrease-only re-read of landlords' balances. Signed by the endowment's
- * refresher, it also attests them: only attested landlords count.
+ * refresher, it also attests them: a landlord counts after REQUIRED_ATTESTATIONS
+ * such reads, at least MIN_ATTEST_SPACING_SECS apart.
  */
 export function refreshLandlordsIx(inst: Instance, caller: TransactionSigner, landlords: LandlordRow[]) {
   return ix(inst.program, DISC.refreshLandlords, [
@@ -461,6 +490,11 @@ export function refreshLandlordsIx(inst: Instance, caller: TransactionSigner, la
       { address: l.record.dividendAccount, role: R },
     ]),
   ]);
+}
+
+/** The refresher gives up its role at once (works after the admin renounces too). */
+export function resignRefresherIx(inst: Instance, refresher: TransactionSigner) {
+  return ix(inst.program, DISC.resignRefresher, [signer(refresher, false), { address: inst.config, role: W }]);
 }
 
 export async function pruneLandlordIx(inst: Instance, landlord: LandlordRow) {

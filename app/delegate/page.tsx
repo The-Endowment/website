@@ -100,9 +100,10 @@ export default function Delegate() {
               <li>
                 <strong>Checked between counts</strong>
                 <span>
-                  Between counts the endowment&rsquo;s refresher reads every landlord at unannounced times. A wallet counts
-                  only if it was read, still delegated, since its last count, so the same $PENIS can&rsquo;t be counted in
-                  two wallets.
+                  Several times a day, at unannounced times, the endowment&rsquo;s refresher reads every landlord at once. A
+                  wallet counts after three of these checks since its last count, each finding it still delegated, and
+                  only for the lowest balance any of them saw. $PENIS moved between wallets counts once, and every check
+                  is public on-chain.
                 </span>
               </li>
               <li>

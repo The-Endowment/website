@@ -8,6 +8,7 @@ import {
   getBase64EncodedWireTransaction,
   getSignatureFromTransaction,
   pipe,
+  type Base64EncodedWireTransaction,
   setTransactionMessageFeePayerSigner,
   setTransactionMessageLifetimeUsingBlockhash,
   signTransactionMessageWithSigners,
@@ -40,16 +41,20 @@ import {
   flagshipConfig,
   LEGACY_TOKEN_PROGRAM,
   listLandlords,
+  MIN_ATTEST_SPACING_SECS,
   MIN_DELEGATION,
   parsePool,
+  PROGRAM_ERRORS,
   pruneLandlordIx,
   refreshLandlordsIx,
+  REQUIRED_ATTESTATIONS,
   sweepIx,
   type EndowmentConfig,
   type Instance,
   type LandlordRow,
   type PoolAccounts,
 } from "@/lib/endowment";
+import { deviationBps, reservedFees, spotPriceX32, twapPriceX32, x32ToNumber } from "@/lib/price";
 import { flagshipInstance } from "@/lib/solana";
 
 type Rpc = ReturnType<typeof createSolanaRpc>;
@@ -86,8 +91,8 @@ const BUDGET_MS = 50_000;
 /** At most this many transactions in flight at once. */
 const PARALLEL = 10;
 
-/** Signs and sends without waiting for confirmation; returns the signature. */
-async function submit(k: Keeper, ixs: Instruction[], computeUnits = 400_000): Promise<string> {
+/** Builds and signs one transaction. */
+async function sign(k: Keeper, ixs: Instruction[], computeUnits = 400_000) {
   const { value: blockhash } = await k.rpc.getLatestBlockhash().send();
   const budget = [
     getSetComputeUnitLimitInstruction({ units: computeUnits }),
@@ -100,10 +105,14 @@ async function submit(k: Keeper, ixs: Instruction[], computeUnits = 400_000): Pr
     (m) => appendTransactionMessageInstructions([...budget, ...ixs], m),
   );
   const signed = await signTransactionMessageWithSigners(message);
-  await k.rpc
-    .sendTransaction(getBase64EncodedWireTransaction(signed), { encoding: "base64", skipPreflight: false })
-    .send();
-  return getSignatureFromTransaction(signed);
+  return { wire: getBase64EncodedWireTransaction(signed), signature: getSignatureFromTransaction(signed) as string };
+}
+
+/** Signs and sends without waiting for confirmation; returns the signature. */
+async function submit(k: Keeper, ixs: Instruction[], computeUnits = 400_000): Promise<string> {
+  const { wire, signature } = await sign(k, ixs, computeUnits);
+  await k.rpc.sendTransaction(wire, { encoding: "base64", skipPreflight: false }).send();
+  return signature;
 }
 
 /** Waits for all of `signatures` together; each is confirmed, or has an error. */
@@ -139,33 +148,36 @@ type Job<T> = { item: T; ixs: Instruction[]; computeUnits: number };
 type Outcome<T> = { item: T; signature?: string; error?: string };
 
 /**
- * Sends every job at once (up to PARALLEL in flight), then confirms them
- * together. Batches of one refresh or count land in the same slot or two,
- * leaving no time to move coin between them.
+ * Sends every job before confirming any (at most PARALLEL submissions in
+ * flight, but never waiting for one wave to land before sending the next),
+ * then confirms them all together. So every batch of a refresh pass or count
+ * lands within a slot or two of the others, leaving no time to move coin
+ * between wallets read in different batches (audit R3-RF-02).
  */
 async function sendAll<T>(k: Keeper, jobs: Job<T>[], deadline: number): Promise<Outcome<T>[]> {
-  const out: Outcome<T>[] = [];
+  const sent: Outcome<T>[] = [];
   for (let i = 0; i < jobs.length && Date.now() < deadline; i += PARALLEL) {
     const wave = jobs.slice(i, i + PARALLEL);
-    const sent = await Promise.all(
-      wave.map((j) =>
-        submit(k, j.ixs, j.computeUnits).then(
-          (signature) => ({ item: j.item, signature }) as Outcome<T>,
-          (e) => ({ item: j.item, error: errMessage(e) }) as Outcome<T>,
+    sent.push(
+      ...(await Promise.all(
+        wave.map((j) =>
+          submit(k, j.ixs, j.computeUnits).then(
+            (signature) => ({ item: j.item, signature }) as Outcome<T>,
+            (e) => ({ item: j.item, error: errMessage(e) }) as Outcome<T>,
+          ),
         ),
-      ),
+      )),
     );
-    const confirmed = await confirmAll(
-      k,
-      sent.flatMap((s) => (s.signature ? [s.signature] : [])),
-      deadline,
-    );
-    for (const s of sent) {
-      const err = s.signature ? confirmed.get(s.signature) : s.error;
-      out.push(err ? { item: s.item, signature: s.signature, error: err } : s);
-    }
   }
-  return out;
+  const confirmed = await confirmAll(
+    k,
+    sent.flatMap((s) => (s.signature ? [s.signature] : [])),
+    deadline,
+  );
+  return sent.map((s) => {
+    const err = s.signature ? confirmed.get(s.signature) : s.error;
+    return err ? { item: s.item, signature: s.signature, error: err } : s;
+  });
 }
 
 const errMessage = (e: unknown) => (e instanceof Error ? e.message : String(e));
@@ -251,14 +263,51 @@ export async function runSweeps(k: Keeper) {
   return { due: due.length, signatures, failures };
 }
 
-// ---- Buys (audit I-14, KW-11) ----
+// ---- Buys (audit I-14, KW-11, R3-TW-02) ----
+
+/** Slack under the simulated fill for `min_out` (1%). */
+const MIN_OUT_SLACK_BPS = BigInt(100);
+
+/** The program error in a simulation or send failure, by name where known. */
+function programError(err: unknown) {
+  const text = JSON.stringify(err, (_, v) => (typeof v === "bigint" ? v.toString() : v));
+  const code = Number(/"Custom":\s*"?(\d+)/.exec(text)?.[1]);
+  return Number.isFinite(code) ? (PROGRAM_ERRORS[code] ?? `error ${code}`) : text;
+}
+
+/** Spot, TWAP and their deviation, as the program reads them, for the log of a skipped buy. */
+async function priceReport(k: Keeper, config: EndowmentConfig, pool: PoolAccounts) {
+  const dividendIndex = pool.mints[0] === k.inst.dividendMint ? 0 : 1;
+  const [poolInfo, observation, dividendVault, coinVault] = await Promise.all([
+    k.rpc.getAccountInfo(config.pool, { encoding: "base64" }).send(),
+    k.rpc.getAccountInfo(pool.observation, { encoding: "base64" }).send(),
+    fetchMaybeToken(k.rpc, pool.vaults[dividendIndex]),
+    fetchMaybeToken(k.rpc, pool.vaults[1 - dividendIndex]),
+  ]);
+  if (!poolInfo.value || !observation.value || !dividendVault.exists || !coinVault.exists) return null;
+  const poolBytes = base64ToBytes(poolInfo.value.data[0]);
+  const spot = spotPriceX32(
+    dividendVault.data.amount - reservedFees(poolBytes, dividendIndex),
+    coinVault.data.amount - reservedFees(poolBytes, 1 - dividendIndex),
+  );
+  const twap = twapPriceX32(base64ToBytes(observation.value.data[0]), dividendIndex, BigInt(nowSecs()));
+  return {
+    spot: spot === null ? null : x32ToNumber(spot),
+    twap: twap === null ? null : x32ToNumber(twap),
+    deviationBps: spot !== null && twap !== null ? deviationBps(spot, twap) : null,
+    bandBps: config.params.maxTwapDeviationBps,
+  };
+}
 
 /**
  * Attempt one buyback once the contract's minimum interval has passed and the
- * vault holds at least the minimum buy. Anyone can call buyback, so the keeper
- * doesn't try to hide its timing: the protection is on-chain. The contract sizes
- * the buy and prices it against the pool's recorded time-weighted average; its
- * floor already enforces the worst acceptable fill, so min_out is 0.
+ * vault holds at least the minimum buy. Scheduled every 5 minutes: the pool's
+ * price is often outside the band for a while, so frequent attempts catch the
+ * windows when it's inside. Each attempt is simulated first; if the contract
+ * would refuse it, nothing is sent and the response logs spot, TWAP and their
+ * deviation. Otherwise it's sent with `min_out` at the simulated fill less 1%,
+ * so a caller can't be made to fill much worse than the pool's price right now
+ * (the contract's own TWAP floor still applies on top).
  */
 export async function runBuy(k: Keeper) {
   const config = await readConfig(k);
@@ -274,12 +323,13 @@ export async function runBuy(k: Keeper) {
   const poolAccounts = await readPool(k, config);
   const keeperDividend = await ata(k.signer.address, k.inst.dividendMint, k.inst.dividendTokenProgram);
   const lpVault = await ata(authority, poolAccounts.lpMint, LEGACY_TOKEN_PROGRAM);
+  const coinVault = await ata(authority, k.inst.coinMint, k.inst.coinTokenProgram);
   // The flagship's vault, derived exactly as the program derives it (pinned constants).
   const flagship = await flagshipConfig();
   if (!flagship) throw new Error("Flagship config unknown");
   const flagshipVault = await ata(await authorityPda(k.inst.program, flagship), k.inst.dividendMint, k.inst.dividendTokenProgram);
 
-  const ixs: Instruction[] = [
+  const setup: Instruction[] = [
     getCreateAssociatedTokenIdempotentInstruction({
       payer: k.signer,
       owner: k.signer.address,
@@ -295,9 +345,31 @@ export async function runBuy(k: Keeper) {
       ata: lpVault,
       tokenProgram: LEGACY_TOKEN_PROGRAM,
     }),
-    await buybackIx(k.inst, config.pool, poolAccounts, k.signer, keeperDividend, flagshipVault, config.donationBps > 0, BigInt(0)),
   ];
-  return { signature: await send(k, ixs, 600_000) };
+  const buy = (minOut: bigint) =>
+    buybackIx(k.inst, config.pool, poolAccounts, k.signer, keeperDividend, flagshipVault, config.donationBps > 0, minOut);
+
+  // Simulate with no minimum, reading the coin vault afterwards.
+  const coinBefore = await fetchMaybeToken(k.rpc, coinVault);
+  const { wire } = await sign(k, [...setup, await buy(BigInt(0))], 600_000);
+  const sim = await k.rpc
+    .simulateTransaction(wire as Base64EncodedWireTransaction, {
+      encoding: "base64",
+      sigVerify: false,
+      replaceRecentBlockhash: true,
+      accounts: { addresses: [coinVault], encoding: "base64" },
+    })
+    .send();
+  if (sim.value.err) {
+    return { skipped: programError(sim.value.err), price: await priceReport(k, config, poolAccounts) };
+  }
+  const after = sim.value.accounts?.[0];
+  const before = coinBefore.exists ? coinBefore.data.amount : BigInt(0);
+  const afterAmount = after ? new DataView(base64ToBytes(after.data[0]).buffer).getBigUint64(64, true) : before;
+  const simulated = afterAmount > before ? afterAmount - before : BigInt(0);
+  const minOut = (simulated * (BigInt(10_000) - MIN_OUT_SLACK_BPS)) / BigInt(10_000);
+  const signature = await send(k, [...setup, await buy(minOut)], 600_000);
+  return { signature, simulatedOut: simulated.toString(), minOut: minOut.toString() };
 }
 
 // ---- The refresher's pass (the anti-shuffle attestation) ----
@@ -307,14 +379,17 @@ const BATCH = 8;
 const batchUnits = (n: number) => 30_000 + 15_000 * n;
 
 /**
- * The refresher reads every landlord, all batches sent together, and a failed
- * batch is retried one landlord at a time. Only attested landlords count, so
- * this must run between counts; the keeper runs it at random times through the
- * day and right before each count. If this keeper isn't the endowment's
- * refresher, its refreshes still lower recorded balances but attest nothing.
+ * The refresher reads every landlord (or those given), in a fresh random order,
+ * every batch sent before any is confirmed, and a failed batch is retried one
+ * landlord at a time. A landlord counts only after REQUIRED_ATTESTATIONS such
+ * reads at least MIN_ATTEST_SPACING_SECS apart since its last count, so the
+ * keeper runs several independently shuffled passes a day at random times, and
+ * tops up landlords still short of reads when a count is open. If this keeper
+ * isn't the endowment's refresher, its refreshes still lower recorded balances
+ * but attest nothing.
  */
-async function refreshPass(k: Keeper, deadline: number) {
-  const landlords = await listLandlords(k.rpc, k.inst.program, k.inst.config);
+async function refreshPass(k: Keeper, deadline: number, only?: LandlordRow[]) {
+  const landlords = only ?? (await listLandlords(k.rpc, k.inst.program, k.inst.config));
   const jobs = chunk(shuffled(landlords), BATCH).map((batch) => ({
     item: batch,
     ixs: [refreshLandlordsIx(k.inst, k.signer, batch)],
@@ -338,10 +413,12 @@ async function refreshPass(k: Keeper, deadline: number) {
 
 /**
  * Called often by the scheduler; each call proceeds only on a secret-seeded
- * random draw (about `KEEPER_REFRESHES_PER_DAY` times a day).
+ * random draw (about `KEEPER_REFRESHES_PER_DAY` times a day), so passes land at
+ * times nobody can predict. The default of 8 leaves plenty of spaced passes
+ * between counts for every landlord to reach its REQUIRED_ATTESTATIONS reads.
  */
 export async function runRefresh(k: Keeper, force = false) {
-  const perDay = Number(process.env.KEEPER_REFRESHES_PER_DAY ?? 6);
+  const perDay = Number(process.env.KEEPER_REFRESHES_PER_DAY ?? 8);
   const tickMinutes = Number(process.env.KEEPER_REFRESH_TICK_MINUTES ?? 15);
   const ticksPerDay = Math.max(1, Math.floor((24 * 60) / tickMinutes));
   const tick = Math.floor(nowSecs() / (tickMinutes * 60));
@@ -352,20 +429,30 @@ export async function runRefresh(k: Keeper, force = false) {
   return { attests, ...(await refreshPass(k, Date.now() + BUDGET_MS)) };
 }
 
-// ---- The daily commitment count (audit M-07, KW-04) ----
+// ---- The daily commitment count (audit M-07, KW-04, R3-RF-03) ----
+
+/** Whether the refresher may add a read to this landlord now (`count::refresh_landlords`). */
+const readDue = (l: LandlordRow, now: number) =>
+  l.record.attestations === 0 || now - Number(l.record.lastAttestedAt) >= MIN_ATTEST_SPACING_SECS;
 
 /**
  * Run the daily count, resumably, within one invocation's time budget. When a
- * count is due: the refresher's pass, then begin (no pruning first: a landlord
- * that no longer qualifies simply counts zero). Then count every landlord the
- * open round still expects, all batches sent together, retrying failures one
- * at a time, and finish once complete or timed out.
+ * count is due: a refresher pass (the contract only lets a round begin after
+ * one), then begin. While a round is open: first refresh every landlord it
+ * still expects that is short of its reads and due another, then count them
+ * all, every batch sent before any is confirmed, retrying failures one at a
+ * time. The contract leaves a landlord still short of reads pending rather
+ * than counting it as zero, and the next call (every 15 minutes) reads it
+ * again, 30 minutes after its last read, until it counts. The round finishes
+ * once complete or timed out. No pruning first: a landlord that no longer
+ * qualifies simply counts zero.
  */
 export async function runCount(k: Keeper) {
   const deadline = Date.now() + BUDGET_MS;
   let config = await readConfig(k);
   const now = nowSecs();
   if (now < Number(config.pausedUntil)) return { skipped: "paused" };
+  const isRefresher = config.params.refresher === k.signer.address;
   const signatures: string[] = [];
   let refresh: Awaited<ReturnType<typeof refreshPass>> | null = null;
 
@@ -374,15 +461,23 @@ export async function runCount(k: Keeper) {
     if (config.count.round > BigInt(0) && now - started < COUNT_INTERVAL_SECS) {
       return { skipped: "counted recently", lastCountAt: Number(config.lastCountAt), nextCountAfter: started + COUNT_INTERVAL_SECS };
     }
-    if (config.params.refresher === k.signer.address) refresh = await refreshPass(k, deadline - 20_000);
+    if (isRefresher) refresh = await refreshPass(k, deadline - 25_000);
     signatures.push(await send(k, [beginCountIx(k.inst)], 40_000));
     config = await readConfig(k);
   }
 
   const round = config.count.round;
-  const pending = (await listLandlords(k.rpc, k.inst.program, k.inst.config)).filter(
-    (l) => l.record.joinedRound < round && l.record.countedRound < round,
-  );
+  const expected = () =>
+    listLandlords(k.rpc, k.inst.program, k.inst.config).then((rows) =>
+      rows.filter((l) => l.record.joinedRound < round && l.record.countedRound < round),
+    );
+  let pending = await expected();
+  // Top up landlords still short of their reads (R3-RF-03), then re-read them.
+  const short = pending.filter((l) => l.record.attestations < REQUIRED_ATTESTATIONS && readDue(l, nowSecs()));
+  if (isRefresher && short.length > 0 && !refresh) {
+    refresh = await refreshPass(k, deadline - 25_000, short);
+    pending = await expected();
+  }
   const outcomes = await sendAll(
     k,
     chunk(shuffled(pending), BATCH).map((batch) => ({
@@ -416,6 +511,8 @@ export async function runCount(k: Keeper) {
     open: final.count.open,
     counted: final.count.counted,
     expected: final.count.expected,
+    // Left for a later call: short of the refresher's reads.
+    waitingForReads: final.count.open ? final.count.expected - final.count.counted : 0,
     committedBps: final.lastCountBps,
     active: final.active,
     refresh,
