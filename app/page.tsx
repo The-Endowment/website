@@ -75,7 +75,7 @@ export default function Home() {
               </li>
               <li>
                 <h3>Compound</h3>
-                <p>It buys $PENIS that stays locked. That $PENIS earns dividends too, which buy more.</p>
+                <p>It buys $PENIS in small amounts and locks it in the vault, where it stays forever.</p>
               </li>
             </ol>
           </div>
@@ -92,17 +92,13 @@ export default function Home() {
             <div className="figures">
               <div className="figure">
                 <span className="figure-value">200,000,000</span>
-                <span className="figure-label">$PENIS from landlord contributions</span>
+                <span className="figure-label">$PENIS, the first milestone</span>
               </div>
               <div className="figure">
                 <span className="figure-value">20%</span>
                 <span className="figure-label">of all $PENIS, held forever</span>
               </div>
             </div>
-            <p>
-              At 200 million, landlord contributions close. The endowment&rsquo;s own dividends keep working forever:
-              part buys more $PENIS, and part becomes permanent liquidity that can never be withdrawn.
-            </p>
           </div>
         </section>
 
