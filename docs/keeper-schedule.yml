@@ -1,0 +1,21 @@
+# Alternative keeper scheduler for projects not on Vercel Pro.
+# Inactive here: copy to .github/workflows/keeper.yml to enable, and add the
+# repository secrets KEEPER_URL (e.g. https://your-site.example) and CRON_SECRET.
+name: keeper
+
+on:
+  schedule:
+    - cron: "*/5 * * * *"
+  workflow_dispatch:
+
+jobs:
+  tick:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Buy
+        run: curl -fsS -H "Authorization: Bearer ${{ secrets.CRON_SECRET }}" "${{ secrets.KEEPER_URL }}/api/keeper/buy" || true
+      - name: Sweep
+        run: curl -fsS -H "Authorization: Bearer ${{ secrets.CRON_SECRET }}" "${{ secrets.KEEPER_URL }}/api/keeper/sweep" || true
+      - name: Count
+        run: curl -fsS -H "Authorization: Bearer ${{ secrets.CRON_SECRET }}" "${{ secrets.KEEPER_URL }}/api/keeper/count" || true

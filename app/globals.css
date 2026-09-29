@@ -92,6 +92,23 @@ button.button-primary { background: var(--bone); }
 .figure-value { font-family: var(--serif); font-size: clamp(40px, 4.4vw, 60px); line-height: 1; }
 .figure-label { font-size: 15px; color: var(--stone); }
 
+/* Commitment bar */
+.commitment { display: flex; flex-direction: column; gap: 14px; border-top: 1px solid var(--rule); padding-top: 28px; }
+.commitment-head { display: flex; align-items: baseline; gap: 16px; flex-wrap: wrap; }
+.bar { height: 6px; border-radius: 3px; background: var(--rule); overflow: hidden; }
+.bar > span { display: block; height: 100%; background: var(--accent); }
+
+/* Two-option layout for the projects page */
+.options { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 40px; }
+.option { display: flex; flex-direction: column; gap: 16px; border-top: 1px solid var(--rule); padding-top: 24px; }
+.option h3 { margin: 0; font-family: var(--serif); font-weight: 400; font-size: 28px; line-height: 1.15; }
+.option ul { margin: 0; padding-left: 20px; color: var(--stone); display: flex; flex-direction: column; gap: 6px; }
+.note { font-size: 15px; color: var(--stone); border-left: 2px solid var(--accent); padding-left: 16px; }
+
+/* Projects table */
+.projects-table td:first-child { font-family: var(--sans); }
+.flagship { margin-left: 10px; font-size: 13px; color: var(--accent); }
+
 /* Pull quote band */
 .band { padding-top: clamp(80px, 10vw, 136px); padding-bottom: clamp(80px, 10vw, 136px); border-bottom: 1px solid var(--rule); display: flex; flex-direction: column; gap: 24px; }
 .band blockquote { margin: 0; font-family: var(--serif); font-size: clamp(40px, 5.4vw, 76px); line-height: 1.02; letter-spacing: -0.01em; max-width: 14em; }
@@ -138,6 +155,7 @@ button.button-primary { background: var(--bone); }
   .nav a:not(.button) { display: none; }
   .hero { grid-template-columns: 1fr; gap: 40px; }
   .hero-art { order: -1; width: 180px; }
+  .options { grid-template-columns: 1fr; }
   .row { grid-template-columns: 1fr; gap: 16px; padding-top: 44px; padding-bottom: 44px; }
   .row-label { padding-top: 0; }
   .steps { grid-template-columns: 1fr; gap: 28px; }

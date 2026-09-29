@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { CopyAddress } from "@/components/CopyAddress";
+import { CommitmentBar } from "@/components/CommitmentBar";
 import { DotLogo } from "@/components/Logo";
 import { links, PENIS_MINT } from "@/lib/site";
 
@@ -10,15 +11,19 @@ const faqs = [
   },
   {
     q: "Is my wallet safe if I opt in?",
-    a: "You delegate one token account: your PUMP. The endowment can move only new PUMP that lands there after you opt in. It can't touch your $PENIS, your SOL, any other token, or PUMP you already held.",
+    a: "You delegate one token account: your PUMP. From then on, new PUMP that arrives there goes to the endowment, whatever its source. It can't touch your $PENIS, your SOL, any other token, or the PUMP you held when you joined. Many landlords use a wallet that holds only $PENIS.",
   },
   {
     q: "Can I leave?",
-    a: "Yes, anytime. Revoke the delegation from any Solana wallet. It's a standard token instruction, so it never depends on this site or on anyone's permission.",
+    a: "Yes, anytime. The Leave button revokes the delegation and removes your landlord record in one step, and revoking works from any Solana wallet without this site or anyone's permission.",
   },
   {
     q: "Who runs it?",
     a: "No one, by design. After a public testing period, the key that can change the contract is destroyed, so no one can ever change its rules or move its $PENIS, including us. Every action is posted publicly, and the endowment has no connection to the coin's creators.",
+  },
+  {
+    q: "What happens at 200 million?",
+    a: "It's a milestone, not an end. Contributions keep flowing, and from then on part of every buy becomes permanent liquidity in the $PENIS pool that can never be withdrawn.",
   },
   {
     q: "Can I check the code?",
@@ -26,7 +31,7 @@ const faqs = [
   },
   {
     q: "When does it open?",
-    a: "It switches on once committed landlords hold 30% of all $PENIS. It opens to the founding landlords first, then to everyone.",
+    a: "Sweeps switch on once committed landlords hold 30% of all $PENIS, as measured by a daily on-chain count. Coin counts once it has been held across a full count, so the number can't be inflated by moving $PENIS between wallets.",
   },
 ];
 
@@ -99,6 +104,10 @@ export default function Home() {
                 <span className="figure-label">of all $PENIS, held forever</span>
               </div>
             </div>
+            <p>
+              After the milestone, contributions keep flowing and part of every buy becomes permanent liquidity that
+              can never be withdrawn.
+            </p>
           </div>
         </section>
 
@@ -117,7 +126,11 @@ export default function Home() {
               </li>
               <li>
                 <strong>The pause is limited</strong>
-                <span>It can&rsquo;t move funds, and it lifts on its own after seven days.</span>
+                <span>It can&rsquo;t move funds, lifts on its own after seven days, and can&rsquo;t be renewed back to back.</span>
+              </li>
+              <li>
+                <strong>Rule changes are announced</strong>
+                <span>Any change to the limits waits 72 hours on-chain before it takes effect.</span>
               </li>
               <li>
                 <strong>Locked forever</strong>
@@ -186,10 +199,10 @@ export default function Home() {
           <div className="row-body">
             <h3 className="statement">Built, tested, and ready for the landlords.</h3>
             <p>
-              The contract is written and tested. It switches on once committed landlords hold 30% of all $PENIS,
-              starting with the founding landlords. The leaderboard and the full ledger go live the same
-              day. Follow <a href={links.x}>@PenisEndowment</a> for the announcement.
+              Sweeps switch on once committed landlords hold 30% of all $PENIS, starting with the founding landlords.
+              Follow <a href={links.x}>@PenisEndowment</a> for the announcement.
             </p>
+            <CommitmentBar />
           </div>
         </section>
 
