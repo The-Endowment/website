@@ -15,9 +15,9 @@ export function SiteHeader() {
           <Link href="/thesis">Thesis</Link>
           <Link href="/#coin">The coin</Link>
           <Link href="/#questions">Questions</Link>
-          <a href={links.x} className="button">
-            Follow
-          </a>
+          <Link href="/delegate" className="button">
+            Delegate
+          </Link>
         </nav>
       </div>
     </header>

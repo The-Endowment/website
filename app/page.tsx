@@ -49,9 +49,9 @@ export default function Home() {
             <Link href="#how" className="button button-primary">
               How it works
             </Link>
-            <a href={links.github} className="button">
-              Read the contract
-            </a>
+            <Link href="/delegate" className="button">
+              Delegate your PUMP
+            </Link>
           </div>
         </div>
         <DotLogo className="hero-art" label="The endowment's mark, a temple drawn in dots" />
