@@ -14,6 +14,10 @@ const faqs = [
     a: "You delegate one token account: your PUMP. From then on, new PUMP that arrives there goes to the endowment, whatever its source. It can't touch your $PENIS, your SOL, any other token, or the PUMP you held when you joined. Many landlords use a wallet that holds only $PENIS.",
   },
   {
+    q: "Can I commit only part of my $PENIS?",
+    a: "Yes. Commitment is per wallet: everything in the wallet you delegate counts, and all new PUMP arriving there goes to the endowment. Keep the $PENIS you want to commit in one wallet and the rest in another.",
+  },
+  {
     q: "Can I leave?",
     a: "Yes, anytime. The Leave button revokes the delegation and removes your landlord record in one step, and revoking works from any Solana wallet without this site or anyone's permission.",
   },
@@ -31,7 +35,7 @@ const faqs = [
   },
   {
     q: "When does it open?",
-    a: "Sweeps switch on once committed landlords hold 30% of all $PENIS, as measured by a daily on-chain count. Coin counts once it has been held across a full count, so the number can't be inflated by moving $PENIS between wallets.",
+    a: "Sweeps switch on once committed landlords hold 30% of all $PENIS, as measured by a daily on-chain count. Coin counts once it has been held across a full count, and every landlord's counted $PENIS is published after each count.",
   },
 ];
 

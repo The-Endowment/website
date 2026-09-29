@@ -2,7 +2,7 @@
 
 The keeper triggers the endowment's permissionless instructions: sweeps, buybacks and the daily commitment count. It holds no special power; its key only pays network fees and receives the buyback tip. Anyone can run one.
 
-Routes: `/api/keeper/sweep`, `/api/keeper/buy`, `/api/keeper/count`, `/api/keeper/health`. Code: `lib/keeper.ts`.
+Routes: `/api/keeper/sweep`, `/api/keeper/buy`, `/api/keeper/count`, `/api/keeper/refresh`, `/api/keeper/health`. Code: `lib/keeper.ts`.
 
 ## Environment variables
 
@@ -18,7 +18,8 @@ Routes: `/api/keeper/sweep`, `/api/keeper/buy`, `/api/keeper/count`, `/api/keepe
 | `KEEPER_JITTER_SECRET` | Optional. Seeds the randomized buy timing (defaults to a hash input derived from the keeper key). |
 | `KEEPER_BUY_JITTER_SECS` | Optional. Random delay added after the contract's minimum buy interval (default 1200). |
 | `KEEPER_PRIORITY_MICROLAMPORTS` | Optional. Priority fee per compute unit (default 5000). |
-| `KEEPER_LOOKUP_TABLE` | Optional. The count's address lookup table. If unset, the keeper finds or creates one it owns. |
+| `KEEPER_REFRESHES_PER_DAY` | Optional. About how many balance refreshes run per day, at random times (default 6). |
+| `KEEPER_REFRESH_TICK_MINUTES` | Optional. How often the refresh route is called by the scheduler (default 15). |
 
 Set secrets with `vercel env add <NAME> production --sensitive`.
 
@@ -32,7 +33,8 @@ Sub-daily Vercel Cron jobs need the Pro plan. Once the project is on Pro, add th
   "crons": [
     { "path": "/api/keeper/buy", "schedule": "*/5 * * * *" },
     { "path": "/api/keeper/sweep", "schedule": "*/15 * * * *" },
-    { "path": "/api/keeper/count", "schedule": "0 * * * *" }
+    { "path": "/api/keeper/count", "schedule": "*/15 * * * *" },
+    { "path": "/api/keeper/refresh", "schedule": "*/15 * * * *" }
   ]
 }
 ```
@@ -40,7 +42,8 @@ Sub-daily Vercel Cron jobs need the Pro plan. Once the project is on Pro, add th
 Vercel sends `Authorization: Bearer $CRON_SECRET` automatically.
 
 - **Buy:** runs every 5 minutes. The job only buys once the vault holds the minimum buy and a randomized time after the last buy has passed, so buys land at irregular times.
-- **Count:** attempted hourly. It runs as soon as 24 hours have passed since the last count, so a strict 24-hour interval never drifts behind a fixed daily schedule.
+- **Count:** attempted every 15 minutes. Once 24 hours have passed since the last round began, it removes landlords that no longer qualify, begins a round, counts landlords in shuffled batches of eight and finishes. If a round is already open (it was interrupted, or someone else began it), it counts whoever is left and finishes, after the two-hour timeout if some can't be counted.
+- **Refresh:** called every 15 minutes, but proceeds only on a secret-seeded random draw, about `KEEPER_REFRESHES_PER_DAY` times a day. It lowers each landlord's recorded balance to its current one, in randomly grouped batches, so coin moved between landlord wallets counts once.
 - **Sweep:** every 15 minutes, as a fallback to the webhook.
 
 Alternative without Vercel Pro: the GitHub Actions workflow in `docs/keeper-schedule.yml` does the same with `curl`. Copy it to `.github/workflows/` and add `KEEPER_URL` and `CRON_SECRET` as repository secrets.
@@ -49,14 +52,15 @@ Alternative without Vercel Pro: the GitHub Actions workflow in `docs/keeper-sche
 
 Create a Helius webhook on the dividend distributor's address (for $PENIS: `HuBMeYW3aDn8BH65fo8xxbP4oiexyup8udzKyccgi8Ga`) that POSTs to `/api/keeper/sweep` with the header `Authorization: Bearer $WEBHOOK_SECRET`. Sweeps then run within seconds of each drop.
 
-## Address lookup table
+## Count cost
 
-The commitment count reads every landlord in one transaction: up to 28 landlords, two accounts each. That only fits under Solana's transaction size limit with an address lookup table. The count job handles this itself: it finds or creates a table owned by the keeper wallet, extends it with any missing roster accounts, waits a slot, and sends the count as a version 0 transaction using the table. After the first run, set `KEEPER_LOOKUP_TABLE` to the table address it reports, to skip the lookup.
+There is no limit on landlords. Each count batch reads eight landlords (three accounts each) in about 47k compute units and fits a normal transaction, so no lookup table is needed. A count of N landlords takes about N/8 transactions.
 
 ## Runbook
 
-- **Health:** `GET /api/keeper/health` reports the age of the last count and `stale: true` if it is over 48 hours. Point an uptime monitor at it.
-- **A count was run by someone else:** nothing to do. The count is atomic and permissionless; the job reports "counted recently".
+- **Health:** `GET /api/keeper/health` reports the current round, whether it is open, how many landlords it has counted, and `stale: true` if the last count is over 48 hours old or a round has been open past its timeout. Point an uptime monitor at it.
+- **A count was run by someone else:** nothing to do. Counting is permissionless; the job continues any open round and otherwise reports "counted recently".
+- **A landlord failed to count:** the response lists it with the error. The round still finishes after its timeout, without that landlord.
 - **A sweep failed:** the response lists failing landlords with the error. Common causes: the landlord revoked, or the endowment is paused or not yet active. Other landlords are unaffected.
 - **Buys skipped:** "below the minimum buy" or "not yet" are normal. Errors about fees, pool state or price mean the contract refused to trade in unsafe conditions. Check the pool and the mints' fee settings.
 - **Keeper low on SOL:** top up the keeper wallet. Tips accrue as PUMP in its PUMP account and can be swapped to SOL as needed.

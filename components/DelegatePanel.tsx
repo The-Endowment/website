@@ -25,18 +25,14 @@ import {
   bpsToPercent,
   decodeConfig,
   decodeLandlord,
-  decodeRoster,
   deregisterLandlordIx,
   fetchDecoded,
   landlordPda,
-  MAX_LANDLORDS,
   registerLandlordIx,
   resyncBaselineIx,
-  rosterPda,
   type EndowmentConfig,
   type Instance,
   type LandlordRecord,
-  type RosterRecord,
 } from "@/lib/endowment";
 import { flagshipInstance, formatTokens, TOKEN_DECIMALS } from "@/lib/solana";
 
@@ -53,7 +49,6 @@ const UNLIMITED = BigInt("18446744073709551615");
 type Status = {
   inst: Instance;
   config: EndowmentConfig;
-  roster: RosterRecord;
   landlord: LandlordRecord | null;
   dividendAccount: Address;
   coinAccount: Address;
@@ -69,15 +64,14 @@ type Status = {
 async function loadStatus(inst: Instance, owner: Address): Promise<Status> {
   const dividendAccount = await ata(owner, inst.dividendMint, inst.dividendTokenProgram);
   const coinAccount = await ata(owner, inst.coinMint, inst.coinTokenProgram);
-  const [config, roster, landlord, dividend, coin, mint] = await Promise.all([
+  const [config, landlord, dividend, coin, mint] = await Promise.all([
     fetchDecoded(client.rpc, inst.config, decodeConfig),
-    fetchDecoded(client.rpc, await rosterPda(inst.program, inst.config), decodeRoster),
     fetchDecoded(client.rpc, await landlordPda(inst.program, inst.config, owner), decodeLandlord),
     fetchMaybeToken(client.rpc, dividendAccount),
     fetchMaybeToken(client.rpc, coinAccount),
     fetchMaybeMint(client.rpc, inst.coinMint),
   ]);
-  if (!config || !roster) throw new Error("The endowment isn't live yet.");
+  if (!config) throw new Error("The endowment isn't live yet.");
   const authority = await authorityPda(inst.program, inst.config);
   const delegate = dividend.exists && isSome(dividend.data.delegate) ? dividend.data.delegate.value : null;
   const coinSupply = mint.exists ? mint.data.supply : BigInt(0);
@@ -85,7 +79,6 @@ async function loadStatus(inst: Instance, owner: Address): Promise<Status> {
   return {
     inst,
     config,
-    roster,
     landlord,
     dividendAccount,
     coinAccount,
@@ -109,17 +102,7 @@ function blocker(s: Status): string | null {
   if (s.coinBalance < s.minStake) {
     return `Landlords hold at least ${formatTokens(s.minStake)} $PENIS (${bpsToPercent(s.config.params.minStakeBps)}% of supply). This wallet holds ${formatTokens(s.coinBalance)}.`;
   }
-  if (!s.landlord && s.roster.entries.length >= MAX_LANDLORDS && !evictionTarget(s)) {
-    return `All ${MAX_LANDLORDS} landlord places are taken by wallets holding more $PENIS than this one.`;
-  }
   return null;
-}
-
-/** When the roster is full, the smallest recorded stake gives way to a larger newcomer. */
-function evictionTarget(s: Status): RosterRecord["entries"][number] | null {
-  if (s.roster.entries.length < MAX_LANDLORDS) return null;
-  const smallest = s.roster.entries.reduce((a, b) => (b.snapshot < a.snapshot ? b : a));
-  return s.coinBalance > smallest.snapshot ? smallest : null;
 }
 
 function Connected({ inst }: { inst: Instance }) {
@@ -171,11 +154,7 @@ function Connected({ inst }: { inst: Instance }) {
       // Coming back: reset the baseline so everything this account holds now stays the landlord's.
       ixs.push(await resyncBaselineIx(inst, signer, status.dividendAccount));
     } else {
-      const target = evictionTarget(status);
-      const evict = target
-        ? { landlord: await landlordPda(inst.program, inst.config, target.owner), owner: target.owner }
-        : null;
-      ixs.push(await registerLandlordIx(inst, signer, status.dividendAccount, status.coinAccount, evict));
+      ixs.push(await registerLandlordIx(inst, signer, status.dividendAccount, status.coinAccount));
     }
     const result = await client.sendTransaction(ixs, { abortSignal: signal });
     await refresh();
@@ -245,8 +224,10 @@ function Connected({ inst }: { inst: Instance }) {
 
       {status && !isIn && (
         <p className="muted small">
-          Once you join, all new PUMP that arrives in this wallet&rsquo;s PUMP account goes to the endowment, whatever
-          its source. The PUMP it holds today stays yours. Many landlords use a wallet that holds only $PENIS.
+          Everything in the wallet you delegate is committed: its $PENIS counts toward the 30%, and all new PUMP that
+          arrives in it goes to the endowment, whatever its source. The PUMP it holds today stays yours. Want to commit
+          part of your holdings? Keep the rest in another wallet. We recommend a wallet that holds only the $PENIS
+          you&rsquo;re committing and no other PUMP.
         </p>
       )}
       {status && status.delegate && !status.delegatedToEndowment && (

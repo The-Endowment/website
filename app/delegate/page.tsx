@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { CommitmentBar } from "@/components/CommitmentBar";
 import { DelegatePanel } from "@/components/DelegatePanel";
+import { LandlordLedger } from "@/components/LandlordLedger";
 import { WalletProvider } from "@/components/WalletClient";
 
 export const metadata: Metadata = {
@@ -28,6 +29,20 @@ export default function Delegate() {
           <WalletProvider>
             <DelegatePanel />
           </WalletProvider>
+        </section>
+
+        <section className="row">
+          <h2 className="row-label">Your wallet is the commitment</h2>
+          <div className="row-body">
+            <p>
+              Everything in the wallet you delegate is committed: its $PENIS counts toward the 30%, and all new PUMP that
+              arrives in it goes to the endowment. Want to commit part of your holdings? Keep the rest in another wallet.
+            </p>
+            <p className="muted small">
+              We recommend a wallet that holds only the $PENIS you&rsquo;re committing and no other PUMP, so everything
+              that arrives there is your $PENIS rent.
+            </p>
+          </div>
         </section>
 
         <section className="row">
@@ -62,26 +77,28 @@ export default function Delegate() {
             <ul className="plain-list">
               <li>
                 <strong>A daily count</strong>
-                <span>Once a day the contract reads every landlord&rsquo;s $PENIS in a single transaction.</span>
+                <span>Once a day the contract reads every landlord&rsquo;s $PENIS. There&rsquo;s no limit on landlords.</span>
               </li>
               <li>
                 <strong>Held, not borrowed</strong>
-                <span>Each landlord counts for the lower of today&rsquo;s balance and the previous count&rsquo;s.</span>
+                <span>
+                  Each landlord counts for the lower of today&rsquo;s balance and the previous count&rsquo;s, so new or
+                  added $PENIS counts from the following day.
+                </span>
               </li>
               <li>
                 <strong>The threshold</strong>
                 <span>Sweeps switch on at 30% of supply committed and pause below 25%.</span>
               </li>
               <li>
-                <strong>Landlord places</strong>
-                <span>
-                  There are 28 places. When they&rsquo;re full, a newcomer holding more $PENIS takes the smallest
-                  landlord&rsquo;s place.
-                </span>
+                <strong>Public tally</strong>
+                <span>Every landlord&rsquo;s counted $PENIS is published on-chain after each count.</span>
               </li>
             </ul>
           </div>
         </section>
+
+        <LandlordLedger />
       </div>
     </>
   );

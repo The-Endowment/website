@@ -21,9 +21,11 @@ An **endowment** takes the idea one step further. Landlords lend it their divide
 
 ## 3. The rules
 
-**Commitment threshold.** Sweeps run only while landlords together hold enough of the coin's supply, 30% by default. Once a day, anyone can run the commitment count. It reads every landlord in a single transaction, so the same coin can never be counted twice. Each landlord counts for the lower of their balance now and at the previous count, so coin must be held across a full day to count, and only landlords whose delegation is still in place are counted. Sweeps switch on at the threshold and pause if commitment falls below a lower line (25% by default), so small changes don't flip them back and forth.
+**Commitment threshold.** Sweeps run only while landlords together hold enough of the coin's supply, 30% by default. Once a day, anyone can run the commitment count. It starts a round, reads every landlord in batches, and closes the round once all are read (or after two hours). Each landlord counts for the lower of their balance now and at their previous reading, so coin must be held across a full day to count, and only landlords whose delegation is still in place are counted. Between counts, anyone can refresh landlords' recorded balances, which can only lower them, so coin moved between landlord wallets counts once. Every landlord's counted amount is published on-chain after each count. Sweeps switch on at the threshold and pause if commitment falls below a lower line (25% by default), so small changes don't flip them back and forth.
 
-**Landlord places.** Each endowment has up to 28 landlord places, so the whole count fits in one transaction. Landlords must hold a minimum stake (0.1% of supply by default). When the places are full, a newcomer holding more takes the place of the smallest landlord.
+**Landlords.** There is no limit on landlords. Each must hold a minimum stake (0.1% of supply by default); anyone can remove a landlord who no longer holds it or has revoked.
+
+**Commitment is per wallet.** Everything in a landlord's wallet is committed: all its coin counts toward the threshold, and all new dividend tokens arriving in it are swept. To commit part of a holding, keep the rest in another wallet.
 
 **Buying.** Each buy is sized by the contract: no larger than the per-buy cap, the daily allowance, or what the pool can absorb within the price-impact limit. Buys are priced against the pool's 10-minute time-weighted average price, and refused if the spot price has been pushed away from it. Buys are spaced by a minimum interval, and a small tip (0.25% by default) pays whoever triggers each buy, which covers the automation's network fees.
 
@@ -37,7 +39,7 @@ An **endowment** takes the idea one step further. Landlords lend it their divide
 
 ## 4. Creating an endowment on the shared contract
 
-The shared contract hosts many endowments. Each one has its own vaults, landlords, settings and roster, keyed by its coin and its creator, and no endowment can touch another's accounts.
+The shared contract hosts many endowments. Each one has its own vaults, landlords, settings and count, keyed by its coin and its creator, and no endowment can touch another's accounts.
 
 **Requirements**
 - A Raydium CPMM pool pairing your coin with the asset it pays as dividends.
@@ -68,7 +70,8 @@ The keeper is a small service that triggers the endowment's permissionless instr
 
 - **Sweeps.** Run after every dividend drop (for example from a webhook on the dividend distributor), with a timer as a fallback. Each landlord is swept on its own, so one failure never blocks the others.
 - **Buys.** Check every few minutes. The keeper waits until the vault holds at least the minimum buy and a randomized time after the last buy has passed, then calls `buyback`. The contract does the sizing and pricing.
-- **Count.** Once a day, run `count_commitment`. It reads every landlord in one transaction, which uses an address lookup table to fit.
+- **Count.** Once a day, run `begin_count`, then `count_landlords` in batches of about eight landlords, then `finish_count`. A batch fits a normal transaction, so no lookup table is needed.
+- **Refresh.** A few times a day, at random times, run `refresh_landlords` over every landlord in randomly grouped batches.
 
 The website repository includes a ready-made keeper with setup notes in `docs/keeper.md`.
 

@@ -9,7 +9,7 @@ import {
   fixDecoderSize,
   getAddressDecoder,
   getAddressEncoder,
-  getArrayDecoder,
+  getBase58Decoder,
   getBooleanDecoder,
   getBytesDecoder,
   getI64Decoder,
@@ -61,15 +61,19 @@ export const DISC = {
   pruneLandlord: [246, 56, 34, 9, 95, 107, 19, 188],
   sweep: [40, 23, 234, 175, 14, 61, 154, 177],
   buyback: [106, 117, 64, 30, 56, 69, 7, 45],
-  countCommitment: [230, 62, 106, 123, 71, 203, 99, 53],
+  beginCount: [119, 0, 58, 85, 81, 17, 62, 91],
+  countLandlords: [16, 55, 45, 27, 207, 59, 13, 48],
+  finishCount: [226, 69, 229, 200, 228, 181, 186, 170],
+  refreshLandlords: [29, 213, 34, 6, 109, 63, 210, 36],
   configAccount: [155, 12, 170, 224, 30, 250, 204, 130],
   landlordAccount: [84, 167, 79, 195, 204, 84, 46, 152],
-  rosterAccount: [211, 108, 170, 22, 253, 177, 162, 194],
+  landlordCountedEvent: [44, 109, 57, 199, 10, 214, 112, 239],
+  commitmentCountedEvent: [164, 226, 102, 0, 197, 218, 219, 86],
 };
 
-/** Matches `MAX_LANDLORDS` and `COUNT_INTERVAL_SECS` in the program's constants. */
-export const MAX_LANDLORDS = 28;
+/** Match `COUNT_INTERVAL_SECS` and `COUNT_TIMEOUT_SECS` in the program's constants. */
 export const COUNT_INTERVAL_SECS = 24 * 60 * 60;
+export const COUNT_TIMEOUT_SECS = 2 * 60 * 60;
 
 const text = new TextEncoder();
 const addressBytes = (a: Address) => getAddressEncoder().encode(a);
@@ -86,7 +90,6 @@ async function pda(program: Address, label: string, ...keys: Address[]) {
 export const configPda = (program: Address, coinMint: Address, creatorKey: Address) =>
   pda(program, "config", coinMint, creatorKey);
 export const authorityPda = (program: Address, config: Address) => pda(program, "authority", config);
-export const rosterPda = (program: Address, config: Address) => pda(program, "roster", config);
 export const landlordPda = (program: Address, config: Address, owner: Address) =>
   pda(program, "landlord", config, owner);
 
@@ -128,7 +131,6 @@ const configDecoder = getStructDecoder([
   ["pool", getAddressDecoder()],
   ["bump", getU8Decoder()],
   ["authorityBump", getU8Decoder()],
-  ["rosterBump", getU8Decoder()],
   ["params", paramsDecoder],
   ["pendingParams", paramsDecoder],
   ["pendingEffectiveAt", getI64Decoder()],
@@ -141,6 +143,19 @@ const configDecoder = getStructDecoder([
   ["lastCountAt", getI64Decoder()],
   ["lastCountBps", getU16Decoder()],
   ["lastCommitted", getU64Decoder()],
+  ["landlordCount", getU32Decoder()],
+  [
+    "count",
+    getStructDecoder([
+      ["round", getU64Decoder()],
+      ["open", getBooleanDecoder()],
+      ["startedAt", getI64Decoder()],
+      ["supply", getU64Decoder()],
+      ["expected", getU32Decoder()],
+      ["counted", getU32Decoder()],
+      ["committed", getU64Decoder()],
+    ]),
+  ],
   ["buyAllowance", getU64Decoder()],
   ["allowanceUpdatedAt", getI64Decoder()],
   ["lastBuyAt", getI64Decoder()],
@@ -167,25 +182,11 @@ const landlordDecoder = getStructDecoder([
   ["registeredAt", getI64Decoder()],
   ["lastSweepAt", getI64Decoder()],
   ["bump", getU8Decoder()],
-]);
-
-const rosterDecoder = getStructDecoder([
-  ["discriminator", fixDecoderSize(getBytesDecoder(), 8)],
-  ["version", getU8Decoder()],
-  ["config", getAddressDecoder()],
-  [
-    "entries",
-    getArrayDecoder(
-      getStructDecoder([
-        ["owner", getAddressDecoder()],
-        ["coinAccount", getAddressDecoder()],
-        ["dividendAccount", getAddressDecoder()],
-        ["snapshot", getU64Decoder()],
-        ["snapshotValid", getBooleanDecoder()],
-      ]),
-      { size: getU32Decoder() },
-    ),
-  ],
+  ["joinedRound", getU64Decoder()],
+  ["countedRound", getU64Decoder()],
+  ["countedAmount", getU64Decoder()],
+  ["snapshot", getU64Decoder()],
+  ["snapshotValid", getBooleanDecoder()],
 ]);
 
 function hasDiscriminator(bytes: Uint8Array, disc: number[]) {
@@ -194,16 +195,12 @@ function hasDiscriminator(bytes: Uint8Array, disc: number[]) {
 
 export type EndowmentConfig = ReturnType<typeof configDecoder.decode>;
 export type LandlordRecord = ReturnType<typeof landlordDecoder.decode>;
-export type RosterRecord = ReturnType<typeof rosterDecoder.decode>;
 
 export function decodeConfig(bytes: Uint8Array): EndowmentConfig | null {
   return hasDiscriminator(bytes, DISC.configAccount) ? configDecoder.decode(bytes) : null;
 }
 export function decodeLandlord(bytes: Uint8Array): LandlordRecord | null {
   return hasDiscriminator(bytes, DISC.landlordAccount) ? landlordDecoder.decode(bytes) : null;
-}
-export function decodeRoster(bytes: Uint8Array): RosterRecord | null {
-  return hasDiscriminator(bytes, DISC.rosterAccount) ? rosterDecoder.decode(bytes) : null;
 }
 
 export function base64ToBytes(b64: string): Uint8Array {
@@ -240,9 +237,6 @@ const signer = (s: TransactionSigner, writable: boolean): Meta => ({
   signer: s,
 });
 
-/** Anchor encodes an absent optional account as the program's own address. */
-const optional = (program: Address, a: Address | null): Meta => ({ address: a ?? program, role: a ? W : R });
-
 export type Instance = {
   program: Address;
   config: Address;
@@ -257,14 +251,12 @@ export async function registerLandlordIx(
   owner: TransactionSigner,
   dividendAccount: Address,
   coinAccount: Address,
-  evict: { landlord: Address; owner: Address } | null,
 ) {
   return ix(inst.program, DISC.registerLandlord, [
     signer(owner, true),
-    { address: inst.config, role: R },
+    { address: inst.config, role: W },
     { address: await authorityPda(inst.program, inst.config), role: R },
     { address: await landlordPda(inst.program, inst.config, owner.address), role: W },
-    { address: await rosterPda(inst.program, inst.config), role: W },
     { address: inst.dividendMint, role: R },
     { address: dividendAccount, role: R },
     { address: inst.coinMint, role: R },
@@ -272,8 +264,6 @@ export async function registerLandlordIx(
     { address: inst.dividendTokenProgram, role: R },
     { address: inst.coinTokenProgram, role: R },
     { address: SYSTEM_PROGRAM, role: R },
-    optional(inst.program, evict?.landlord ?? null),
-    optional(inst.program, evict?.owner ?? null),
   ]);
 }
 
@@ -289,8 +279,7 @@ export async function resyncBaselineIx(inst: Instance, owner: TransactionSigner,
 export async function deregisterLandlordIx(inst: Instance, owner: TransactionSigner) {
   return ix(inst.program, DISC.deregisterLandlord, [
     signer(owner, true),
-    { address: inst.config, role: R },
-    { address: await rosterPda(inst.program, inst.config), role: W },
+    { address: inst.config, role: W },
     { address: await landlordPda(inst.program, inst.config, owner.address), role: W },
   ]);
 }
@@ -376,22 +365,111 @@ export async function buybackIx(
   );
 }
 
-/** The atomic commitment count: every roster entry's coin and dividend account, in roster order. */
-export async function countCommitmentIx(inst: Instance, roster: RosterRecord) {
-  return ix(inst.program, DISC.countCommitment, [
+// ---- The daily commitment count: begin → count landlords in batches → finish ----
+
+export type LandlordRow = { address: Address; record: LandlordRecord };
+
+export function beginCountIx(inst: Instance) {
+  return ix(inst.program, DISC.beginCount, [
     { address: inst.config, role: W },
-    { address: await rosterPda(inst.program, inst.config), role: W },
     { address: inst.coinMint, role: R },
-    ...roster.entries.flatMap((e) => [
-      { address: e.coinAccount, role: R },
-      { address: e.dividendAccount, role: R },
+  ]);
+}
+
+/** Counts a batch of landlords: each as its record, coin account and dividend account. */
+export function countLandlordsIx(inst: Instance, landlords: LandlordRow[]) {
+  return ix(inst.program, DISC.countLandlords, [
+    { address: inst.config, role: W },
+    ...landlords.flatMap((l) => [
+      { address: l.address, role: W },
+      { address: l.record.coinAccount, role: R },
+      { address: l.record.dividendAccount, role: R },
     ]),
   ]);
 }
 
+export function finishCountIx(inst: Instance) {
+  return ix(inst.program, DISC.finishCount, [{ address: inst.config, role: W }]);
+}
+
+/** Decrease-only re-read of landlords' balances between counts. */
+export function refreshLandlordsIx(inst: Instance, landlords: LandlordRow[]) {
+  return ix(inst.program, DISC.refreshLandlords, [
+    { address: inst.config, role: R },
+    ...landlords.flatMap((l) => [
+      { address: l.address, role: W },
+      { address: l.record.coinAccount, role: R },
+    ]),
+  ]);
+}
+
+export async function pruneLandlordIx(inst: Instance, landlord: LandlordRow) {
+  return ix(inst.program, DISC.pruneLandlord, [
+    { address: inst.config, role: W },
+    { address: await authorityPda(inst.program, inst.config), role: R },
+    { address: landlord.address, role: W },
+    { address: landlord.record.owner, role: W },
+    { address: inst.coinMint, role: R },
+    { address: landlord.record.dividendAccount, role: R },
+    { address: landlord.record.coinAccount, role: R },
+  ]);
+}
+
+/** Every landlord of one endowment (getProgramAccounts on the Landlord discriminator and config). */
+export async function listLandlords(rpc: unknown, program: Address, config: Address): Promise<LandlordRow[]> {
+  const discB58 = getBase58Decoder().decode(new Uint8Array(DISC.landlordAccount));
+  type Row = { pubkey: Address; account: { data: [string, string] } };
+  const rows = (await (rpc as { getProgramAccounts: (p: Address, c: unknown) => { send: () => Promise<Row[]> } })
+    .getProgramAccounts(program, {
+      encoding: "base64",
+      filters: [
+        { memcmp: { offset: BigInt(0), bytes: discB58, encoding: "base58" } },
+        // Landlord.config sits right after the discriminator and version byte.
+        { memcmp: { offset: BigInt(9), bytes: config, encoding: "base58" } },
+      ],
+    })
+    .send()) as Row[];
+  return rows
+    .map((r) => ({ address: r.pubkey, record: decodeLandlord(base64ToBytes(r.account.data[0])) }))
+    .filter((r): r is LandlordRow => r.record !== null);
+}
+
+// ---- Events (Anchor "Program data:" logs) ----
+
+export type LandlordCountedEvent = {
+  round: bigint;
+  landlord: Address;
+  owner: Address;
+  counted: bigint;
+  rawBalance: bigint;
+};
+
+const landlordCountedDecoder = getStructDecoder([
+  ["discriminator", fixDecoderSize(getBytesDecoder(), 8)],
+  ["config", getAddressDecoder()],
+  ["round", getU64Decoder()],
+  ["landlord", getAddressDecoder()],
+  ["owner", getAddressDecoder()],
+  ["counted", getU64Decoder()],
+  ["rawBalance", getU64Decoder()],
+]);
+
+/** The LandlordCounted events for `config` in a transaction's log lines. */
+export function landlordCountedFromLogs(logs: readonly string[], config: Address): LandlordCountedEvent[] {
+  const out: LandlordCountedEvent[] = [];
+  for (const line of logs) {
+    if (!line.startsWith("Program data: ")) continue;
+    const bytes = base64ToBytes(line.slice("Program data: ".length));
+    if (!hasDiscriminator(bytes, DISC.landlordCountedEvent)) continue;
+    const e = landlordCountedDecoder.decode(bytes);
+    if (e.config !== config) continue;
+    out.push({ round: e.round, landlord: e.landlord, owner: e.owner, counted: e.counted, rawBalance: e.rawBalance });
+  }
+  return out;
+}
+
 /** Every endowment created on the program, via getProgramAccounts on the Config discriminator. */
 export async function listConfigs(rpc: unknown, program: Address) {
-  const { getBase58Decoder } = await import("@solana/kit");
   const discB58 = getBase58Decoder().decode(new Uint8Array(DISC.configAccount));
   type Row = { pubkey: Address; account: { data: [string, string] } };
   const rows = (await (rpc as { getProgramAccounts: (p: Address, c: unknown) => { send: () => Promise<Row[]> } })

@@ -1,49 +1,35 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import {
-  bpsToPercent,
-  decodeConfig,
-  decodeRoster,
-  fetchDecoded,
-  MAX_LANDLORDS,
-  rosterPda,
-  type EndowmentConfig,
-} from "@/lib/endowment";
+import { bpsToPercent, decodeConfig, fetchDecoded, type EndowmentConfig } from "@/lib/endowment";
 import { flagshipInstance, readRpc } from "@/lib/solana";
-
-type Data = { config: EndowmentConfig; landlords: number };
 
 /**
  * Committed supply from the endowment's last on-chain count, against the
  * threshold that switches sweeps on. Renders nothing before launch.
  */
 export function CommitmentBar() {
-  const [data, setData] = useState<Data | null>(null);
+  const [config, setConfig] = useState<EndowmentConfig | null>(null);
 
   useEffect(() => {
     let cancelled = false;
     (async () => {
       const inst = await flagshipInstance();
       if (!inst) return;
-      const rpc = readRpc();
-      const [config, roster] = await Promise.all([
-        fetchDecoded(rpc, inst.config, decodeConfig),
-        fetchDecoded(rpc, await rosterPda(inst.program, inst.config), decodeRoster),
-      ]);
-      if (!cancelled && config) setData({ config, landlords: roster?.entries.length ?? 0 });
+      const config = await fetchDecoded(readRpc(), inst.config, decodeConfig);
+      if (!cancelled && config) setConfig(config);
     })().catch(() => {});
     return () => {
       cancelled = true;
     };
   }, []);
 
-  if (!data) return null;
-  const { config, landlords } = data;
+  if (!config) return null;
   const committed = config.lastCountBps;
   const threshold = config.params.activateBps;
   const filled = threshold === 0 ? 100 : Math.min(100, (committed / threshold) * 100);
   const lastCount = Number(config.lastCountAt);
+  const landlords = config.landlordCount;
 
   return (
     <div className="commitment">
@@ -57,7 +43,7 @@ export function CommitmentBar() {
         <span style={{ width: `${filled}%` }} />
       </div>
       <p className="muted small">
-        {landlords} of {MAX_LANDLORDS} landlord places filled.
+        {landlords} {landlords === 1 ? "landlord" : "landlords"}.
         {lastCount > 0 ? ` Last counted on-chain ${new Date(lastCount * 1000).toLocaleString()}.` : " The first count runs a day after landlords join."}
       </p>
     </div>

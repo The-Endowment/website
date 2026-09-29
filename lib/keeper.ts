@@ -1,13 +1,11 @@
 import "server-only";
-import { createHmac } from "node:crypto";
+import { createHmac, randomInt } from "node:crypto";
 import {
   appendTransactionMessageInstructions,
-  compressTransactionMessageUsingAddressLookupTables,
   createKeyPairSignerFromBytes,
   createSolanaRpc,
   createTransactionMessage,
   getBase64EncodedWireTransaction,
-  getBase58Decoder,
   getSignatureFromTransaction,
   pipe,
   setTransactionMessageFeePayerSigner,
@@ -18,16 +16,11 @@ import {
   type KeyPairSigner,
 } from "@solana/kit";
 import {
-  ADDRESS_LOOKUP_TABLE_PROGRAM_ADDRESS,
-  fetchMaybeAddressLookupTable,
-  getCreateLookupTableInstructionAsync,
-  getExtendLookupTableInstruction,
-} from "@solana-program/address-lookup-table";
-import {
   getSetComputeUnitLimitInstruction,
   getSetComputeUnitPriceInstruction,
 } from "@solana-program/compute-budget";
 import {
+  fetchMaybeMint,
   fetchMaybeToken,
   getCreateAssociatedTokenIdempotentInstruction,
   TOKEN_2022_PROGRAM_ADDRESS,
@@ -36,21 +29,24 @@ import {
   ata,
   authorityPda,
   base64ToBytes,
+  beginCountIx,
   buybackIx,
   COUNT_INTERVAL_SECS,
-  countCommitmentIx,
+  COUNT_TIMEOUT_SECS,
+  countLandlordsIx,
   decodeConfig,
-  decodeLandlord,
-  decodeRoster,
-  DISC,
   fetchDecoded,
+  finishCountIx,
   flagshipConfig,
   LEGACY_TOKEN_PROGRAM,
+  listLandlords,
   parsePool,
-  rosterPda,
+  pruneLandlordIx,
+  refreshLandlordsIx,
   sweepIx,
   type EndowmentConfig,
   type Instance,
+  type LandlordRow,
 } from "@/lib/endowment";
 import { flagshipInstance } from "@/lib/solana";
 
@@ -85,25 +81,18 @@ export async function loadKeeper(): Promise<Keeper | null> {
 
 // ---- Sending ----
 
-async function send(
-  k: Keeper,
-  ixs: Instruction[],
-  opts: { computeUnits?: number; lookupTables?: Record<Address, Address[]> } = {},
-): Promise<string> {
+async function send(k: Keeper, ixs: Instruction[], opts: { computeUnits?: number } = {}): Promise<string> {
   const { value: blockhash } = await k.rpc.getLatestBlockhash().send();
   const budget = [
     getSetComputeUnitLimitInstruction({ units: opts.computeUnits ?? 400_000 }),
     getSetComputeUnitPriceInstruction({ microLamports: k.priorityMicroLamports }),
   ];
-  let message = pipe(
+  const message = pipe(
     createTransactionMessage({ version: 0 }),
     (m) => setTransactionMessageFeePayerSigner(k.signer, m),
     (m) => setTransactionMessageLifetimeUsingBlockhash(blockhash, m),
     (m) => appendTransactionMessageInstructions([...budget, ...ixs], m),
   );
-  if (opts.lookupTables) {
-    message = compressTransactionMessageUsingAddressLookupTables(message, opts.lookupTables) as typeof message;
-  }
   const signed = await signTransactionMessageWithSigners(message);
   const signature = getSignatureFromTransaction(signed);
   await k.rpc
@@ -147,28 +136,16 @@ export async function runSweeps(k: Keeper) {
   if (now < Number(config.pausedUntil)) return { skipped: "paused" };
 
   const authority = await authorityPda(k.inst.program, k.inst.config);
-  const discB58 = getBase58Decoder().decode(new Uint8Array(DISC.landlordAccount));
-  type Row = { pubkey: Address; account: { data: [string, string] } };
-  const rows = (await k.rpc
-    .getProgramAccounts(k.inst.program, {
-      encoding: "base64",
-      filters: [
-        { memcmp: { offset: BigInt(0), bytes: discB58, encoding: "base58" } },
-        // Landlord.config sits right after the discriminator and version byte.
-        { memcmp: { offset: BigInt(9), bytes: k.inst.config, encoding: "base58" } },
-      ],
-    } as never)
-    .send()) as unknown as Row[];
+  const rows = await listLandlords(k.rpc, k.inst.program, k.inst.config);
 
   const due: { landlord: Address; dividendAccount: Address }[] = [];
   for (const row of rows) {
-    const landlord = decodeLandlord(base64ToBytes(row.account.data[0]));
-    if (!landlord) continue;
+    const landlord = row.record;
     const token = await fetchMaybeToken(k.rpc, landlord.dividendAccount);
     if (!token.exists || token.data.amount <= landlord.baseline) continue;
     const d = token.data.delegate;
     if (d.__option !== "Some" || d.value !== authority) continue;
-    due.push({ landlord: row.pubkey, dividendAccount: landlord.dividendAccount });
+    due.push({ landlord: row.address, dividendAccount: landlord.dividendAccount });
   }
 
   const signatures: string[] = [];
@@ -256,92 +233,156 @@ export async function runBuy(k: Keeper) {
 
 // ---- The daily commitment count (audit M-07) ----
 
-/** Find the keeper's lookup table: from KEEPER_LOOKUP_TABLE, else the first one it owns. */
-async function findLookupTable(k: Keeper): Promise<Address | null> {
-  const fromEnv = process.env.KEEPER_LOOKUP_TABLE;
-  if (fromEnv) return fromEnv as Address;
-  type Row = { pubkey: Address };
-  const rows = (await k.rpc
-    .getProgramAccounts(ADDRESS_LOOKUP_TABLE_PROGRAM_ADDRESS, {
-      encoding: "base64",
-      dataSlice: { offset: 0, length: 0 },
-      // Authority: an Option<Pubkey> whose tag is at byte 21 and key at 22.
-      filters: [{ memcmp: { offset: BigInt(22), bytes: k.signer.address, encoding: "base58" } }],
-    } as never)
-    .send()) as unknown as Row[];
-  return rows[0]?.pubkey ?? null;
+/** Landlords per count or refresh transaction: three accounts each (two for refresh). */
+const COUNT_BATCH = 8;
+const REFRESH_BATCH = 14;
+
+/** A fresh random order, so which landlords share a transaction changes every time. */
+function shuffled<T>(items: T[]): T[] {
+  const out = [...items];
+  for (let i = out.length - 1; i > 0; i--) {
+    const j = randomInt(i + 1);
+    [out[i], out[j]] = [out[j], out[i]];
+  }
+  return out;
+}
+
+/** Does this landlord still qualify: delegated to this endowment and holding the minimum stake? */
+async function qualifies(k: Keeper, row: LandlordRow, authority: Address, minStake: bigint) {
+  const [dividend, coin] = await Promise.all([
+    fetchMaybeToken(k.rpc, row.record.dividendAccount),
+    fetchMaybeToken(k.rpc, row.record.coinAccount),
+  ]);
+  const d = dividend.exists ? dividend.data.delegate : null;
+  const delegated = Boolean(d && d.__option === "Some" && d.value === authority);
+  const held = coin.exists ? coin.data.amount : BigInt(0);
+  return delegated && held >= minStake;
 }
 
 /**
- * Make sure a lookup table holds every account the count reads, creating or
- * extending it as needed. Returns the table and its addresses once usable.
- */
-async function ensureLookupTable(k: Keeper, needed: Address[]) {
-  let table = await findLookupTable(k);
-  const signatures: string[] = [];
-  if (!table) {
-    const slot = await k.rpc.getSlot({ commitment: "finalized" }).send();
-    const create = await getCreateLookupTableInstructionAsync({ authority: k.signer, payer: k.signer, recentSlot: slot });
-    signatures.push(await send(k, [create]));
-    table = create.accounts[0].address as Address;
-  }
-  let current = await fetchMaybeAddressLookupTable(k.rpc, table);
-  const have = new Set(current.exists ? current.data.addresses : []);
-  const missing = needed.filter((a) => !have.has(a));
-  for (let i = 0; i < missing.length; i += 20) {
-    const extend = getExtendLookupTableInstruction({
-      address: table,
-      authority: k.signer,
-      payer: k.signer,
-      addresses: missing.slice(i, i + 20),
-    });
-    signatures.push(await send(k, [extend]));
-  }
-  if (missing.length > 0) {
-    // New entries become usable one slot after they're added.
-    await new Promise((r) => setTimeout(r, 1500));
-    current = await fetchMaybeAddressLookupTable(k.rpc, table);
-  }
-  if (!current.exists) throw new Error("Lookup table not found after creation");
-  return { table, addresses: current.data.addresses, signatures };
-}
-
-/**
- * Run the atomic count when it's due. The contract reads every landlord in one
- * transaction, so there's nothing to resume: if anyone else ran today's count,
- * this simply reports that and exits.
+ * Run the daily count, resumably. If a round is open (started by anyone), count
+ * whoever it still expects and finish it, after its timeout if some can't be
+ * counted. If none is open and one is due, prune landlords that no longer
+ * qualify, begin, count everyone in shuffled batches, and finish.
  */
 export async function runCount(k: Keeper) {
-  const config = await readConfig(k);
+  let config = await readConfig(k);
   const now = nowSecs();
-  const last = Number(config.lastCountAt);
   if (now < Number(config.pausedUntil)) return { skipped: "paused" };
-  if (last > 0 && now - last < COUNT_INTERVAL_SECS) {
-    return { skipped: "counted recently", lastCountAt: last, nextCountAfter: last + COUNT_INTERVAL_SECS };
-  }
-  const roster = await fetchDecoded(k.rpc, await rosterPda(k.inst.program, k.inst.config), decodeRoster);
-  if (!roster) throw new Error("Roster not found");
+  const signatures: string[] = [];
+  const failures: { landlord: Address; error: string }[] = [];
+  let pruned = 0;
 
-  const count = await countCommitmentIx(k.inst, roster);
-  const needed = count.accounts?.map((a) => a.address) ?? [];
-  const { table, addresses, signatures } = await ensureLookupTable(k, needed);
-  signatures.push(
-    await send(k, [count], { computeUnits: 200_000, lookupTables: { [table]: addresses } as Record<Address, Address[]> }),
+  if (!config.count.open) {
+    const started = Number(config.count.startedAt);
+    if (config.count.round > BigInt(0) && now - started < COUNT_INTERVAL_SECS) {
+      return { skipped: "counted recently", lastCountAt: Number(config.lastCountAt), nextCountAfter: started + COUNT_INTERVAL_SECS };
+    }
+    // Prune first, so the count doesn't keep reading landlords that left in all but name.
+    const authority = await authorityPda(k.inst.program, k.inst.config);
+    const mint = await fetchMaybeMint(k.rpc, k.inst.coinMint);
+    const supply = mint.exists ? mint.data.supply : BigInt(0);
+    const minStake = (supply * BigInt(config.params.minStakeBps) + BigInt(9_999)) / BigInt(10_000);
+    for (const row of await listLandlords(k.rpc, k.inst.program, k.inst.config)) {
+      if (await qualifies(k, row, authority, minStake)) continue;
+      try {
+        signatures.push(await send(k, [await pruneLandlordIx(k.inst, row)], { computeUnits: 60_000 }));
+        pruned++;
+      } catch (e) {
+        failures.push({ landlord: row.address, error: errMessage(e) });
+      }
+    }
+    signatures.push(await send(k, [beginCountIx(k.inst)], { computeUnits: 40_000 }));
+    config = await readConfig(k);
+  }
+
+  const round = config.count.round;
+  const pending = (await listLandlords(k.rpc, k.inst.program, k.inst.config)).filter(
+    (l) => l.record.joinedRound < round && l.record.countedRound < round,
   );
+  for (const batch of chunk(shuffled(pending), COUNT_BATCH)) {
+    try {
+      signatures.push(await send(k, [countLandlordsIx(k.inst, batch)], { computeUnits: 20_000 + 12_000 * batch.length }));
+    } catch {
+      // One bad landlord (e.g. counted by someone else a moment ago) shouldn't stop the rest.
+      for (const one of batch) {
+        try {
+          signatures.push(await send(k, [countLandlordsIx(k.inst, [one])], { computeUnits: 40_000 }));
+        } catch (e) {
+          failures.push({ landlord: one.address, error: errMessage(e) });
+        }
+      }
+    }
+  }
+
   const after = await readConfig(k);
+  const complete = after.count.counted >= after.count.expected;
+  const timedOut = nowSecs() - Number(after.count.startedAt) >= COUNT_TIMEOUT_SECS;
+  if (after.count.open && (complete || timedOut)) {
+    signatures.push(await send(k, [finishCountIx(k.inst)], { computeUnits: 40_000 }));
+  }
+  const final = await readConfig(k);
   return {
-    landlords: roster.entries.length,
-    committedBps: after.lastCountBps,
-    active: after.active,
-    lookupTable: table,
+    round: Number(final.count.round),
+    open: final.count.open,
+    counted: final.count.counted,
+    expected: final.count.expected,
+    committedBps: final.lastCountBps,
+    active: final.active,
+    pruned,
     signatures,
+    failures,
   };
 }
 
-/** How long since the last count, for alerting on a stalled count. */
+function chunk<T>(items: T[], size: number): T[][] {
+  const out: T[][] = [];
+  for (let i = 0; i < items.length; i += size) out.push(items.slice(i, i + size));
+  return out;
+}
+
+/**
+ * Refresh every landlord's recorded balance (decrease-only) at a random moment.
+ * Called often by the scheduler; each call proceeds only on a secret-seeded
+ * random draw (about `KEEPER_REFRESHES_PER_DAY` times a day), and batches
+ * landlords in a fresh random order, so coin can't be timed to sit in two
+ * landlord wallets at every read.
+ */
+export async function runRefresh(k: Keeper, force = false) {
+  const perDay = Number(process.env.KEEPER_REFRESHES_PER_DAY ?? 6);
+  const tickMinutes = Number(process.env.KEEPER_REFRESH_TICK_MINUTES ?? 15);
+  const ticksPerDay = Math.max(1, Math.floor((24 * 60) / tickMinutes));
+  const tick = Math.floor(nowSecs() / (tickMinutes * 60));
+  const draw = createHmac("sha256", k.jitterSecret).update(`refresh:${k.inst.config}:${tick}`).digest().readUInt32BE(0);
+  if (!force && draw % ticksPerDay >= perDay) return { skipped: "not this tick" };
+
+  const landlords = await listLandlords(k.rpc, k.inst.program, k.inst.config);
+  const signatures: string[] = [];
+  const failures: string[] = [];
+  for (const batch of chunk(shuffled(landlords.filter((l) => l.record.snapshotValid)), REFRESH_BATCH)) {
+    try {
+      signatures.push(await send(k, [refreshLandlordsIx(k.inst, batch)], { computeUnits: 20_000 + 6_000 * batch.length }));
+    } catch (e) {
+      failures.push(errMessage(e));
+    }
+  }
+  return { landlords: landlords.length, signatures, failures };
+}
+
+/** Count freshness, for alerting on a stalled or overdue count. */
 export async function countHealth(k: Keeper) {
   const config = await readConfig(k);
+  const now = nowSecs();
   const last = Number(config.lastCountAt);
-  const age = last > 0 ? nowSecs() - last : null;
-  return { lastCountAt: last, ageSecs: age, stale: age !== null && age > 2 * COUNT_INTERVAL_SECS };
+  const age = last > 0 ? now - last : null;
+  const openFor = config.count.open ? now - Number(config.count.startedAt) : null;
+  return {
+    round: Number(config.count.round),
+    open: config.count.open,
+    counted: config.count.counted,
+    expected: config.count.expected,
+    lastCountAt: last,
+    ageSecs: age,
+    stale: (age !== null && age > 2 * COUNT_INTERVAL_SECS) || (openFor !== null && openFor > COUNT_TIMEOUT_SECS),
+  };
 }

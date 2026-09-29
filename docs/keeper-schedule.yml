@@ -19,3 +19,5 @@ jobs:
         run: curl -fsS -H "Authorization: Bearer ${{ secrets.CRON_SECRET }}" "${{ secrets.KEEPER_URL }}/api/keeper/sweep" || true
       - name: Count
         run: curl -fsS -H "Authorization: Bearer ${{ secrets.CRON_SECRET }}" "${{ secrets.KEEPER_URL }}/api/keeper/count" || true
+      - name: Refresh
+        run: curl -fsS -H "Authorization: Bearer ${{ secrets.CRON_SECRET }}" "${{ secrets.KEEPER_URL }}/api/keeper/refresh" || true
