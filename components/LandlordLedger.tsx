@@ -1,14 +1,15 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { bpsToPercent } from "@/lib/endowment";
 import type { Ledger } from "@/lib/ledger";
 import { formatTokens } from "@/lib/solana";
 
 const short = (a: string) => `${a.slice(0, 4)}…${a.slice(-4)}`;
 
 /**
- * The public tally from the last on-chain count: every landlord wallet, what it
- * counted for, and its balance when it was read. Renders nothing before launch.
+ * The public tally: every landlord wallet, straight from its on-chain record.
+ * Renders nothing before launch.
  */
 export function LandlordLedger() {
   const [ledger, setLedger] = useState<Ledger | null>(null);
@@ -27,22 +28,25 @@ export function LandlordLedger() {
   }, []);
 
   if (!ledger || !ledger.launched || ledger.rows.length === 0) return null;
-  const total = BigInt(ledger.totalCounted);
 
   return (
     <section className="row" id="ledger">
       <h2 className="row-label">Landlord ledger</h2>
       <div className="row-body">
         <p>
-          Count #{ledger.round}: every landlord wallet, what it counted for, and its $PENIS when the contract read it.
-          Anyone can check these numbers on-chain.
+          Count #{ledger.round}: {formatTokens(BigInt(ledger.totalCounted))} $PENIS committed (
+          {bpsToPercent(ledger.committedBps)}% of supply).
+          {ledger.inProgress &&
+            ` Count #${ledger.inProgress.round} is in progress: ${ledger.inProgress.counted} of ${ledger.inProgress.expected} landlords read so far.`}{" "}
+          Each row is the landlord&rsquo;s own on-chain record, which anyone can check.
         </p>
         <table className="table">
           <thead>
             <tr>
               <th>Wallet</th>
               <th className="num">Counted</th>
-              <th className="num">Held at count</th>
+              <th className="num">Recorded $PENIS</th>
+              <th className="num">Checked since</th>
             </tr>
           </thead>
           <tbody>
@@ -52,19 +56,22 @@ export function LandlordLedger() {
                   <a href={`https://solscan.io/account/${r.owner}`} className="mono">
                     {short(r.owner)}
                   </a>
-                  {r.flag && <span className="tag">{r.flag}</span>}
                 </td>
-                <td className="num">{formatTokens(BigInt(r.counted))}</td>
-                <td className="num">{formatTokens(BigInt(r.balanceAtCount))}</td>
+                <td className="num">
+                  {r.round > 0 ? formatTokens(BigInt(r.counted)) : "–"}
+                  {r.round > 0 && r.round !== ledger.round && <span className="tag">#{r.round}</span>}
+                </td>
+                <td className="num">{formatTokens(BigInt(r.recorded))}</td>
+                <td className="num">{r.attested ? "Yes" : "Not yet"}</td>
               </tr>
             ))}
-            <tr className="current">
-              <td>Total</td>
-              <td className="num">{formatTokens(total)}</td>
-              <td className="num" />
-            </tr>
           </tbody>
         </table>
+        <p className="muted small">
+          Counted: what the wallet counted for when it was last read. Recorded: the most its next count can credit, which
+          only goes down between counts. Checked since: read by the endowment&rsquo;s refresher since its last count,
+          which a wallet needs in order to count.
+        </p>
       </div>
     </section>
   );

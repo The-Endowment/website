@@ -67,6 +67,13 @@ export default function Delegate() {
                 <strong>A small deposit</strong>
                 <span>About 0.003 SOL to store your landlord record on-chain, returned when you leave.</span>
               </li>
+              <li>
+                <strong>During the test period</strong>
+                <span>
+                  The contract&rsquo;s upgrade key is held by the team&rsquo;s multisig until it is destroyed at the end of
+                  the public test period, and every upgrade is announced first. Leave at any time.
+                </span>
+              </li>
             </ul>
           </div>
         </section>
@@ -83,7 +90,7 @@ export default function Delegate() {
                 <strong>Held, not borrowed</strong>
                 <span>
                   Each landlord counts for the lower of today&rsquo;s balance and the previous count&rsquo;s, so new or
-                  added $PENIS counts from the following day.
+                  added $PENIS counts from the following count, and your first count only records your balance.
                 </span>
               </li>
               <li>
@@ -91,8 +98,16 @@ export default function Delegate() {
                 <span>Sweeps switch on at 30% of supply committed and pause below 25%.</span>
               </li>
               <li>
+                <strong>Checked between counts</strong>
+                <span>
+                  Between counts the endowment&rsquo;s refresher reads every landlord at unannounced times. A wallet counts
+                  only if it was read, still delegated, since its last count, so the same $PENIS can&rsquo;t be counted in
+                  two wallets.
+                </span>
+              </li>
+              <li>
                 <strong>Public tally</strong>
-                <span>Every landlord&rsquo;s counted $PENIS is published on-chain after each count.</span>
+                <span>Every landlord&rsquo;s record is on-chain for anyone to check.</span>
               </li>
             </ul>
           </div>

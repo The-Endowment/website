@@ -1,16 +1,15 @@
 import { loadLedger } from "@/lib/ledger";
 
-export const dynamic = "force-dynamic";
-export const maxDuration = 60;
+// Built once and regenerated at most every five minutes (audit KW-06): the
+// query string can't bypass it, and it reads only the public RPC.
+export const dynamic = "force-static";
+export const revalidate = 300;
 
-/** The latest finished count, per landlord. Cached at the edge for five minutes. */
+/** Every landlord's record, from the landlord accounts. */
 export async function GET() {
   try {
-    const ledger = await loadLedger();
-    return Response.json(ledger, {
-      headers: { "Cache-Control": "public, s-maxage=300, stale-while-revalidate=600" },
-    });
+    return Response.json(await loadLedger());
   } catch {
-    return Response.json({ launched: false }, { headers: { "Cache-Control": "public, s-maxage=60" } });
+    return Response.json({ launched: false });
   }
 }

@@ -14,8 +14,9 @@ export default function Projects() {
         <div className="thesis-head">
           <h1 className="display h1">One contract, many endowments.</h1>
           <p className="lede">
-            Every project here runs on the same open-source contract as the $PENIS Endowment, with the same rules and
-            the same guarantees.
+            Every project here runs on the same open-source contract as the $PENIS Endowment. The contract&rsquo;s rules
+            are the same for all; each project picks its own settings within them, and its own keys. Each row shows what
+            those keys can still do.
           </p>
         </div>
       </section>

@@ -27,14 +27,17 @@ import {
   decodeLandlord,
   deregisterLandlordIx,
   fetchDecoded,
+  isFlagshipConfig,
   landlordPda,
+  MIN_DELEGATION,
   registerLandlordIx,
   resyncBaselineIx,
   type EndowmentConfig,
   type Instance,
   type LandlordRecord,
 } from "@/lib/endowment";
-import { flagshipInstance, formatTokens, TOKEN_DECIMALS } from "@/lib/solana";
+import type { EndowmentSummary } from "@/app/api/endowments/route";
+import { flagshipInstance, formatTokens } from "@/lib/solana";
 
 /**
  * The delegation is unlimited on purpose. The program counts a landlord, and
@@ -55,25 +58,50 @@ type Status = {
   dividendBalance: bigint;
   coinBalance: bigint;
   coinSupply: bigint;
+  dividendDecimals: number;
   delegate: Address | null;
+  /** Delegated to this endowment, in full (the program needs at least MIN_DELEGATION). */
   delegatedToEndowment: boolean;
+  /** Delegated to this endowment, but for less than it needs (re-approve to fix). */
+  delegationTooSmall: boolean;
+  /** When the delegate is another endowment on the contract, its coin's symbol. */
+  otherEndowment: string | null;
   minStake: bigint;
   now: number;
 };
 
+/** The coin symbol of the endowment whose authority is `delegate`, if it's one on this contract. */
+async function endowmentNamed(program: Address, delegate: Address): Promise<string | null> {
+  try {
+    const { endowments } = (await (await fetch("/api/endowments")).json()) as { endowments: EndowmentSummary[] };
+    for (const e of endowments) {
+      if ((await authorityPda(program, e.config as Address)) === delegate) {
+        return e.symbol ? `$${e.symbol}` : `${e.coinMint.slice(0, 4)}…${e.coinMint.slice(-4)}`;
+      }
+    }
+  } catch {
+    // Unnamed: shown as an address.
+  }
+  return null;
+}
+
 async function loadStatus(inst: Instance, owner: Address): Promise<Status> {
   const dividendAccount = await ata(owner, inst.dividendMint, inst.dividendTokenProgram);
   const coinAccount = await ata(owner, inst.coinMint, inst.coinTokenProgram);
-  const [config, landlord, dividend, coin, mint] = await Promise.all([
+  const [config, landlord, dividend, coin, mint, dividendMint] = await Promise.all([
     fetchDecoded(client.rpc, inst.config, decodeConfig),
     fetchDecoded(client.rpc, await landlordPda(inst.program, inst.config, owner), decodeLandlord),
     fetchMaybeToken(client.rpc, dividendAccount),
     fetchMaybeToken(client.rpc, coinAccount),
     fetchMaybeMint(client.rpc, inst.coinMint),
+    fetchMaybeMint(client.rpc, inst.dividendMint),
   ]);
-  if (!config) throw new Error("The endowment isn't live yet.");
+  // Only ever offer opt-in to the real flagship (audit KW-09).
+  if (!config || !isFlagshipConfig(config)) throw new Error("The endowment isn't live yet.");
   const authority = await authorityPda(inst.program, inst.config);
   const delegate = dividend.exists && isSome(dividend.data.delegate) ? dividend.data.delegate.value : null;
+  const delegatedAmount = dividend.exists ? dividend.data.delegatedAmount : BigInt(0);
+  const ours = delegate === authority;
   const coinSupply = mint.exists ? mint.data.supply : BigInt(0);
   const minStake = (coinSupply * BigInt(config.params.minStakeBps) + BigInt(9_999)) / BigInt(10_000);
   return {
@@ -85,8 +113,11 @@ async function loadStatus(inst: Instance, owner: Address): Promise<Status> {
     dividendBalance: dividend.exists ? dividend.data.amount : BigInt(0),
     coinBalance: coin.exists ? coin.data.amount : BigInt(0),
     coinSupply,
+    dividendDecimals: dividendMint.exists ? dividendMint.data.decimals : 6,
     delegate,
-    delegatedToEndowment: delegate === authority,
+    delegatedToEndowment: ours && delegatedAmount >= MIN_DELEGATION,
+    delegationTooSmall: ours && delegatedAmount < MIN_DELEGATION,
+    otherEndowment: delegate && !ours ? await endowmentNamed(inst.program, delegate) : null,
     minStake,
     now: Math.floor(Date.now() / 1000),
   };
@@ -138,6 +169,14 @@ function Connected({ inst }: { inst: Instance }) {
         ata: status.dividendAccount,
         tokenProgram: inst.dividendTokenProgram,
       }),
+      // Registering needs the coin account to exist, even while it's empty (audit L-12).
+      getCreateAssociatedTokenIdempotentInstruction({
+        payer: signer,
+        owner: signer.address,
+        mint: inst.coinMint,
+        ata: status.coinAccount,
+        tokenProgram: inst.coinTokenProgram,
+      }),
       getApproveCheckedInstruction(
         {
           source: status.dividendAccount,
@@ -145,7 +184,7 @@ function Connected({ inst }: { inst: Instance }) {
           delegate: authority,
           owner: signer,
           amount: UNLIMITED,
-          decimals: TOKEN_DECIMALS,
+          decimals: status.dividendDecimals,
         },
         { programAddress: inst.dividendTokenProgram as typeof TOKEN_2022_PROGRAM_ADDRESS },
       ),
@@ -165,7 +204,8 @@ function Connected({ inst }: { inst: Instance }) {
     if (!status) throw new Error("No status");
     const signer = client.identity;
     const ixs: Instruction[] = [];
-    if (status.delegate) {
+    // Only this endowment's delegation: another app's or endowment's is left alone (audit KW-10).
+    if (status.delegatedToEndowment || status.delegationTooSmall) {
       ixs.push(
         getRevokeInstruction(
           { source: status.dividendAccount, owner: signer },
@@ -188,6 +228,8 @@ function Connected({ inst }: { inst: Instance }) {
 
   let delegation = "Not delegated";
   if (status?.delegatedToEndowment) delegation = "Delegated to the endowment";
+  else if (status?.delegationTooSmall) delegation = "Delegated to the endowment, but not in full";
+  else if (status?.otherEndowment) delegation = `Delegated to the ${status.otherEndowment} endowment`;
   else if (status?.delegate) delegation = `Delegated to another app (${status.delegate.slice(0, 4)}…${status.delegate.slice(-4)})`;
 
   return (
@@ -230,8 +272,15 @@ function Connected({ inst }: { inst: Instance }) {
           you&rsquo;re committing and no other PUMP.
         </p>
       )}
-      {status && status.delegate && !status.delegatedToEndowment && (
-        <p className="muted small">Joining replaces the other app&rsquo;s delegation on your PUMP account.</p>
+      {status && status.delegate && !status.delegatedToEndowment && !status.delegationTooSmall && (
+        <p className="muted small">
+          {status.otherEndowment
+            ? `A PUMP account can have one delegate. Joining ends this wallet's delegation to the ${status.otherEndowment} endowment, and it stops counting there.`
+            : "Joining replaces the other app\u2019s delegation on your PUMP account."}
+        </p>
+      )}
+      {status?.delegationTooSmall && (
+        <p className="muted small">Your approval is smaller than the endowment needs to count you. Rejoin to renew it.</p>
       )}
       {status && !isIn && reason && <p className="small">{reason}</p>}
 
@@ -251,7 +300,7 @@ function Connected({ inst }: { inst: Instance }) {
             You&rsquo;re a landlord
           </button>
         )}
-        {status && (status.delegate || status.landlord) && (
+        {status && (status.delegatedToEndowment || status.delegationTooSmall || status.landlord) && (
           <button type="button" className="button" disabled={busy} onClick={() => leave.dispatch()}>
             {leave.isRunning ? "Confirm in your wallet…" : "Leave"}
           </button>

@@ -16,6 +16,18 @@ export function useEndowments() {
   return list;
 }
 
+/** What this endowment's keys can still do, in a few words. */
+function keys(e: EndowmentSummary) {
+  const out: string[] = [];
+  if (e.retired) out.push("retired");
+  out.push(e.renounced ? "settings frozen" : "admin can change settings (72h notice)");
+  if (e.guardian) out.push("can be paused");
+  if (e.pendingChange) out.push("change pending");
+  if (e.noRefresher) out.push("no refresher");
+  else if (e.refresherIsCreator) out.push("creator checks the count");
+  return out.join(" · ");
+}
+
 export function ProjectsList() {
   const list = useEndowments();
   if (list === null) return <p className="muted">Loading…</p>;
@@ -40,8 +52,12 @@ export function ProjectsList() {
                 {e.symbol ? `$${e.symbol}` : `${e.coinMint.slice(0, 4)}…${e.coinMint.slice(-4)}`}
               </a>
               {e.flagship && <span className="flagship">flagship</span>}
+              {e.flagshipLookalike && <span className="tag">not the $PENIS Endowment</span>}
+              {!e.flagship && <div className="muted small">{keys(e)}</div>}
             </td>
-            <td className="num">{bpsToPercent(e.committedBps)}%</td>
+            <td className="num">
+              {bpsToPercent(e.committedBps)}% <span className="muted small">of {bpsToPercent(e.activateBps)}%</span>
+            </td>
             <td className="num">{formatTokens(BigInt(e.coinBought))}</td>
             <td className="num">{e.active ? "On" : "Off"}</td>
           </tr>

@@ -44,12 +44,33 @@ function knownProgram(value: string | undefined): Address | null {
 /** Unset until launch; when set it must be one of KNOWN_PROGRAM_IDS. */
 export const PROGRAM_ID: Address | null = knownProgram(process.env.NEXT_PUBLIC_ENDOWMENT_PROGRAM_ID);
 
-/** The wallet that created the $PENIS endowment (part of its config address). Set at launch. */
-const creator = process.env.NEXT_PUBLIC_ENDOWMENT_CREATOR;
-export const FLAGSHIP_CREATOR: Address | null = creator ? address(creator) : null;
-
 export const PUMP_MINT = address("pumpCmXqMfrsAkQ5r49WcJnRayYRqmXz6ae8H7H9Dfn");
 export const PENIS_MINT = address("JE3HT7SbCgXDQWV6xp3oiiAisDzq4HyZ8wyEVBDCs45Z");
+
+/**
+ * The flagship, pinned (audit KW-09): the same constants the program derives
+ * the flagship from (`FLAGSHIP_COIN_MINT`, `FLAGSHIP_CREATOR` in
+ * programs/endowment/src/constants.rs). The creator is the all-zero placeholder
+ * until it is set, in both places, before deploy.
+ */
+export const PROGRAM_FLAGSHIP_COIN_MINT = PENIS_MINT;
+export const PROGRAM_FLAGSHIP_CREATOR = address("11111111111111111111111111111111"); // SET BEFORE DEPLOY
+const PLACEHOLDER_CREATOR = "11111111111111111111111111111111";
+
+/**
+ * The wallet that created the $PENIS endowment, from the environment, checked
+ * against the program's constant: a mismatch is refused, so a wrong or tampered
+ * setting can never point landlords at another instance.
+ */
+function pinnedCreator(value: string | undefined): Address | null {
+  if (!value) return null;
+  if (value !== PROGRAM_FLAGSHIP_CREATOR) {
+    throw new Error(`Refusing flagship creator ${value}: the program's flagship is ${PROGRAM_FLAGSHIP_CREATOR}`);
+  }
+  if (value === PLACEHOLDER_CREATOR) return null;
+  return address(value);
+}
+export const FLAGSHIP_CREATOR: Address | null = pinnedCreator(process.env.NEXT_PUBLIC_ENDOWMENT_CREATOR);
 export const CPMM_PROGRAM = address("CPMMoo8L3F4NbTegBCKVNunggL7H1ZpdTHKxQB5qKP1C");
 export const LEGACY_TOKEN_PROGRAM = address("TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA");
 export const SYSTEM_PROGRAM = address("11111111111111111111111111111111");
@@ -67,13 +88,15 @@ export const DISC = {
   refreshLandlords: [29, 213, 34, 6, 109, 63, 210, 36],
   configAccount: [155, 12, 170, 224, 30, 250, 204, 130],
   landlordAccount: [84, 167, 79, 195, 204, 84, 46, 152],
-  landlordCountedEvent: [44, 109, 57, 199, 10, 214, 112, 239],
-  commitmentCountedEvent: [164, 226, 102, 0, 197, 218, 219, 86],
 };
 
-/** Match `COUNT_INTERVAL_SECS` and `COUNT_TIMEOUT_SECS` in the program's constants. */
+/** Match `COUNT_INTERVAL_SECS`, `COUNT_TIMEOUT_SECS` and `ACTIVE_MAX_AGE_SECS` in the program's constants. */
 export const COUNT_INTERVAL_SECS = 24 * 60 * 60;
 export const COUNT_TIMEOUT_SECS = 2 * 60 * 60;
+export const ACTIVE_MAX_AGE_SECS = 3 * 24 * 60 * 60;
+/** Match `MIN_DELEGATION` (u64::MAX / 2). */
+export const MIN_DELEGATION = BigInt("9223372036854775807");
+export const DEFAULT_ADDRESS = address("11111111111111111111111111111111");
 
 const text = new TextEncoder();
 const addressBytes = (a: Address) => getAddressEncoder().encode(a);
@@ -98,10 +121,20 @@ export async function ata(owner: Address, mint: Address, tokenProgram: Address =
   return a;
 }
 
-/** The $PENIS endowment's config address, or null before launch. */
+/** The $PENIS endowment's config address, derived as the program does, or null before launch. */
 export async function flagshipConfig(): Promise<Address | null> {
   if (!PROGRAM_ID || !FLAGSHIP_CREATOR) return null;
-  return configPda(PROGRAM_ID, PENIS_MINT, FLAGSHIP_CREATOR);
+  return configPda(PROGRAM_ID, PROGRAM_FLAGSHIP_COIN_MINT, FLAGSHIP_CREATOR);
+}
+
+/** Whether a fetched config really is the flagship's (defence in depth before opt-in). */
+export function isFlagshipConfig(config: EndowmentConfig) {
+  return (
+    FLAGSHIP_CREATOR !== null &&
+    config.creator === FLAGSHIP_CREATOR &&
+    config.coinMint === PENIS_MINT &&
+    config.dividendMint === PUMP_MINT
+  );
 }
 
 // ---- Account decoders (layouts from programs/endowment/src/state.rs) ----
@@ -117,6 +150,7 @@ const paramsDecoder = getStructDecoder([
   ["activateBps", getU16Decoder()],
   ["deactivateBps", getU16Decoder()],
   ["minStakeBps", getU16Decoder()],
+  ["refresher", getAddressDecoder()],
 ]);
 
 const configDecoder = getStructDecoder([
@@ -138,11 +172,14 @@ const configDecoder = getStructDecoder([
   ["contributionCap", getU64Decoder()],
   ["pausedUntil", getI64Decoder()],
   ["retired", getBooleanDecoder()],
+  ["retireAt", getI64Decoder()],
   ["milestoneReached", getBooleanDecoder()],
   ["active", getBooleanDecoder()],
   ["lastCountAt", getI64Decoder()],
   ["lastCountBps", getU16Decoder()],
   ["lastCommitted", getU64Decoder()],
+  ["lastAttestedAt", getI64Decoder()],
+  ["lastSweepAt", getI64Decoder()],
   ["landlordCount", getU32Decoder()],
   [
     "count",
@@ -154,6 +191,7 @@ const configDecoder = getStructDecoder([
       ["expected", getU32Decoder()],
       ["counted", getU32Decoder()],
       ["committed", getU64Decoder()],
+      ["minStake", getU64Decoder()],
     ]),
   ],
   ["buyAllowance", getU64Decoder()],
@@ -187,6 +225,7 @@ const landlordDecoder = getStructDecoder([
   ["countedAmount", getU64Decoder()],
   ["snapshot", getU64Decoder()],
   ["snapshotValid", getBooleanDecoder()],
+  ["attested", getBooleanDecoder()],
 ]);
 
 function hasDiscriminator(bytes: Uint8Array, disc: number[]) {
@@ -284,8 +323,16 @@ export async function deregisterLandlordIx(inst: Instance, owner: TransactionSig
   ]);
 }
 
-export async function sweepIx(inst: Instance, landlord: Address, dividendAccount: Address) {
+/** A sweep also passes (read-only) what a buyback would trade through, so it fails closed when buybacks can't run. */
+export async function sweepIx(
+  inst: Instance,
+  pool: Address,
+  poolAccounts: PoolAccounts,
+  landlord: Address,
+  dividendAccount: Address,
+) {
   const authority = await authorityPda(inst.program, inst.config);
+  const dividendIndex = poolAccounts.mints[0] === inst.dividendMint ? 0 : 1;
   return ix(inst.program, DISC.sweep, [
     { address: inst.config, role: W },
     { address: authority, role: R },
@@ -293,6 +340,12 @@ export async function sweepIx(inst: Instance, landlord: Address, dividendAccount
     { address: inst.dividendMint, role: R },
     { address: dividendAccount, role: W },
     { address: await ata(authority, inst.dividendMint, inst.dividendTokenProgram), role: W },
+    { address: inst.coinMint, role: R },
+    { address: await ata(authority, inst.coinMint, inst.coinTokenProgram), role: R },
+    { address: pool, role: R },
+    { address: poolAccounts.ammConfig, role: R },
+    { address: poolAccounts.vaults[dividendIndex], role: R },
+    { address: poolAccounts.vaults[1 - dividendIndex], role: R },
     { address: inst.dividendTokenProgram, role: R },
   ]);
 }
@@ -325,6 +378,8 @@ export async function buybackIx(
   caller: TransactionSigner,
   callerDividendAccount: Address,
   flagshipDividendVault: Address,
+  /** Only a donating endowment passes the flagship's vault writable (audit R2-ISO-09). */
+  donates: boolean,
   minOut: bigint,
 ) {
   const authority = await authorityPda(inst.program, inst.config);
@@ -355,7 +410,7 @@ export async function buybackIx(
       { address: poolAccounts.observation, role: W },
       { address: poolAccounts.lpMint, role: W },
       { address: await ata(authority, poolAccounts.lpMint, LEGACY_TOKEN_PROGRAM), role: W },
-      { address: flagshipDividendVault, role: W },
+      { address: flagshipDividendVault, role: donates ? W : R },
       { address: inst.dividendTokenProgram, role: R },
       { address: inst.coinTokenProgram, role: R },
       { address: LEGACY_TOKEN_PROGRAM, role: R },
@@ -392,13 +447,18 @@ export function finishCountIx(inst: Instance) {
   return ix(inst.program, DISC.finishCount, [{ address: inst.config, role: W }]);
 }
 
-/** Decrease-only re-read of landlords' balances between counts. */
-export function refreshLandlordsIx(inst: Instance, landlords: LandlordRow[]) {
+/**
+ * Decrease-only re-read of landlords' balances. Signed by the endowment's
+ * refresher, it also attests them: only attested landlords count.
+ */
+export function refreshLandlordsIx(inst: Instance, caller: TransactionSigner, landlords: LandlordRow[]) {
   return ix(inst.program, DISC.refreshLandlords, [
-    { address: inst.config, role: R },
+    { address: inst.config, role: W },
+    signer(caller, false),
     ...landlords.flatMap((l) => [
       { address: l.address, role: W },
       { address: l.record.coinAccount, role: R },
+      { address: l.record.dividendAccount, role: R },
     ]),
   ]);
 }
@@ -432,40 +492,6 @@ export async function listLandlords(rpc: unknown, program: Address, config: Addr
   return rows
     .map((r) => ({ address: r.pubkey, record: decodeLandlord(base64ToBytes(r.account.data[0])) }))
     .filter((r): r is LandlordRow => r.record !== null);
-}
-
-// ---- Events (Anchor "Program data:" logs) ----
-
-export type LandlordCountedEvent = {
-  round: bigint;
-  landlord: Address;
-  owner: Address;
-  counted: bigint;
-  rawBalance: bigint;
-};
-
-const landlordCountedDecoder = getStructDecoder([
-  ["discriminator", fixDecoderSize(getBytesDecoder(), 8)],
-  ["config", getAddressDecoder()],
-  ["round", getU64Decoder()],
-  ["landlord", getAddressDecoder()],
-  ["owner", getAddressDecoder()],
-  ["counted", getU64Decoder()],
-  ["rawBalance", getU64Decoder()],
-]);
-
-/** The LandlordCounted events for `config` in a transaction's log lines. */
-export function landlordCountedFromLogs(logs: readonly string[], config: Address): LandlordCountedEvent[] {
-  const out: LandlordCountedEvent[] = [];
-  for (const line of logs) {
-    if (!line.startsWith("Program data: ")) continue;
-    const bytes = base64ToBytes(line.slice("Program data: ".length));
-    if (!hasDiscriminator(bytes, DISC.landlordCountedEvent)) continue;
-    const e = landlordCountedDecoder.decode(bytes);
-    if (e.config !== config) continue;
-    out.push({ round: e.round, landlord: e.landlord, owner: e.owner, counted: e.counted, rawBalance: e.rawBalance });
-  }
-  return out;
 }
 
 /** Every endowment created on the program, via getProgramAccounts on the Config discriminator. */

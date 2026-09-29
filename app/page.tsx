@@ -35,7 +35,7 @@ const faqs = [
   },
   {
     q: "When does it open?",
-    a: "Sweeps switch on once committed landlords hold 30% of all $PENIS, as measured by a daily on-chain count. Coin counts once it has been held across a full count, and every landlord's counted $PENIS is published after each count.",
+    a: "Sweeps switch on once committed landlords hold 30% of all $PENIS, as measured by a daily on-chain count. A landlord's $PENIS counts from its second count, once it has been held from one count to the next, and every landlord's record is public on-chain.",
   },
 ];
 
@@ -95,8 +95,8 @@ export default function Home() {
           <div className="row-body">
             <h3 className="statement">Every PUMP buys $PENIS.</h3>
             <p>
-              The endowment buys in small amounts on a randomized schedule, with whatever PUMP it holds. Nothing is
-              sold, and nothing is spent on anything else.
+              The endowment buys in small, spaced-out amounts with whatever PUMP it holds, each priced against the
+              pool&rsquo;s recent average. Nothing is sold, and nothing is spent on anything else.
             </p>
             <div className="figures">
               <div className="figure">
@@ -134,7 +134,7 @@ export default function Home() {
               </li>
               <li>
                 <strong>Rule changes are announced</strong>
-                <span>Any change to the limits waits 72 hours on-chain before it takes effect.</span>
+                <span>Any change to the limits, or retiring the endowment, waits 72 hours on-chain before it takes effect.</span>
               </li>
               <li>
                 <strong>Locked forever</strong>

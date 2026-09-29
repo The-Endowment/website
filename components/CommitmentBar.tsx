@@ -44,7 +44,9 @@ export function CommitmentBar() {
       </div>
       <p className="muted small">
         {landlords} {landlords === 1 ? "landlord" : "landlords"}.
-        {lastCount > 0 ? ` Last counted on-chain ${new Date(lastCount * 1000).toLocaleString()}.` : " The first count runs a day after landlords join."}
+        {lastCount > 0
+          ? ` Last counted on-chain ${new Date(lastCount * 1000).toLocaleString()}.`
+          : " Counts run daily; a landlord's $PENIS counts from its second count."}
       </p>
     </div>
   );
