@@ -13,9 +13,11 @@ const instrumentSerif = Instrument_Serif({
 });
 
 export const metadata: Metadata = {
+  metadataBase: new URL("https://thepenisendowment.com"),
+  alternates: { canonical: "/" },
   title: { default: "The $PENIS Endowment", template: "%s · The $PENIS Endowment" },
   description:
-    "Permanent capital for buybacks, liquidity, and growth. The endowment holds $PENIS forever and spends only the PUMP it earns.",
+    "Permanent capital. Landlords delegate their PUMP rewards, and the endowment turns every PUMP into $PENIS it holds forever.",
   // Pre-launch: keep it out of search until the landlords sign off.
   robots: { index: false, follow: false },
 };

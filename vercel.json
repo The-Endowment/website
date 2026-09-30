@@ -1,3 +1,17 @@
 {
-  "framework": "nextjs"
+  "framework": "nextjs",
+  "redirects": [
+    {
+      "source": "/:path*",
+      "has": [{ "type": "host", "value": "www.thepenisendowment.com" }],
+      "destination": "https://thepenisendowment.com/:path*",
+      "permanent": true
+    },
+    {
+      "source": "/:path*",
+      "has": [{ "type": "host", "value": "penis-endowment.vercel.app" }],
+      "destination": "https://thepenisendowment.com/:path*",
+      "permanent": true
+    }
+  ]
 }
