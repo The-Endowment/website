@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { CopyAddress } from "@/components/CopyAddress";
-import { CommitmentBar } from "@/components/CommitmentBar";
+import { Campaign } from "@/components/Campaign";
 import { DotLogo } from "@/components/Logo";
 import { links, PENIS_MINT } from "@/lib/site";
 
@@ -65,6 +65,7 @@ export default function Home() {
         </div>
         <DotLogo className="hero-art" label="The endowment's mark, a temple drawn in dots" />
       </section>
+        <Campaign />
         <section id="how" className="row">
           <h2 className="row-label">How it works</h2>
           <div className="row-body">
@@ -213,7 +214,6 @@ export default function Home() {
               Sweeps switch on once committed landlords hold 30% of all $PENIS, starting with the founding landlords.
               Follow <a href={links.x}>@PenisEndowment</a> for the announcement.
             </p>
-            <CommitmentBar />
           </div>
         </section>
 

@@ -1,7 +1,6 @@
 import type { Metadata } from "next";
 import { CommitmentBar } from "@/components/CommitmentBar";
 import { DelegatePanel } from "@/components/DelegatePanel";
-import { LandlordLedger } from "@/components/LandlordLedger";
 import { WalletProvider } from "@/components/WalletClient";
 
 export const metadata: Metadata = {
@@ -78,7 +77,7 @@ export default function Delegate() {
           </div>
         </section>
 
-        <section className="row">
+        <section id="counting" className="row">
           <h2 className="row-label">How counting works</h2>
           <div className="row-body">
             <ul className="plain-list">
@@ -114,7 +113,6 @@ export default function Delegate() {
           </div>
         </section>
 
-        <LandlordLedger />
       </div>
     </>
   );

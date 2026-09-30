@@ -151,6 +151,62 @@ button.button-primary { background: var(--bone); }
 .quote { margin: 8px 0; padding-left: 24px; border-left: 2px solid var(--accent); font-family: var(--serif); font-size: 26px; line-height: 1.3; }
 .signoff { display: flex; justify-content: space-between; align-items: center; gap: 32px; flex-wrap: wrap; }
 
+/* Campaign (home page, below the hero) */
+.campaign .row-body { min-width: 0; }
+.campaign .badge { display: inline-flex; align-items: center; gap: 8px; align-self: flex-start; font-size: 13px; color: var(--accent); border: 1px solid #6b5a3c; border-radius: 999px; padding: 4px 12px; }
+.campaign .badge::before { content: ""; width: 7px; height: 7px; border-radius: 50%; background: var(--accent); }
+.goal { display: flex; flex-direction: column; gap: 14px; }
+.goal-figures { display: flex; flex-wrap: wrap; align-items: baseline; gap: 6px 14px; }
+.goal .big { font-family: var(--serif); font-size: clamp(64px, 9vw, 112px); line-height: 0.9; letter-spacing: -0.01em; }
+.goal .of { font-family: var(--serif); font-size: clamp(28px, 3vw, 40px); color: var(--stone); }
+.track { position: relative; height: 14px; border-radius: 7px; background: var(--surface); border: 1px solid var(--rule); }
+.track .fill { position: absolute; inset: 0 auto 0 0; border-radius: 7px; background: linear-gradient(90deg, #6b5a3c, var(--accent)); }
+.ticks { position: relative; height: 38px; font-size: 13px; color: var(--faint); font-variant-numeric: tabular-nums; }
+.tick { position: absolute; top: 0; transform: translateX(-50%); display: flex; flex-direction: column; align-items: center; gap: 2px; white-space: nowrap; }
+.tick::before { content: ""; width: 1px; height: 8px; background: var(--rule); }
+.tick.start { transform: none; align-items: flex-start; }
+.tick.end { transform: translateX(-100%); align-items: flex-end; }
+.tick.goalmark { color: var(--bone); }
+.goal-facts { display: flex; flex-wrap: wrap; gap: 8px 28px; font-size: 14px; color: var(--stone); font-variant-numeric: tabular-nums; }
+.goal-facts b { color: var(--bone); font-weight: 500; }
+.board-head { display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between; gap: 8px; }
+.board-title { font-family: var(--serif); font-weight: 400; font-size: 28px; margin: 0; }
+.board-sub { font-size: 14px; color: var(--stone); }
+.table-scroll { overflow-x: auto; }
+.board { width: 100%; border-collapse: collapse; font-size: 15px; font-variant-numeric: tabular-nums; }
+.board th { text-align: left; font-weight: 500; color: var(--stone); font-size: 13px; padding: 0 12px 10px 0; border-bottom: 1px solid var(--rule); white-space: nowrap; }
+.board td { padding: 13px 12px 13px 0; border-bottom: 1px solid var(--rule); white-space: nowrap; }
+.board .num { text-align: right; }
+.board th:last-child, .board td:last-child { padding-right: 0; }
+.board .rank { color: var(--faint); width: 36px; }
+.board .wallet { font-family: var(--mono); font-size: 14px; }
+.share { display: flex; align-items: center; justify-content: flex-end; gap: 10px; }
+.share-value { min-width: 3.4em; text-align: right; }
+.minibar { width: 72px; height: 4px; border-radius: 2px; background: var(--surface); position: relative; overflow: hidden; }
+.minibar span { position: absolute; inset: 0 auto 0 0; background: var(--accent); }
+.count-details { font-size: 14px; color: var(--stone); display: flex; flex-direction: column; }
+.count-details summary { cursor: pointer; }
+.count-details summary:hover { color: var(--bone); }
+.count-details .table-scroll { margin: 14px 0; }
+.link-button { font: inherit; color: inherit; background: none; border: 0; padding: 0; cursor: pointer; text-decoration: underline; text-decoration-color: var(--rule); text-underline-offset: 3px; }
+.link-button:hover { color: var(--accent); }
+.buys { display: grid; }
+.buy { display: grid; grid-template-columns: 90px 1fr auto; gap: 16px; align-items: baseline; padding-block: 12px; border-bottom: 1px solid var(--rule); font-size: 15px; font-variant-numeric: tabular-nums; }
+.buy time { color: var(--faint); font-size: 14px; }
+.buy .arrow { color: var(--accent); padding-inline: 6px; }
+.buy a { font-family: var(--mono); font-size: 13px; color: var(--stone); }
+@media (prefers-reduced-motion: no-preference) {
+  .track .fill { transition: width 600ms ease; }
+}
+@media (max-width: 640px) {
+  .tick-note { display: none; }
+}
+@media (max-width: 520px) {
+  .buy { grid-template-columns: 1fr auto; }
+  .buy time { grid-column: 1 / -1; }
+  .minibar { display: none; }
+}
+
 @media (max-width: 960px) {
   .nav a:not(.button) { display: none; }
   .hero { grid-template-columns: 1fr; gap: 40px; }
