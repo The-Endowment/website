@@ -2,7 +2,7 @@
 
 How to give a dividend-paying coin a permanent holder that never sells, funded by its own largest holders.
 
-Source: https://github.com/The-PENIS-Endowment (Apache-2.0)
+Source: https://github.com/The-Endowment (Apache-2.0)
 
 ---
 

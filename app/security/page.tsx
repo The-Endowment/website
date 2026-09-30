@@ -8,7 +8,7 @@ export const metadata: Metadata = {
 };
 
 const REVIEWED_COMMIT = "3bfce2c4aa4e8e560a94c749ebf273c3b53a7d58";
-const commitUrl = `https://github.com/The-PENIS-Endowment/endowment/commit/${REVIEWED_COMMIT}`;
+const commitUrl = `https://github.com/The-Endowment/endowment/commit/${REVIEWED_COMMIT}`;
 
 const rounds = [
   { name: "Round 1: full review", scope: "The first complete contract, automation and website", result: "Every finding addressed in a redesign" },
