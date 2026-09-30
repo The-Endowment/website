@@ -12,7 +12,6 @@ import {
   setTransactionMessageFeePayerSigner,
   setTransactionMessageLifetimeUsingBlockhash,
   signTransactionMessageWithSigners,
-  type Address,
   type Instruction,
   type KeyPairSigner,
 } from "@solana/kit";
@@ -26,7 +25,6 @@ import {
   getCreateAssociatedTokenIdempotentInstruction,
 } from "@solana-program/token-2022";
 import {
-  ACTIVE_MAX_AGE_SECS,
   ata,
   attestationsOf,
   authorityPda,
@@ -59,6 +57,7 @@ import {
 } from "@/lib/endowment";
 import { deviationBps, reservedFees, spotPriceX32, twapPriceX32, x32ToNumber } from "@/lib/price";
 import { flagshipInstance } from "@/lib/solana";
+import { fundingState, fundingStatus } from "@/lib/funding-state";
 
 type Rpc = ReturnType<typeof createSolanaRpc>;
 
@@ -215,9 +214,10 @@ function shuffled<T>(items: T[]): T[] {
   return out;
 }
 
-/** Sweeps run while active and a count finished recently (`Config::sweeps_on`). */
-function sweepsOn(config: EndowmentConfig, now: number) {
-  return config.active && (config.params.activateBps === 0 || now - Number(config.lastCountAt) <= ACTIVE_MAX_AGE_SECS);
+async function directCoinBalance(k: Keeper): Promise<bigint | null> {
+  const authority = await authorityPda(k.inst.program, k.inst.config);
+  const vault = await fetchMaybeToken(k.rpc, await ata(authority, k.inst.coinMint, k.inst.coinTokenProgram));
+  return vault.exists ? vault.data.amount : null;
 }
 
 // ---- Sweeps (audit L-06, I-16) ----
@@ -232,9 +232,8 @@ export async function runSweeps(k: Keeper) {
   const deadline = Date.now() + BUDGET_MS;
   const config = await readConfig(k);
   const now = nowSecs();
-  if (config.retired) return { skipped: "retired" };
-  if (now < Number(config.pausedUntil)) return { skipped: "paused" };
-  if (!sweepsOn(config, now)) return { skipped: "sweeps are off (commitment below the threshold, or no recent count)" };
+  const state = fundingState(config, await directCoinBalance(k), now);
+  if (state !== "enabled") return { skipped: fundingStatus[state] };
 
   const [authority, poolAccounts, rows] = await Promise.all([
     authorityPda(k.inst.program, k.inst.config),
@@ -603,6 +602,7 @@ export async function runPrune(k: Keeper) {
 export async function countHealth(k: Keeper) {
   const config = await readConfig(k);
   const now = nowSecs();
+  const state = fundingState(config, await directCoinBalance(k), now);
   const age = (t: bigint) => (t > BigInt(0) ? now - Number(t) : null);
   const countAge = age(config.lastCountAt);
   const attestAge = age(config.lastAttestedAt);
@@ -621,7 +621,8 @@ export async function countHealth(k: Keeper) {
     refresherIsKeeper,
     lastAttestedAt: Number(config.lastAttestedAt),
     attestAgeSecs: attestAge,
-    sweepsOn: sweepsOn(config, now),
+    sweepsOn: state === "enabled",
+    fundingState: state,
     lastSweepAt: Number(config.lastSweepAt),
     sweepAgeSecs: age(config.lastSweepAt),
     stale: countStale || attestStale,

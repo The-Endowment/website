@@ -94,7 +94,7 @@ export const DISC = {
 /** Match `COUNT_INTERVAL_SECS`, `COUNT_TIMEOUT_SECS` and `ACTIVE_MAX_AGE_SECS` in the program's constants. */
 export const COUNT_INTERVAL_SECS = 24 * 60 * 60;
 export const COUNT_TIMEOUT_SECS = 4 * 60 * 60;
-export const ACTIVE_MAX_AGE_SECS = 3 * 24 * 60 * 60;
+export { ACTIVE_MAX_AGE_SECS } from "./funding-state";
 /** Match `MAX_VAULT_DAYS_OF_BUYS`: sweeps stop filling the dividend vault past this many days of buys. */
 export const MAX_VAULT_DAYS_OF_BUYS = 3;
 /** Match `REQUIRED_ATTESTATIONS` and `MIN_ATTEST_SPACING_SECS`: a landlord counts after this many spaced refresher reads. */
@@ -116,6 +116,7 @@ export const PROGRAM_ERRORS: Record<number, string> = {
   6048: "PriceBelowTwap",
   6049: "FloorAboveQuote",
   6050: "NotAttested",
+  6053: "Completed",
 };
 /** Match `MIN_DELEGATION` (u64::MAX / 2). */
 export const MIN_DELEGATION = BigInt("9223372036854775807");

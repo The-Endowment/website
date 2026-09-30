@@ -27,7 +27,7 @@ const faqs = [
   },
   {
     q: "What happens at 200 million?",
-    a: "It's a milestone, not an end. Contributions keep flowing, and from then on part of every buy becomes permanent liquidity in the $PENIS pool that can never be withdrawn.",
+    a: "Holder contributions stop permanently once the endowment's direct vault holds 200 million $PENIS. Direct donations count; coins in liquidity pools do not. Existing treasury funds and future treasury rewards continue buying $PENIS and adding permanent liquidity under the contract's rules.",
   },
   {
     q: "Can I check the code?",
@@ -102,7 +102,7 @@ export default function Home() {
             <div className="figures">
               <div className="figure">
                 <span className="figure-value">200,000,000</span>
-                <span className="figure-label">$PENIS, the first milestone</span>
+                <span className="figure-label">$PENIS held directly, the funding goal</span>
               </div>
               <div className="figure">
                 <span className="figure-value">20%</span>
@@ -110,8 +110,8 @@ export default function Home() {
               </div>
             </div>
             <p>
-              After the milestone, contributions keep flowing and part of every buy becomes permanent liquidity that
-              can never be withdrawn.
+              At the goal, holder contributions stop permanently. Existing treasury funds and future treasury rewards
+              continue buying $PENIS and adding permanent liquidity. Coins in liquidity pools do not count toward the goal.
             </p>
           </div>
         </section>

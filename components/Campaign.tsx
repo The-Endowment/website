@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import type { Campaign as CampaignData, CampaignLandlord } from "@/lib/campaign";
 import { formatTokens, TOKEN_DECIMALS } from "@/lib/solana";
+import { fundingStatus } from "@/lib/funding-state";
 
 type Launched = Extract<CampaignData, { launched: true }>;
 
@@ -104,8 +105,8 @@ function Raising({ c }: { c: Launched }) {
       <div className="row-body">
         <h3 className="statement">The endowment switches on at {pct(x)}.</h3>
         <p className="lede">
-          Every landlord who delegates moves the bar. When committed wallets hold {pct(x)} of all $PENIS, sweeps and
-          buybacks start, and the endowment starts buying $PENIS that is never sold.
+          Holder contributions start when eligible commitment reaches {pct(x)} in an on-chain count.
+          The endowment can also buy using funds it already holds. {fundingStatus[c.fundingState]}
         </p>
 
         <div className="goal">
@@ -221,6 +222,8 @@ const TOP = 6;
 function Live({ c }: { c: Launched }) {
   const [all, setAll] = useState(false);
   const bought = BigInt(c.totalBought);
+  const held = BigInt(c.directHeld);
+  const complete = c.stage === "complete";
   const spent = BigInt(c.totalSpent);
   const swept = BigInt(c.totalSwept);
   const cap = BigInt(c.milestone);
@@ -232,22 +235,22 @@ function Live({ c }: { c: Launched }) {
     <section className="row campaign" id="campaign">
       <h2 className="row-label">The endowment</h2>
       <div className="row-body">
-        <span className="badge">Live</span>
-        <h3 className="statement">Rent in, $PENIS locked away.</h3>
+        <span className="badge">{complete ? "Funding complete" : "Live"}</span>
+        <h3 className="statement">{complete ? "The funding goal has been reached." : "$PENIS held for the endowment."}</h3>
         <p className="lede">
-          Landlords crossed {pct(c.activateBps)} and the endowment switched on. Every PUMP they delegate now buys
-          $PENIS in small amounts through the day, and none of it is ever sold.
+          {fundingStatus[c.fundingState]} The goal counts $PENIS held directly in the vault, including donations.
+          Liquidity-pool holdings are separate. {complete && "Existing treasury funds and future treasury rewards continue under the buy/liquidity policy."}
         </p>
 
         <div className="goal">
           {cap > ZERO ? (
             <Goal
-              big={compact(bought)}
-              of={`of ${compact(cap)} $PENIS bought and locked`}
-              fill={ratio(bought, cap)}
-              label={`$PENIS bought toward the ${compact(cap)} milestone`}
+              big={compact(held)}
+              of={`of ${compact(cap)} $PENIS held directly`}
+              fill={ratio(held, cap)}
+              label={`Direct vault holdings toward the ${compact(cap)} funding goal`}
               max={Number(cap / UNIT)}
-              now={Number(bought / UNIT)}
+              now={Number((held > cap ? cap : held) / UNIT)}
               ticks={[
                 { at: 25, label: quarter(1) },
                 { at: 50, label: quarter(2) },
@@ -257,8 +260,8 @@ function Live({ c }: { c: Launched }) {
             />
           ) : (
             <div className="goal-figures">
-              <span className="big">{compact(bought)}</span>
-              <span className="of">$PENIS bought and locked</span>
+              <span className="big">{compact(held)}</span>
+              <span className="of">$PENIS held directly</span>
             </div>
           )}
           <div className="goal-facts">
@@ -359,7 +362,10 @@ export function Campaign() {
   useEffect(() => {
     let cancelled = false;
     fetch("/api/campaign")
-      .then((r) => r.json())
+      .then((r) => {
+        if (!r.ok) throw new Error("Campaign data is unavailable");
+        return r.json();
+      })
       .then((d: CampaignData) => {
         if (!cancelled) setData(d);
       })
@@ -370,5 +376,5 @@ export function Campaign() {
   }, []);
 
   if (!data || !data.launched) return null;
-  return data.stage === "live" ? <Live c={data} /> : <Raising c={data} />;
+  return data.stage === "raising" ? <Raising c={data} /> : <Live c={data} />;
 }

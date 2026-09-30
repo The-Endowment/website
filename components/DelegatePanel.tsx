@@ -38,6 +38,7 @@ import {
 } from "@/lib/endowment";
 import type { EndowmentSummary } from "@/app/api/endowments/route";
 import { flagshipInstance, formatTokens } from "@/lib/solana";
+import { fundingState } from "@/lib/funding-state";
 
 /**
  * The delegation is unlimited on purpose. The program counts a landlord, and
@@ -58,6 +59,7 @@ type Status = {
   dividendBalance: bigint;
   coinBalance: bigint;
   coinSupply: bigint;
+  directHeld: bigint | null;
   dividendDecimals: number;
   delegate: Address | null;
   /** Delegated to this endowment, in full (the program needs at least MIN_DELEGATION). */
@@ -99,6 +101,7 @@ async function loadStatus(inst: Instance, owner: Address): Promise<Status> {
   // Only ever offer opt-in to the real flagship (audit KW-09).
   if (!config || !isFlagshipConfig(config)) throw new Error("The endowment isn't live yet.");
   const authority = await authorityPda(inst.program, inst.config);
+  const coinVault = await fetchMaybeToken(client.rpc, await ata(authority, inst.coinMint, inst.coinTokenProgram));
   const delegate = dividend.exists && isSome(dividend.data.delegate) ? dividend.data.delegate.value : null;
   const delegatedAmount = dividend.exists ? dividend.data.delegatedAmount : BigInt(0);
   const ours = delegate === authority;
@@ -113,6 +116,7 @@ async function loadStatus(inst: Instance, owner: Address): Promise<Status> {
     dividendBalance: dividend.exists ? dividend.data.amount : BigInt(0),
     coinBalance: coin.exists ? coin.data.amount : BigInt(0),
     coinSupply,
+    directHeld: coinVault.exists ? coinVault.data.amount : null,
     dividendDecimals: dividendMint.exists ? dividendMint.data.decimals : 6,
     delegate,
     delegatedToEndowment: ours && delegatedAmount >= MIN_DELEGATION,
@@ -125,6 +129,9 @@ async function loadStatus(inst: Instance, owner: Address): Promise<Status> {
 
 /** Why opting in isn't possible right now, in plain words; null if it is. */
 function blocker(s: Status): string | null {
+  const state = fundingState(s.config, s.directHeld, s.now);
+  if (state === "complete") return "The funding goal has been reached. Holder contributions have ended permanently; you can still revoke and leave.";
+  if (state === "unavailable") return "The endowment vault balance cannot be verified. Please try again before joining.";
   if (s.config.retired) return "The endowment has closed to new landlords.";
   if (s.now < Number(s.config.pausedUntil)) {
     const until = new Date(Number(s.config.pausedUntil) * 1000).toLocaleString();
@@ -145,12 +152,15 @@ function Connected({ inst }: { inst: Instance }) {
 
   const refresh = useCallback(async () => {
     if (!owner) return;
-    setLoadError(null);
-    try {
-      setStatus(await loadStatus(inst, owner));
-    } catch (e) {
-      setLoadError(e instanceof Error && e.message.includes("live") ? e.message : "Couldn't read your wallet from the network. Try again in a moment.");
-    }
+    await loadStatus(inst, owner).then(
+      (next) => {
+        setStatus(next);
+        setLoadError(null);
+      },
+      (e: unknown) => {
+        setLoadError(e instanceof Error && e.message.includes("live") ? e.message : "Couldn't read your wallet from the network. Try again in a moment.");
+      },
+    );
   }, [inst, owner]);
 
   useEffect(() => {
@@ -160,13 +170,17 @@ function Connected({ inst }: { inst: Instance }) {
   const optIn = useAction(async (signal: AbortSignal) => {
     if (!status) throw new Error("No status");
     const signer = client.identity;
+    // Recheck completion immediately before requesting any token approval.
+    const latest = await loadStatus(inst, signer.address);
+    const reason = blocker(latest);
+    if (reason) throw new Error(reason);
     const authority = await authorityPda(inst.program, inst.config);
     const ixs: Instruction[] = [
       getCreateAssociatedTokenIdempotentInstruction({
         payer: signer,
         owner: signer.address,
         mint: inst.dividendMint,
-        ata: status.dividendAccount,
+        ata: latest.dividendAccount,
         tokenProgram: inst.dividendTokenProgram,
       }),
       // Registering needs the coin account to exist, even while it's empty (audit L-12).
@@ -174,26 +188,26 @@ function Connected({ inst }: { inst: Instance }) {
         payer: signer,
         owner: signer.address,
         mint: inst.coinMint,
-        ata: status.coinAccount,
+        ata: latest.coinAccount,
         tokenProgram: inst.coinTokenProgram,
       }),
       getApproveCheckedInstruction(
         {
-          source: status.dividendAccount,
+          source: latest.dividendAccount,
           mint: inst.dividendMint,
           delegate: authority,
           owner: signer,
           amount: UNLIMITED,
-          decimals: status.dividendDecimals,
+          decimals: latest.dividendDecimals,
         },
         { programAddress: inst.dividendTokenProgram as typeof TOKEN_2022_PROGRAM_ADDRESS },
       ),
     ];
-    if (status.landlord) {
+    if (latest.landlord) {
       // Coming back: reset the baseline so everything this account holds now stays the landlord's.
-      ixs.push(await resyncBaselineIx(inst, signer, status.dividendAccount));
+      ixs.push(await resyncBaselineIx(inst, signer, latest.dividendAccount));
     } else {
-      ixs.push(await registerLandlordIx(inst, signer, status.dividendAccount, status.coinAccount));
+      ixs.push(await registerLandlordIx(inst, signer, latest.dividendAccount, latest.coinAccount));
     }
     const result = await client.sendTransaction(ixs, { abortSignal: signal });
     await refresh();

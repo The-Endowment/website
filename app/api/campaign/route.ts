@@ -10,6 +10,6 @@ export async function GET() {
   try {
     return Response.json(await loadCampaign());
   } catch {
-    return Response.json({ launched: false });
+    return Response.json({ error: "Campaign data is temporarily unavailable" }, { status: 503 });
   }
 }

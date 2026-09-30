@@ -1,4 +1,5 @@
 import { createHash } from "node:crypto";
+import { fetchMaybeToken } from "@solana-program/token-2022";
 import { getAddressDecoder, type Address, type Signature } from "@solana/kit";
 import {
   ata,
@@ -13,6 +14,7 @@ import {
   REQUIRED_ATTESTATIONS,
 } from "@/lib/endowment";
 import { flagshipInstance, readRpc } from "@/lib/solana";
+import { fundingState, type FundingState } from "@/lib/funding-state";
 
 /** One landlord, as the campaign shows it. Amounts are base-unit strings (6 decimals). */
 export type CampaignLandlord = {
@@ -34,7 +36,8 @@ export type Campaign =
   | { launched: false }
   | {
       launched: true;
-      stage: "raising" | "live";
+      stage: "raising" | "live" | "complete";
+      fundingState: FundingState;
       active: boolean;
       activateBps: number;
       deactivateBps: number;
@@ -47,6 +50,7 @@ export type Campaign =
       totalSwept: string;
       totalSpent: string;
       totalBought: string;
+      directHeld: string;
       milestone: string;
       landlords: CampaignLandlord[];
       buys: CampaignBuy[];
@@ -110,6 +114,11 @@ export async function loadCampaign(): Promise<Campaign> {
   const config = await fetchDecoded(rpc, inst.config, decodeConfig);
   if (!config) return { launched: false };
 
+  const authority = await authorityPda(inst.program, inst.config);
+  const coinVault = await fetchMaybeToken(rpc, await ata(authority, inst.coinMint, inst.coinTokenProgram));
+  if (!coinVault.exists) throw new Error("The endowment coin vault is unavailable");
+  const state = fundingState(config, coinVault.data.amount, Math.floor(Date.now() / 1000));
+
   let supply = config.count.supply;
   if (supply === BigInt(0)) {
     const s = await rpc.getTokenSupply(inst.coinMint).send();
@@ -126,15 +135,16 @@ export async function loadCampaign(): Promise<Campaign> {
     contributed: record.totalContributed.toString(),
   }));
 
-  // Live once it has ever switched on: sweeps only run while active, and buys only spend swept PUMP.
+  // Treasury income and direct donations can fund buys without any holder sweep.
   const live =
     config.active || config.totalSwept > BigInt(0) || config.totalCoinBought > BigInt(0);
   const { buys, lastDay } = live ? await recentBuys(rpc, inst.program, inst.config, config.pool) : { buys: [], lastDay: 0 };
 
   return {
     launched: true,
-    stage: live ? "live" : "raising",
-    active: config.active,
+    stage: state === "complete" ? "complete" : live ? "live" : "raising",
+    fundingState: state,
+    active: state === "enabled",
     activateBps: config.params.activateBps,
     deactivateBps: config.params.deactivateBps,
     committedBps: config.lastCountBps,
@@ -145,6 +155,7 @@ export async function loadCampaign(): Promise<Campaign> {
     totalSwept: config.totalSwept.toString(),
     totalSpent: config.totalDividendSpent.toString(),
     totalBought: config.totalCoinBought.toString(),
+    directHeld: coinVault.data.amount.toString(),
     milestone: config.contributionCap.toString(),
     landlords,
     buys,
