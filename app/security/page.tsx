@@ -4,37 +4,29 @@ import { links } from "@/lib/site";
 export const metadata: Metadata = {
   title: "Security",
   description:
-    "How the $PENIS Endowment contract was reviewed: an AI-assisted adversarial security review in three rounds, a final check and a live launch rehearsal.",
+    "The $PENIS Endowment's current review status, trusted reward reporter, contract safeguards and remaining launch requirements.",
 };
 
-const REVIEWED_COMMIT = "3bfce2c4aa4e8e560a94c749ebf273c3b53a7d58";
-const commitUrl = `https://github.com/The-Endowment/endowment/commit/${REVIEWED_COMMIT}`;
-
-const rounds = [
-  { name: "Round 1: full review", scope: "The first complete contract, automation and website", result: "Every finding addressed in a redesign" },
-  { name: "Round 2: full review", scope: "The shared multi-endowment contract, plus a re-check of every round-1 finding", result: "62 resolved, 12 accepted by design, 3 completed at launch" },
-  { name: "Round 3: targeted review", scope: "The new counting and pricing mechanisms", result: "21 resolved, 1 accepted by design" },
-  { name: "Final check", scope: "Every round-3 change, re-verified", result: "All resolved" },
-  { name: "Launch rehearsal", scope: "Full launch on a fork of Solana mainnet, with the real tokens and pool", result: "7 of 7 steps passed" },
-];
+const LEGACY_REVIEWED_COMMIT = "3bfce2c4aa4e8e560a94c749ebf273c3b53a7d58";
+const commitUrl = `https://github.com/The-Endowment/endowment/commit/${LEGACY_REVIEWED_COMMIT}`;
 
 export default function Security() {
   return (
     <>
       <section className="wrap">
         <div className="thesis-head">
-          <h1 className="display h1">Reviewed, then reviewed again.</h1>
+          <h1 className="display h1">Safeguards, trust and review.</h1>
           <p className="lede">
-            The contract was put through an AI-assisted adversarial security review: three rounds, a final focused
-            check, and a full launch rehearsal on a fork of mainnet. Every finding was resolved or is a documented
-            design choice.
+            The version 4 replacement is being developed and reviewed locally. New enrollment and automated
+            contributions remain closed here. The current work has not received an independent security audit
+            and is not an authorized production release.
           </p>
           <div className="actions">
             <a href="/security-review.pdf" className="button button-primary" download>
-              Download the summary (PDF)
+              Historical review (PDF)
             </a>
             <a href={commitUrl} className="button">
-              Reviewed code
+              Legacy reviewed commit
             </a>
           </div>
         </div>
@@ -42,37 +34,47 @@ export default function Security() {
 
       <div className="wrap">
         <section className="row">
-          <h2 className="row-label">Method</h2>
+          <h2 className="row-label">Reward collection</h2>
           <div className="row-body">
-            <h3 className="statement">Every finding had to survive a skeptic.</h3>
+            <h3 className="statement">A trusted reporter identifies eligible PUMP.</h3>
             <ul className="plain-list">
               <li>
-                <strong>Scoped reviewers</strong>
+                <strong>What the pledge covers</strong>
                 <span>
-                  Independent reviewers, one per attack surface: access control, token handling, pricing, counting,
-                  governance, economic attacks, and the automation and website.
+                  All verified StonkFun rewards paid in PUMP after fresh enrollment while funding is active,
+                  including PUMP rewards from other coins in the same wallet. Rewards paid in STONK or other
+                  assets are excluded.
                 </span>
               </li>
               <li>
-                <strong>Adversarial verification</strong>
+                <strong>What the reporter must exclude</strong>
                 <span>
-                  A separate reviewer tried to refute every finding. Anything rated high had to be proven with a working
-                  exploit test against the real program and real pool data.
+                  Existing PUMP, purchases, ordinary transfers and rewards paid while funding is inactive do not
+                  create eligibility. Spending reduces eligible rewards; buying replacements does not restore them.
+                  This classification depends on the reporter, not on an on-chain proof of each reward.
                 </span>
               </li>
               <li>
-                <strong>Regression checks</strong>
-                <span>Each round re-checked every earlier finding against the code, not against the fix notes.</span>
-              </li>
-              <li>
-                <strong>Completeness critic</strong>
-                <span>A final reviewer each round looked for anything the others missed.</span>
-              </li>
-              <li>
-                <strong>Live rehearsal</strong>
+                <strong>No daily wallet cap</strong>
                 <span>
-                  The whole launch was run on a fork of mainnet: opting in, dividend sweeps, the daily count, the 30%
-                  switch, real buys against the $PENIS pool, pausing and settings changes.
+                  The pledge has no daily contribution cap per wallet. It uses a broad, revocable PUMP token
+                  approval. A mistaken or compromised reporter could collect PUMP that the policy excludes,
+                  within the available approval, balance and contract constraints.
+                </span>
+              </li>
+              <li>
+                <strong>Checks on each collection</strong>
+                <span>
+                  The replacement checks the authorized reporter, fresh consent, exact amount, expiry and replay
+                  protection, and sends contributions only to the configured treasury. These checks do not prove
+                  that the reporter classified the PUMP correctly.
+                </span>
+              </li>
+              <li>
+                <strong>Daily oversight</strong>
+                <span>
+                  An approximate daily comparison with StonkFun reward totals can flag discrepancies for
+                  investigation. Matching totals cannot prove that each wallet was charged correctly.
                 </span>
               </li>
             </ul>
@@ -80,78 +82,86 @@ export default function Security() {
         </section>
 
         <section className="row">
-          <h2 className="row-label">Results</h2>
+          <h2 className="row-label">Review status</h2>
           <div className="row-body">
-            <div className="figures">
-              <div className="figure">
-                <span className="figure-value">152</span>
-                <span className="figure-label">automated tests, including one for every exploit found</span>
-              </div>
-              <div className="figure">
-                <span className="figure-value">0</span>
-                <span className="figure-label">ways found, in any round, for anyone to take funds</span>
-              </div>
-            </div>
             <table className="table">
               <thead>
                 <tr>
-                  <th>Stage</th>
-                  <th>Scope</th>
-                  <th>Outcome</th>
+                  <th>Work</th>
+                  <th>Status</th>
                 </tr>
               </thead>
               <tbody>
-                {rounds.map((r) => (
-                  <tr key={r.name}>
-                    <td>{r.name}</td>
-                    <td>{r.scope}</td>
-                    <td>{r.result}</td>
-                  </tr>
-                ))}
+                <tr>
+                  <td>Version 4 contract, reporter and website</td>
+                  <td>Local implementation, automated tests and AI-assisted adversarial review in progress</td>
+                </tr>
+                <tr>
+                  <td>Independent security review</td>
+                  <td>Pending; AI-assisted review is not an independent audit or certification</td>
+                </tr>
+                <tr>
+                  <td>Treasury rewards and governance</td>
+                  <td>Program-owned treasury reward eligibility and the upgrade-authority policy still need verification and agreement</td>
+                </tr>
+                <tr>
+                  <td>Deployment and limited pilot</td>
+                  <td>Not authorized by these local changes; deployment identity and release checks remain outstanding</td>
+                </tr>
               </tbody>
             </table>
           </div>
         </section>
 
         <section className="row">
-          <h2 className="row-label">Verified</h2>
+          <h2 className="row-label">Contract safeguards</h2>
           <div className="row-body">
-            <h3 className="statement">What the contract guarantees.</h3>
+            <h3 className="statement">Rules in the replacement under review.</h3>
             <ul className="plain-list">
               <li>
-                <strong>$PENIS never leaves</strong>
-                <span>No function can move $PENIS out of the vault, or withdraw locked liquidity.</span>
-              </li>
-              <li>
-                <strong>Landlords keep what they hold</strong>
+                <strong>Restricted treasury use</strong>
                 <span>
-                  The endowment can only take new PUMP above the balance a landlord held when joining, and nothing
-                  else in the wallet.
+                  There is no admin or reporter withdrawal instruction. The buyback process can move $PENIS from
+                  the vault into permanently locked liquidity, so the direct vault balance can change.
                 </span>
               </li>
               <li>
-                <strong>Leaving never depends on us</strong>
-                <span>Revoking works from any wallet, without this site.</span>
+                <strong>Holder $PENIS is not pledged</strong>
+                <span>
+                  Enrollment delegates PUMP collection, not access to the holder&rsquo;s $PENIS. Funding starts at
+                  30% committed, pauses below 25%, and resumes at 30%. Holder collection stops permanently when
+                  the direct treasury vault reaches 200 million $PENIS; liquidity holdings do not count toward that goal.
+                </span>
+              </li>
+              <li>
+                <strong>Revocation remains available</strong>
+                <span>
+                  Holders can revoke the PUMP approval directly through the token program without the reporter or
+                  this site. Completed contributions are not refunded. Existing approvals require separate revocation;
+                  this website update does not change old deployments.
+                </span>
               </li>
               <li>
                 <strong>Changes are slow and public</strong>
-                <span>Settings changes wait 72 hours and stay within hard limits written into the code.</span>
-              </li>
-              <li>
-                <strong>The pause is limited</strong>
-                <span>It lasts at most 7 days, can&rsquo;t be renewed back to back, and can&rsquo;t move funds.</span>
-              </li>
-              <li>
-                <strong>Safe tokens only</strong>
                 <span>
-                  Endowments can only be created for coins nobody can mint more of, freeze, or take back from wallets.
+                  Parameter changes and reporter replacement use a 72-hour timelock in the current design.
+                  Retained program upgrade authority can replace the code and override these safeguards;
+                  the timelock does not constrain that separate authority.
                 </span>
               </li>
               <li>
-                <strong>Fair prices</strong>
+                <strong>Bounded buying</strong>
                 <span>
-                  Buys are priced against the pool&rsquo;s own recent average and sized to its depth, so a trade placed
-                  just before a buy can&rsquo;t push the price against the endowment.
+                  Trade size, pool depth and recent average price constrain buys. These checks limit exposure but
+                  do not guarantee a fair market price or prevent all manipulation and losses.
+                </span>
+              </li>
+              <li>
+                <strong>Outside token controls</strong>
+                <span>
+                  The contract checks supported mint authorities and token settings before relevant operations.
+                  Third-party token controls remain a dependency; detecting a change and stopping an operation
+                  cannot guarantee that funds retain their value or that no loss occurs.
                 </span>
               </li>
             </ul>
@@ -159,28 +169,29 @@ export default function Security() {
         </section>
 
         <section className="row">
-          <h2 className="row-label">Design choices</h2>
+          <h2 className="row-label">Other dependencies</h2>
           <div className="row-body">
             <ul className="plain-list">
               <li>
                 <strong>The refresher</strong>
                 <span>
                   An automation key checks landlords before each daily count. It can&rsquo;t move funds, its role is
-                  shown publicly for every endowment, and it can resign at any time.
+                  recorded on-chain, and it can resign. This counting role is separate from the reporter that
+                  authorizes PUMP collection.
                 </span>
               </li>
               <li>
-                <strong>Counting is public</strong>
+                <strong>Counts need fresh evidence</strong>
                 <span>
-                  Each landlord&rsquo;s counted $PENIS is on-chain and shown on the site, so any attempt to game the
-                  count is costly and visible.
+                  Counted balances are public, but holdings can change between observations. Freshness checks and
+                  invalidation after refresher changes constrain when collection may proceed.
                 </span>
               </li>
               <li>
-                <strong>Outside token settings</strong>
+                <strong>Incomplete reward history</strong>
                 <span>
-                  PUMP and $PENIS each have a setting controlled by a third party. If either changes, the endowment
-                  pauses buying and sweeping on its own, and nothing is lost.
+                  Missing API records or uncertain wallet history leave the affected rewards with holders. The
+                  system may collect less than the full pledge; it does not infer a debt from a wallet balance.
                 </span>
               </li>
             </ul>
@@ -188,16 +199,20 @@ export default function Security() {
         </section>
 
         <section className="row">
-          <h2 className="row-label">The code</h2>
+          <h2 className="row-label">Historical materials</h2>
           <div className="row-body">
             <p>
-              The review covered commit{" "}
+              The linked PDF describes an earlier AI-assisted review of legacy commit{" "}
               <a href={commitUrl}>
-                <span className="mono">{REVIEWED_COMMIT.slice(0, 7)}</span>
+                <span className="mono">{LEGACY_REVIEWED_COMMIT.slice(0, 7)}</span>
               </a>{" "}
-              of the <a href={links.github}>open-source contract</a>. The deployed program will be a verifiable build of
-              that code, so anyone can confirm what is running matches what was reviewed. Once the founders&rsquo; test is
-              complete, the upgrade key is destroyed and the code can never change.
+              of the <a href={links.github}>open-source contract</a>. Its test counts, findings and rehearsal results
+              do not cover or certify the version 4 replacement. The repository link provides published source;
+              the local replacement is still being prepared for review.
+            </p>
+            <p>
+              Before launch, the reviewed release must be matched to the deployed program. Whether and when to
+              remove upgrade authority remains a governance decision; no key-destruction date is promised.
             </p>
           </div>
         </section>

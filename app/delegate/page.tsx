@@ -6,7 +6,7 @@ import { COLLECTION_PENDING_NOTICE } from "@/lib/collection-policy";
 
 export const metadata: Metadata = {
   title: "Enrollment",
-  description: "Review an existing endowment enrollment or leave. New enrollment is closed while reward routing is reviewed.",
+  description: "Review an existing endowment enrollment or leave. New enrollment is closed while reported reward collection is reviewed.",
 };
 
 export default function Delegate() {
@@ -28,9 +28,9 @@ export default function Delegate() {
           <h2 className="row-label">Existing approvals</h2>
           <div className="row-body">
             <p>
-              Closing enrollment and stopping this website&rsquo;s automated collector does not revoke existing approvals.
-              The old contract can still collect PUMP above its recorded balance baseline, including purchased PUMP,
-              if someone else calls it. Existing participants should revoke that approval before relying on reward-only protection.
+              The version 4 replacement disables the old balance-based sweep and requires fresh consent.
+              Old deployments and approvals are not automatically changed by this website update.
+              Existing participants can revoke their approval and leave at any time.
             </p>
             <p>
               Leave revokes this endowment&rsquo;s PUMP approval and removes its enrollment record.
@@ -43,14 +43,15 @@ export default function Delegate() {
           <h2 className="row-label">Planned pledge</h2>
           <div className="row-body">
             <p>
-              The planned system will contribute verified StonkFun rewards paid in PUMP, including rewards from other
+              The replacement uses a trusted reporting service to identify verified StonkFun rewards paid in PUMP, including rewards from other
               coins in the same wallet, while you are enrolled and funding is active. Existing PUMP, purchased PUMP,
-              ordinary transfers and rewards already paid while funding is inactive must stay with you.
+              ordinary transfers and rewards already paid while funding is inactive are excluded by the reporting policy.
+              A reporter error or compromise can nevertheless cause an incorrect collection. There is no daily cap per wallet.
             </p>
             <p>
               Your $PENIS will stay in your wallet. Funding starts at 30% committed, pauses below 25%, and resumes at 30%.
               Holder contributions end permanently when the endowment directly holds 200 million $PENIS.
-              These are requirements for the replacement; reward-only collection is not available in the current contract.
+              The local replacement is under review; collection remains disabled here until an authorized release.
             </p>
           </div>
         </section>

@@ -94,7 +94,7 @@ export const DISC = {
 /** Match `COUNT_INTERVAL_SECS`, `COUNT_TIMEOUT_SECS` and `ACTIVE_MAX_AGE_SECS` in the program's constants. */
 export const COUNT_INTERVAL_SECS = 24 * 60 * 60;
 export const COUNT_TIMEOUT_SECS = 4 * 60 * 60;
-export { ACTIVE_MAX_AGE_SECS } from "./funding-state";
+export { ACTIVE_MAX_AGE_SECS } from "./funding-state.ts";
 /** Match `MAX_VAULT_DAYS_OF_BUYS`: sweeps stop filling the dividend vault past this many days of buys. */
 export const MAX_VAULT_DAYS_OF_BUYS = 3;
 /** Match `REQUIRED_ATTESTATIONS` and `MIN_ATTEST_SPACING_SECS`: a landlord counts after this many spaced refresher reads. */
@@ -233,6 +233,8 @@ const configDecoder = getStructDecoder([
   ["totalDonated", getU64Decoder()],
   /** Bumped whenever the refresher changes; reads from an earlier epoch don't count (FC-R3-03). */
   ["refresherEpoch", getU32Decoder()],
+  ["collectionEpoch", getU64Decoder()],
+  ["nextConsentId", getU64Decoder()],
 ]);
 
 const landlordDecoder = getStructDecoder([
@@ -257,6 +259,8 @@ const landlordDecoder = getStructDecoder([
   ["lastAttestedAt", getI64Decoder()],
   /** The config's `refresherEpoch` when those reads were made. */
   ["attestationEpoch", getU32Decoder()],
+  ["consentId", getU64Decoder()],
+  ["lastReportNonce", getU64Decoder()],
 ]);
 
 function hasDiscriminator(bytes: Uint8Array, disc: number[]) {

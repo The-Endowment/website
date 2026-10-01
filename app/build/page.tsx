@@ -4,7 +4,7 @@ import { links } from "@/lib/site";
 export const metadata: Metadata = {
   title: "For projects",
   description:
-    "Start an endowment for your own dividend-paying coin: on the shared open-source contract, or as your own deployment.",
+    "Explore the endowment's open-source design and historical guides. The version 4 replacement is under local review and is not ready for project launches.",
 };
 
 export default function Build() {
@@ -14,16 +14,16 @@ export default function Build() {
         <div className="thesis-head">
           <h1 className="display h1">Your coin, your endowment.</h1>
           <p className="lede">
-            If your coin pays its holders dividends, your largest holders can turn that income into a permanent,
-            never-selling holder of your coin. The same contract that runs the $PENIS Endowment is open source and
-            built to host many projects.
+            The endowment explores how holders can contribute dividend income to a shared treasury. The version 4
+            replacement is being developed and reviewed locally for $PENIS. New enrollment and collection remain
+            closed here; a reviewed shared deployment for other projects is not available through this site.
           </p>
           <div className="actions">
             <a href="/endowment-guide.pdf" className="button button-primary" download>
-              Download the guide (PDF)
+              Historical guide (PDF)
             </a>
             <a href="/endowment-guide.md" className="button" download>
-              Guide (Markdown)
+              Historical guide (Markdown)
             </a>
           </div>
         </div>
@@ -31,35 +31,37 @@ export default function Build() {
 
       <div className="wrap">
         <section className="row">
-          <h2 className="row-label">Two ways</h2>
+          <h2 className="row-label">For future projects</h2>
           <div className="row-body">
             <div className="options">
               <div className="option">
-                <h3>Create an endowment on the shared contract</h3>
+                <h3>Shared deployment needs further review</h3>
                 <p className="muted">
-                  One transaction creates your endowment on the same reviewed contract as $PENIS. Your endowment has its
-                  own vault, landlords and settings, fully separate from every other project.
+                  The source includes a multi-endowment design, but the current replacement focuses on the $PENIS
+                  campaign. Supporting another project requires verifying its tokens, pool, reward sources and
+                  treasury eligibility, then reviewing the full deployment.
                 </p>
                 <ul>
-                  <li>A Raydium CPMM pool pairing your coin with its dividend asset</li>
-                  <li>Dividends pushed to holders&rsquo; wallets automatically, with no claim step</li>
-                  <li>Optional: donate 0.1%, 0.2% or 0.3% of each buy to the $PENIS Endowment, for PUMP-paid coins</li>
+                  <li>Compatible tokens and a supported liquidity pool</li>
+                  <li>Verifiable reward receipts and a reviewed reporting service</li>
+                  <li>An explicit policy for admin, reporter and program upgrade authorities</li>
                 </ul>
                 <p className="note">
-                  Creation opens once the contract&rsquo;s upgrade key has been destroyed, so every project runs on
-                  code that can never change.
+                  No launch date or removal of upgrade authority is promised. Retained upgrade authority can replace
+                  the contract and override its safeguards.
                 </p>
               </div>
               <div className="option">
-                <h3>Deploy your own copy</h3>
+                <h3>Explore the source</h3>
                 <p className="muted">
-                  Prefer to run it yourself? The contract, website and keeper are Apache-2.0 licensed. Fork them, adapt
-                  them, and deploy under your own keys.
+                  The contract, website and keeper are open source. The linked repository contains published code;
+                  the local version 4 replacement is still being prepared for review. Reading or copying the source
+                  does not establish that it is ready to hold funds.
                 </p>
                 <ul>
-                  <li>Full source on GitHub, with tests against real mainnet pool data</li>
-                  <li>The guide covers building, deploying and running the keeper</li>
-                  <li>You run your own review before launch</li>
+                  <li>Source and tests are available on GitHub</li>
+                  <li>The linked guides describe the legacy system, not version 4 deployment instructions</li>
+                  <li>Independent security review and deployment validation remain necessary before launch</li>
                 </ul>
                 <div className="actions">
                   <a href={links.github} className="button">
@@ -72,24 +74,38 @@ export default function Build() {
         </section>
 
         <section className="row">
-          <h2 className="row-label">What every endowment gets</h2>
+          <h2 className="row-label">Current design and limits</h2>
           <div className="row-body">
             <ul className="plain-list">
               <li>
-                <strong>A vault that never sells</strong>
-                <span>No function can move your coin out of the endowment.</span>
+                <strong>Restricted treasury use</strong>
+                <span>
+                  The replacement has no admin or reporter withdrawal instruction. Buybacks can move treasury coins
+                  into permanently locked liquidity; they do not all remain in the direct vault.
+                </span>
               </li>
               <li>
-                <strong>A real commitment threshold</strong>
-                <span>Sweeps start only once landlords holding your chosen share of supply are in, counted daily on-chain.</span>
+                <strong>A trusted reward reporter</strong>
+                <span>
+                  The $PENIS pledge covers all verified StonkFun rewards paid in PUMP while enrolled and funding is
+                  active, including rewards from other coins. There is no daily wallet cap. Broad PUMP approval is
+                  revocable, but an incorrect report can collect PUMP outside the intended reward policy.
+                </span>
               </li>
               <li>
-                <strong>Careful buying</strong>
-                <span>Small buys, sized to pool depth and priced against a time-weighted average.</span>
+                <strong>Bounded operations</strong>
+                <span>
+                  Commitment thresholds, treasury inventory limits, price checks and token-setting checks constrain
+                  operations. They do not guarantee correct reward classification, fair prices or protection from all losses.
+                </span>
               </li>
               <li>
-                <strong>A public trail</strong>
-                <span>Every sweep, buy and setting change is an on-chain event anyone can follow.</span>
+                <strong>Launch requirements still open</strong>
+                <span>
+                  Program-owned treasury reward eligibility, independent security review and upgrade governance
+                  remain outstanding. See the <a href="/security">security and review status</a> before relying on
+                  the design or historical guides.
+                </span>
               </li>
             </ul>
           </div>

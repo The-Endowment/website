@@ -1,23 +1,23 @@
 import type { EndowmentConfig } from "./endowment";
-import { COLLECTION_PENDING_NOTICE } from "./collection-policy.ts";
+import { COLLECTION_RELEASED, COLLECTION_PENDING_NOTICE } from "./collection-policy.ts";
 
 /** Match the contract's ACTIVE_MAX_AGE_SECS. */
 export const ACTIVE_MAX_AGE_SECS = 3 * 24 * 60 * 60;
 
 export type FundingState = "complete" | "retired" | "paused" | "unavailable" | "waiting" | "stale" | "routing_pending" | "enabled";
-type FundingConfig = Pick<EndowmentConfig, "milestoneReached" | "retired" | "pausedUntil" | "contributionCap" | "active" | "lastCountAt"> & {
+type FundingConfig = Pick<EndowmentConfig, "version" | "milestoneReached" | "retired" | "pausedUntil" | "contributionCap" | "active" | "lastCountAt"> & {
   params: Pick<EndowmentConfig["params"], "activateBps">;
 };
 
 /** Lifecycle plus the application hold pending a reviewed reward-routing implementation. */
-export function fundingState(config: FundingConfig, directBalance: bigint | null, now: number): FundingState {
+export function fundingState(config: FundingConfig, directBalance: bigint | null, now: number, reporterReady = false): FundingState {
   if (config.milestoneReached || (directBalance !== null && directBalance >= config.contributionCap)) return "complete";
   if (config.retired) return "retired";
   if (now < Number(config.pausedUntil)) return "paused";
   if (directBalance === null) return "unavailable";
   if (!config.active) return "waiting";
   if (config.params.activateBps > 0 && now - Number(config.lastCountAt) > ACTIVE_MAX_AGE_SECS) return "stale";
-  return "routing_pending";
+  return COLLECTION_RELEASED && config.version === 4 && reporterReady ? "enabled" : "routing_pending";
 }
 
 export const fundingStatus: Record<FundingState, string> = {

@@ -6,6 +6,7 @@ import { unavailableSweep } from "../lib/collection-policy.ts";
 const now = 1_800_000_000;
 const target = 200_000_000_000_000n;
 const active = {
+  version: 4,
   milestoneReached: false,
   retired: false,
   pausedUntil: 0n,

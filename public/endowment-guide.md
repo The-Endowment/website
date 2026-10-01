@@ -1,5 +1,7 @@
 # The Endowment Guide
 
+> **Historical guide:** This document describes the earlier balance-based implementation. It does not cover version 4 reporter-authorized reward collection and is not current deployment guidance. Its safeguards, review claims and key-destruction plans should not be relied on for the replacement. See the [current security and review status](/security).
+
 How to give a dividend-paying coin a permanent holder that never sells, funded by its own largest holders.
 
 Source: https://github.com/The-Endowment (Apache-2.0)

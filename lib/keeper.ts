@@ -1,3 +1,4 @@
+import { fetchReporterPolicy } from "./reward-client";
 import "server-only";
 import { createHmac, randomInt } from "node:crypto";
 import {
@@ -550,7 +551,8 @@ export async function runPrune(k: Keeper) {
 export async function countHealth(k: Keeper) {
   const config = await readConfig(k);
   const now = nowSecs();
-  const state = fundingState(config, await directCoinBalance(k), now);
+  const reporter = await fetchReporterPolicy(k.rpc, k.inst);
+  const state = fundingState(config, await directCoinBalance(k), now, Boolean(reporter && !reporter.disabled));
   const age = (t: bigint) => (t > BigInt(0) ? now - Number(t) : null);
   const countAge = age(config.lastCountAt);
   const attestAge = age(config.lastAttestedAt);

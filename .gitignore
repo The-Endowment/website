@@ -40,3 +40,7 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# Private reporter state and signing material belong outside the repository.
+.reward-reporter/
+*.keypair.json

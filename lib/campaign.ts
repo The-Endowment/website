@@ -1,3 +1,4 @@
+import { fetchReporterPolicy } from "./reward-client";
 import { createHash } from "node:crypto";
 import { fetchMaybeToken } from "@solana-program/token-2022";
 import { getAddressDecoder, type Address, type Signature } from "@solana/kit";
@@ -117,7 +118,8 @@ export async function loadCampaign(): Promise<Campaign> {
   const authority = await authorityPda(inst.program, inst.config);
   const coinVault = await fetchMaybeToken(rpc, await ata(authority, inst.coinMint, inst.coinTokenProgram));
   if (!coinVault.exists) throw new Error("The endowment coin vault is unavailable");
-  const state = fundingState(config, coinVault.data.amount, Math.floor(Date.now() / 1000));
+  const reporter = await fetchReporterPolicy(rpc, inst);
+  const state = fundingState(config, coinVault.data.amount, Math.floor(Date.now() / 1000), Boolean(reporter && !reporter.disabled));
 
   let supply = config.count.supply;
   if (supply === BigInt(0)) {

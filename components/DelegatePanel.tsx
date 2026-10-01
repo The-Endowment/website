@@ -1,6 +1,6 @@
 "use client";
 
-import { isSome, type Address, type Instruction } from "@solana/kit";
+import { type Address, type Instruction } from "@solana/kit";
 import {
   useConnect,
   useConnectedWallet,
@@ -10,40 +10,26 @@ import {
 } from "@solana/kit-plugin-wallet/react";
 import { useAction } from "@solana/react";
 import {
-  fetchMaybeToken,
-  getRevokeInstruction,
+  getApproveCheckedInstruction,
+  getCreateAssociatedTokenIdempotentInstruction,
   TOKEN_2022_PROGRAM_ADDRESS,
 } from "@solana-program/token-2022";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { client } from "@/components/WalletClient";
 import {
-  ata,
   authorityPda,
-  decodeConfig,
-  decodeLandlord,
-  deregisterLandlordIx,
-  fetchDecoded,
   isFlagshipConfig,
-  landlordPda,
-  MIN_DELEGATION,
   type Instance,
-  type LandlordRecord,
 } from "@/lib/endowment";
 import type { EndowmentSummary } from "@/app/api/endowments/route";
 import { flagshipInstance, formatTokens } from "@/lib/solana";
-import { COLLECTION_PENDING_NOTICE } from "@/lib/collection-policy";
+import { COLLECTION_RELEASED, COLLECTION_PENDING_NOTICE } from "@/lib/collection-policy";
 
-type Status = {
-  inst: Instance;
-  landlord: LandlordRecord | null;
-  dividendAccount: Address;
-  dividendBalance: bigint;
-  coinBalance: bigint;
-  delegate: Address | null;
-  /** Delegated to this endowment, in full (the program needs at least MIN_DELEGATION). */
-  delegatedToEndowment: boolean;
-  /** Delegated to this endowment, but for less than the legacy count requires. */
-  delegationTooSmall: boolean;
+import { enrollRewardsIx, renewRewardConsentIx } from "@/lib/reward-client";
+import { loadExitStatus, loadEnrollmentDetails, ownerExitInstructions, type ExitStatus, type EnrollmentDetails } from "@/lib/enrollment-status";
+
+type Status = ExitStatus & {
+  enrollment: EnrollmentDetails | null;
   /** When the delegate is another endowment on the contract, its coin's symbol. */
   otherEndowment: string | null;
 };
@@ -63,81 +49,101 @@ async function endowmentNamed(program: Address, delegate: Address): Promise<stri
   return null;
 }
 
-async function loadStatus(inst: Instance, owner: Address): Promise<Status> {
-  const dividendAccount = await ata(owner, inst.dividendMint, inst.dividendTokenProgram);
-  const coinAccount = await ata(owner, inst.coinMint, inst.coinTokenProgram);
-  const [config, landlord, dividend, coin] = await Promise.all([
-    fetchDecoded(client.rpc, inst.config, decodeConfig),
-    fetchDecoded(client.rpc, await landlordPda(inst.program, inst.config, owner), decodeLandlord),
-    fetchMaybeToken(client.rpc, dividendAccount),
-    fetchMaybeToken(client.rpc, coinAccount),
-  ]);
-  // Only manage legacy enrollment for the verified flagship.
-  if (!config || !isFlagshipConfig(config)) throw new Error("The endowment isn't live yet.");
-  const authority = await authorityPda(inst.program, inst.config);
-  const delegate = dividend.exists && isSome(dividend.data.delegate) ? dividend.data.delegate.value : null;
-  const delegatedAmount = dividend.exists ? dividend.data.delegatedAmount : BigInt(0);
-  const ours = delegate === authority;
-  return {
-    inst,
-    landlord,
-    dividendAccount,
-    dividendBalance: dividend.exists ? dividend.data.amount : BigInt(0),
-    coinBalance: coin.exists ? coin.data.amount : BigInt(0),
-    delegate,
-    delegatedToEndowment: ours && delegatedAmount >= MIN_DELEGATION,
-    delegationTooSmall: ours && delegatedAmount < MIN_DELEGATION,
-    otherEndowment: delegate && !ours ? await endowmentNamed(inst.program, delegate) : null,
-  };
+function joinBlocker(status: Status): string | null {
+  if (!COLLECTION_RELEASED) return COLLECTION_PENDING_NOTICE;
+  const details = status.enrollment;
+  if (!details || status.readErrors.length) return "Enrollment information could not be verified. You can still remove a verified approval or enrollment.";
+  if (!isFlagshipConfig(details.config)) return "The endowment isn't live yet.";
+  if (details.config.version !== 4 || (status.landlord && status.landlord.version !== 4)) return "Leave the legacy enrollment before joining the replacement.";
+  if (!details.policy || details.policy.disabled) return "The reward reporting service is unavailable.";
+  if (details.config.milestoneReached || (details.directBalance !== null && details.directBalance >= details.config.contributionCap)) return "Funding is complete. Holder contributions have ended.";
+  if (details.directBalance === null) return "The endowment balance could not be verified.";
+  if (details.config.retired) return "The endowment has closed enrollment.";
+  if (BigInt(Math.floor(Date.now() / 1000)) < details.config.pausedUntil) return "Enrollment is paused. You can still leave.";
+  if (details.coinBalance < details.minStake) return `Enrollment requires at least ${formatTokens(details.minStake)} PENIS in this wallet.`;
+  if (status.delegate && !status.delegatedToEndowment && !status.delegationTooSmall) return "Revoke the other app's PUMP delegation before joining.";
+  return null;
 }
 
 function Connected({ inst }: { inst: Instance }) {
   const connected = useConnectedWallet(client);
   const { dispatch: disconnect } = useDisconnect(client);
+  const [accepted, setAccepted] = useState(false);
   const [status, setStatus] = useState<Status | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
+  const refreshId = useRef(0);
   const owner = connected?.account.address as Address | undefined;
 
   const refresh = useCallback(async () => {
     if (!owner) return;
-    await loadStatus(inst, owner).then(
-      (next) => {
-        setStatus(next);
-        setLoadError(null);
-      },
-      (e: unknown) => {
-        setLoadError(e instanceof Error && e.message.includes("live") ? e.message : "Couldn't read your wallet from the network. Try again in a moment.");
-      },
-    );
+    const request = ++refreshId.current;
+    await loadExitStatus(client.rpc, inst, owner).then((exit) => {
+      if (request !== refreshId.current) return;
+      const next: Status = { ...exit, enrollment: null, otherEndowment: null };
+      // Show Leave immediately, even if an enrollment-only dependency stalls or rejects.
+      setStatus(next);
+      setLoadError(exit.readErrors.length ? `${exit.readErrors.join(" ")} Leave can only remove verified permissions.` : null);
+      void loadEnrollmentDetails(client.rpc, inst, owner).then(
+        (enrollment) => { if (request === refreshId.current) setStatus((current) => current ? { ...current, enrollment } : current); },
+        () => { if (request === refreshId.current) setLoadError("Enrollment information is unavailable. You can still remove a verified approval or enrollment."); },
+      );
+      if (exit.delegate && !exit.delegatedToEndowment && !exit.delegationTooSmall) {
+        void endowmentNamed(inst.program, exit.delegate).then((otherEndowment) =>
+          { if (request === refreshId.current) setStatus((current) => current ? { ...current, otherEndowment } : current); });
+      }
+    }, () => {
+      if (request !== refreshId.current) return;
+      setStatus(null);
+      setLoadError("Couldn't verify your PUMP delegation or enrollment. Try again in a moment.");
+    });
   }, [inst, owner]);
 
   useEffect(() => {
     refresh();
   }, [refresh]);
 
-  const leave = useAction(async (signal: AbortSignal) => {
-    if (!status) throw new Error("No status");
-    const signer = client.identity;
-    const ixs: Instruction[] = [];
-    // Only this endowment's delegation: another app's or endowment's is left alone (audit KW-10).
-    if (status.delegatedToEndowment || status.delegationTooSmall) {
-      ixs.push(
-        getRevokeInstruction(
-          { source: status.dividendAccount, owner: signer },
-          { programAddress: inst.dividendTokenProgram as typeof TOKEN_2022_PROGRAM_ADDRESS },
-        ),
-      );
+  const optIn = useAction(async (signal: AbortSignal) => {
+    if (!owner || !status || !accepted) throw new Error("Consent is required");
+    const [exit, enrollment] = await Promise.all([loadExitStatus(client.rpc, inst, owner), loadEnrollmentDetails(client.rpc, inst, owner)]);
+    const fresh: Status = { ...exit, enrollment, otherEndowment: null };
+    const reason = joinBlocker(fresh);
+    if (reason) throw new Error(reason);
+    if (enrollment.policy?.reporter !== status.enrollment?.policy?.reporter) {
+      setAccepted(false); setStatus(fresh);
+      throw new Error("The reporter changed. Review the current policy before consenting.");
     }
-    if (status.landlord) ixs.push(await deregisterLandlordIx(inst, signer));
+    const signer = client.identity;
+    if (signer.address !== owner) throw new Error("The connected wallet changed. Refresh before continuing.");
+    const authority = await authorityPda(inst.program, inst.config);
+    const ixs: Instruction[] = [
+      getCreateAssociatedTokenIdempotentInstruction({ payer: signer, owner: signer.address, mint: inst.dividendMint, ata: fresh.dividendAccount, tokenProgram: inst.dividendTokenProgram }),
+      getCreateAssociatedTokenIdempotentInstruction({ payer: signer, owner: signer.address, mint: inst.coinMint, ata: enrollment.coinAccount, tokenProgram: inst.coinTokenProgram }),
+      getApproveCheckedInstruction({ source: fresh.dividendAccount, mint: inst.dividendMint, delegate: authority, owner: signer, amount: (1n << 64n) - 1n, decimals: 6 },
+        { programAddress: inst.dividendTokenProgram as typeof TOKEN_2022_PROGRAM_ADDRESS }),
+      fresh.landlord ? await renewRewardConsentIx(inst, signer) : await enrollRewardsIx(inst, signer),
+    ];
+    if (client.identity.address !== owner) throw new Error("The connected wallet changed. Refresh before continuing.");
+    const result = await client.sendTransaction(ixs, { abortSignal: signal });
+    setAccepted(false); await refresh();
+    return result.context.signature;
+  });
+
+  const leave = useAction(async (signal: AbortSignal) => {
+    if (!owner) throw new Error("No connected wallet");
+    const signer = client.identity;
+    if (signer.address !== owner) throw new Error("The connected wallet changed. Refresh before continuing.");
+    const ixs = await ownerExitInstructions(client.rpc, inst, signer);
+    if (client.identity.address !== owner) throw new Error("The connected wallet changed. Refresh before continuing.");
     const result = await client.sendTransaction(ixs, { abortSignal: signal });
     await refresh();
     return result.context.signature;
   });
 
   if (!connected || !owner) return null;
-  const busy = leave.isRunning;
-  const lastSignature = leave.data;
-  const error = leave.error;
+  const busy = leave.isRunning || optIn.isRunning;
+  const lastSignature = leave.data ?? optIn.data;
+  const error = leave.error ?? optIn.error;
+  const reason = status ? joinBlocker(status) : "Loading wallet state…";
   const isIn = Boolean(status?.landlord && status.delegatedToEndowment);
 
   let delegation = "Not delegated";
@@ -160,15 +166,15 @@ function Connected({ inst }: { inst: Instance }) {
         </div>
         <div className="fact">
           <dt>$PENIS held</dt>
-          <dd>{status ? formatTokens(status.coinBalance) : "…"}</dd>
+          <dd>{status?.enrollment ? formatTokens(status.enrollment.coinBalance) : "…"}</dd>
         </div>
         <div className="fact">
           <dt>PUMP balance</dt>
-          <dd>{status ? formatTokens(status.dividendBalance) : "…"}</dd>
+          <dd>{status?.dividendBalance != null ? formatTokens(status.dividendBalance) : "…"}</dd>
         </div>
         <div className="fact">
           <dt>Delegation</dt>
-          <dd>{status ? delegation : "…"}</dd>
+          <dd>{status?.delegate !== undefined ? delegation : "…"}</dd>
         </div>
         {status?.landlord && (
           <div className="fact">
@@ -179,20 +185,29 @@ function Connected({ inst }: { inst: Instance }) {
       </dl>
 
       <p className="small">{COLLECTION_PENDING_NOTICE}</p>
-      {status && (status.delegatedToEndowment || status.delegationTooSmall) && (
+      {status?.enrollment && status.enrollment.config.version !== 4 && (status.delegatedToEndowment || status.delegationTooSmall) && (
         <p className="muted small">
           Your existing PUMP approval remains on-chain. The old contract can collect PUMP above its baseline,
           including purchases. Use Leave to revoke this endowment&rsquo;s approval and remove your enrollment.
         </p>
       )}
 
+      <p className="small">
+        A project-operated reporter identifies new StonkFun rewards paid in PUMP, including rewards from other coins.
+        Existing PUMP, purchases, ordinary transfers, and inactive-period rewards are excluded by that service&rsquo;s policy.
+        The contract trusts the reporter: a mistake or compromised key can collect other PUMP. There is no per-wallet daily cap.
+        Your wallet grants a broad, revocable PUMP allowance; PENIS is not delegated. Retained program upgrade authority can change these protections.
+      </p>
+      {status?.enrollment?.policy && <p className="muted small">Reporter: <span className="address">{status.enrollment.policy.reporter}</span></p>}
+      <label className="small">
+        <input type="checkbox" checked={accepted} onChange={(event) => setAccepted(event.target.checked)} disabled={busy || Boolean(reason)} />{" "}
+        I understand the trusted reporter and broad PUMP allowance, with no daily wallet cap, and pledge eligible rewards while funding is active.
+      </label>
+      {reason && <p className="muted small">{reason}</p>}
       <div className="actions">
-        {!isIn && <button type="button" className="button button-primary" disabled>Enrollment closed</button>}
-        {isIn && (
-          <button type="button" className="button button-primary" disabled>
-            Existing enrollment
-          </button>
-        )}
+        <button type="button" className="button button-primary" disabled={busy || !accepted || Boolean(reason)} onClick={() => optIn.dispatch()}>
+          {optIn.isRunning ? "Confirm in your wallet…" : !COLLECTION_RELEASED ? "Enrollment closed for review" : isIn ? "Renew reward consent" : "Pledge reward PUMP"}
+        </button>
         {status && (status.delegatedToEndowment || status.delegationTooSmall || status.landlord) && (
           <button type="button" className="button" disabled={busy} onClick={() => leave.dispatch()}>
             {leave.isRunning ? "Confirm in your wallet…" : "Leave"}
@@ -204,7 +219,7 @@ function Connected({ inst }: { inst: Instance }) {
       {error != null && <p className="muted small">The transaction didn&rsquo;t go through. Nothing changed.</p>}
       {lastSignature && (
         <p className="muted small">
-          Done. <a href={`https://solscan.io/tx/${lastSignature}`}>View the transaction</a>
+          Transaction confirmed. <a href={`https://solscan.io/tx/${lastSignature}`}>View the transaction</a>
         </p>
       )}
     </div>
@@ -216,7 +231,7 @@ function Chooser({ inst }: { inst: Instance }) {
   const connected = useConnectedWallet(client);
   const { dispatch: connect, isRunning } = useConnect(client);
 
-  if (connected) return <Connected inst={inst} />;
+  if (connected) return <Connected key={connected.account.address} inst={inst} />;
   if (wallets.length === 0) {
     return (
       <div className="row-body">
