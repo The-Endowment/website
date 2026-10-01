@@ -46,7 +46,7 @@ export default async function Home() {
           </h1>
           <p className="lede">
             $PENIS is a meme coin on Solana. Every trade pays a fee, and every holder receives it in PUMP. Its largest
-            holders are building an endowment that never sells.
+            holders are building an endowment to keep it well-endowed.
           </p>
           <div className="actions">
             <a href={links.stonkfun} className="button button-primary">
@@ -82,7 +82,7 @@ export default async function Home() {
       <section id="endowment" className="row">
         <h2 className="row-label">The endowment</h2>
         <div className="row-body">
-          <h3 className="statement">The holder that can never sell.</h3>
+          <h3 className="statement">The holder that can never pull out.</h3>
           <p>
             The $PENIS Endowment turns PUMP rewards into $PENIS and holds it forever. The largest holders, the
             landlords, lend it the PUMP their $PENIS earns. It buys in small, careful amounts, and the contract has no
