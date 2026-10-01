@@ -3,14 +3,26 @@
   "redirects": [
     {
       "source": "/:path*",
+      "has": [{ "type": "host", "value": "www.peniscoin.meme" }],
+      "destination": "https://peniscoin.meme/:path*",
+      "permanent": true
+    },
+    {
+      "source": "/:path*",
+      "has": [{ "type": "host", "value": "thepenisendowment.com" }],
+      "destination": "https://peniscoin.meme/:path*",
+      "permanent": true
+    },
+    {
+      "source": "/:path*",
       "has": [{ "type": "host", "value": "www.thepenisendowment.com" }],
-      "destination": "https://thepenisendowment.com/:path*",
+      "destination": "https://peniscoin.meme/:path*",
       "permanent": true
     },
     {
       "source": "/:path*",
       "has": [{ "type": "host", "value": "penis-endowment.vercel.app" }],
-      "destination": "https://thepenisendowment.com/:path*",
+      "destination": "https://peniscoin.meme/:path*",
       "permanent": true
     }
   ]

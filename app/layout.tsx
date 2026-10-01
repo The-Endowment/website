@@ -13,7 +13,7 @@ const instrumentSerif = Instrument_Serif({
 });
 
 export const metadata: Metadata = {
-  metadataBase: new URL("https://thepenisendowment.com"),
+  metadataBase: new URL("https://peniscoin.meme"),
   alternates: { canonical: "/" },
   title: { default: "The $PENIS Endowment", template: "%s · The $PENIS Endowment" },
   description:
