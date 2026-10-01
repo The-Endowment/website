@@ -51,7 +51,9 @@ p { margin: 0; }
 .button:hover { border-color: var(--stone); color: var(--bone); }
 button.button { background: transparent; font-family: inherit; cursor: pointer; }
 button.button-primary { background: var(--bone); }
-.button:disabled { opacity: 0.45; cursor: default; }
+.button:disabled, .button-disabled { opacity: 0.45; cursor: default; }
+.button-disabled:hover { border-color: var(--rule); color: var(--bone); }
+.button-primary.button-disabled:hover { background: var(--bone); border-color: var(--bone); color: var(--vault); }
 .button:disabled:hover { border-color: var(--rule); }
 .button-primary { background: var(--bone); border-color: var(--bone); color: var(--vault); }
 .button-primary:hover { background: #fff; border-color: #fff; color: var(--vault); }

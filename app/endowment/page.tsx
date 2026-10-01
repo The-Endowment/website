@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { Campaign } from "@/components/Campaign";
+import { DelegateButton, DelegationNote } from "@/components/DelegateButton";
 import { DotLogo } from "@/components/Logo";
 import { links } from "@/lib/site";
 
@@ -60,13 +61,12 @@ export default function Endowment() {
             that can never pull out.
           </p>
           <div className="actions">
-            <Link href="/delegate" className="button button-primary">
-              Delegate your PUMP
-            </Link>
+            <DelegateButton label="Delegate your PUMP" primary />
             <Link href="#how" className="button">
               How it works
             </Link>
           </div>
+          <DelegationNote />
         </div>
         <DotLogo className="hero-art" label="The endowment's mark, a temple drawn in dots" />
       </section>

@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { CopyAddress } from "@/components/CopyAddress";
 import { Campaign } from "@/components/Campaign";
+import { DelegateButton, DelegationNote } from "@/components/DelegateButton";
 import { DotLogo } from "@/components/Logo";
 import { links, PENIS_MINT } from "@/lib/site";
 import { loadHolderRewards } from "@/lib/stonk";
@@ -102,10 +103,9 @@ export default async function Home() {
             <Link href="/endowment" className="button button-primary">
               How the endowment works
             </Link>
-            <Link href="/delegate" className="button">
-              Become a landlord
-            </Link>
+            <DelegateButton label="Become a landlord" />
           </div>
+          <DelegationNote />
         </div>
       </section>
       <Campaign />

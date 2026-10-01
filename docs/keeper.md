@@ -8,6 +8,7 @@ Routes: `/api/keeper/sweep`, `/api/keeper/buy`, `/api/keeper/count`, `/api/keepe
 
 | Variable | Purpose |
 |---|---|
+| `NEXT_PUBLIC_DELEGATION_OPEN` | `true` opens delegation on the site. Unset, every Delegate button is grayed out with "Delegation opens as soon as the contract goes live." Keep it unset during the founders test. |
 | `NEXT_PUBLIC_ENDOWMENT_PROGRAM_ID` | The program ID. Must be in `KNOWN_PROGRAM_IDS` in `lib/endowment.ts`, or the site refuses it. |
 | `NEXT_PUBLIC_ENDOWMENT_CREATOR` | The wallet that created the $PENIS endowment. Must equal `PROGRAM_FLAGSHIP_CREATOR` in `lib/endowment.ts`, which mirrors `FLAGSHIP_CREATOR` in the program; the site refuses any other value. |
 | `NEXT_PUBLIC_SOLANA_RPC_URL` | RPC for the browser and the public routes (`/api/ledger`, `/api/endowments`). Use a separate key from the keeper's. |

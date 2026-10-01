@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { CommitmentBar } from "@/components/CommitmentBar";
 import { DelegatePanel } from "@/components/DelegatePanel";
 import { WalletProvider } from "@/components/WalletClient";
+import { DELEGATION_CLOSED_NOTE, DELEGATION_OPEN } from "@/lib/site";
 
 export const metadata: Metadata = {
   title: "Delegate",
@@ -16,7 +17,7 @@ export default function Delegate() {
           <h1 className="display h1">Delegate your rent.</h1>
           <p className="lede">
             One transaction lets the endowment collect the PUMP your $PENIS earns, and never more. Your $PENIS, your SOL
-            and the PUMP you hold when you join stay yours. Leave at any time.
+            and the PUMP you hold when you join stay yours. Leave at any time. {DELEGATION_OPEN ? "" : DELEGATION_CLOSED_NOTE}
           </p>
           <CommitmentBar />
         </div>

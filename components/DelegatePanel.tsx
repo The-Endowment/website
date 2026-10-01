@@ -38,6 +38,7 @@ import {
 } from "@/lib/endowment";
 import type { EndowmentSummary } from "@/app/api/endowments/route";
 import { flagshipInstance, formatTokens } from "@/lib/solana";
+import { DELEGATION_CLOSED_NOTE, DELEGATION_OPEN, links } from "@/lib/site";
 
 /**
  * The delegation is unlimited on purpose. The program counts a landlord, and
@@ -360,14 +361,16 @@ export function DelegatePanel() {
     flagshipInstance().then(setInst);
   }, []);
 
-  if (inst === undefined) return <div className="row-body muted">Loading…</div>;
-  if (inst === null) {
+  if (!DELEGATION_OPEN || inst === null) {
     return (
       <div className="row-body">
-        <p>Delegation opens at launch. Follow @PenisEndowment for the announcement.</p>
+        <p>
+          {DELEGATION_CLOSED_NOTE} Follow <a href={links.x}>@PenisEndowment</a> for the announcement.
+        </p>
       </div>
     );
   }
+  if (inst === undefined) return <div className="row-body muted">Loading…</div>;
   return (
     <WalletReadyGate client={client} fallback={<div className="row-body muted">Looking for wallets…</div>}>
       <Chooser inst={inst} />

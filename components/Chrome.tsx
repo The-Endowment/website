@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { DelegateButton } from "@/components/DelegateButton";
 import { SolidLogo } from "@/components/Logo";
 import { ProjectsNavLink } from "@/components/ProjectsList";
 import { links } from "@/lib/site";
@@ -16,9 +17,7 @@ export function SiteHeader() {
           <Link href="/thesis">Thesis</Link>
           <Link href="/#coin">The coin</Link>
           <ProjectsNavLink />
-          <Link href="/delegate" className="button">
-            Delegate
-          </Link>
+          <DelegateButton label="Delegate" />
         </nav>
       </div>
     </header>
