@@ -1,3 +1,4 @@
+import { HOLD_COLLECTION_RELEASED } from "./holding/release.ts";
 import type { EndowmentConfig } from "./endowment";
 import { COLLECTION_RELEASED, COLLECTION_PENDING_NOTICE } from "./collection-policy.ts";
 
@@ -7,6 +8,7 @@ export const ACTIVE_MAX_AGE_SECS = 3 * 24 * 60 * 60;
 export type FundingState = "complete" | "retired" | "paused" | "unavailable" | "waiting" | "stale" | "routing_pending" | "enabled";
 type FundingConfig = Pick<EndowmentConfig, "version" | "milestoneReached" | "retired" | "pausedUntil" | "contributionCap" | "active" | "lastCountAt"> & {
   params: Pick<EndowmentConfig["params"], "activateBps">;
+  holding?: boolean;
 };
 
 /** Lifecycle plus the application hold pending a reviewed reward-routing implementation. */
@@ -17,7 +19,8 @@ export function fundingState(config: FundingConfig, directBalance: bigint | null
   if (directBalance === null) return "unavailable";
   if (!config.active) return "waiting";
   if (config.params.activateBps > 0 && now - Number(config.lastCountAt) > ACTIVE_MAX_AGE_SECS) return "stale";
-  return COLLECTION_RELEASED && config.version === 4 && reporterReady ? "enabled" : "routing_pending";
+  const released = config.holding ? HOLD_COLLECTION_RELEASED : COLLECTION_RELEASED && config.version === 4;
+  return released && reporterReady ? "enabled" : "routing_pending";
 }
 
 export const fundingStatus: Record<FundingState, string> = {

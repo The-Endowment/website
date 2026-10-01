@@ -1,0 +1,312 @@
+{
+  "coinMint": "6D5v44mYvbj9VEd1PzK7bsVUHbbNcfC6XPoCuMsp8rc",
+  "coinTokenProgram": "TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb",
+  "collector": "5eUm8K9YiCqAxtyZgmmN1NGhmD3D2C9Azp2Za7nxwhiN",
+  "config": "BCs11WFr4XrK6yJciVzeqENYEF1EYhgW13Z1RHvUThDs",
+  "dividendMint": "62T6qQjNLPuJjbaUebXS6fL6aVAhjqhPX5BCx6hrGECF",
+  "dividendTokenProgram": "TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb",
+  "owner": "6MNkW8d7923hU4JmKw5TCrE24nKXCjSbg9GFhb8Cr8zD",
+  "pool": "1117mWrzzrZr312ebPDHu8tbfMwFNvCvMbr6WepCNG",
+  "program": "5VBiPX39xFTgwRaUbC3F3HCuVcM3VkTuYDkxwrhYby2u",
+  "records": {
+    "11111111111111111111111111111111": {
+      "data": [
+        "c3lzdGVtX3Byb2dyYW0=",
+        "base64"
+      ],
+      "owner": "NativeLoader1111111111111111111111111111111"
+    },
+    "11157t3sqMV725NVRLrVQbAu98Jjfk1uCKehJnXXQs": {
+      "data": [
+        "2vQhaMvLK28AAAAAxAkAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=",
+        "base64"
+      ],
+      "owner": "CPMMoo8L3F4NbTegBCKVNunggL7H1ZpdTHKxQB5qKP1C"
+    },
+    "1117mWrzzrZr312ebPDHu8tbfMwFNvCvMbr6WepCNG": {
+      "data": [
+        "9+3j9dfD3kYAAAABkHB7w+8lvcmO11y3DWHIsQbcJI2O9h4dHbHKQAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAVWRfCAG6iXPqObyAm4s8IZjKEt42F5nigaLcleShLFKqYcI8cvHJhMyZLofvdzqE80u8IDW7Us3UfE9ODyGiAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA==",
+        "base64"
+      ],
+      "owner": "CPMMoo8L3F4NbTegBCKVNunggL7H1ZpdTHKxQB5qKP1C"
+    },
+    "14i87d4VRn8FUS9HuQxGL5ViMU9FDuALrvFNdDy1C3Le": {
+      "data": [
+        "SqmHCPHLxyYTMmS6H73c6hPNLvCA1u1LN1HxPTg8hohPgqTG9O83xuv/MgnGl+giBYadQdIC34VrHRjBgdDWKgAAAAAAAAAAAQAAAISKBKIguGlnx/CS5hoWMFQIDpCU4p0nzWxyR149ZE1sAQAAAAAAAAAAAAAAABf8////////AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAgcAAAA=",
+        "base64"
+      ],
+      "owner": "TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb"
+    },
+    "4UgcmtdYBREdWRNg1aSkPEZH27VJbC2kxDSPyf55t49s": {
+      "data": [
+        "AVWRfCAG6iXPqObyAm4s8IZjKEt42F5nigaLcleShLFPgqTG9O83xuv/MgnGl+giBYadQdIC34VrHRjBgdDWKgAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAQAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAgcAAAA=",
+        "base64"
+      ],
+      "owner": "TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb"
+    },
+    "5eUm8K9YiCqAxtyZgmmN1NGhmD3D2C9Azp2Za7nxwhiN": {
+      "data": [
+        "",
+        "base64"
+      ],
+      "owner": "11111111111111111111111111111111"
+    },
+    "62T6qQjNLPuJjbaUebXS6fL6aVAhjqhPX5BCx6hrGECF": {
+      "data": [
+        "AQAAAKNxsZR1nId+vybsBNTcXD1+gSqtz19HU5Ril6Swlmg+6AMAAAAAAAAGAQAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA==",
+        "base64"
+      ],
+      "owner": "TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb"
+    },
+    "6D5v44mYvbj9VEd1PzK7bsVUHbbNcfC6XPoCuMsp8rc": {
+      "data": [
+        "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAGAQAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA==",
+        "base64"
+      ],
+      "owner": "TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb"
+    },
+    "762wwxTUoX2BAE8pyVVvRBxELvAWZ6LayJj7egpgVfHS": {
+      "data": [
+        "SqmHCPHLxyYTMmS6H73c6hPNLvCA1u1LN1HxPTg8hoiEigSiILhpZ8fwkuYaFjBUCA6QlOKdJ81sckdePWRNbAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAQAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAgcAAAA=",
+        "base64"
+      ],
+      "owner": "TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb"
+    },
+    "7TEKoNzepPq5q6J5Y1HuTC7BKYfYVbpgVn1SiAPNm1aS": {
+      "data": [
+        "BvSx3TKFitqXnssjrSo9KzYoGcrxz9OUBC1KgXjeYdOlUEUlvQVrak+CpMb07zfG6/8yCcaX6CIFhp1B0gLfhWsdGMGB0NYq/wECAAAAAAAAAAEAAAAAAAAAgDuxagAAAAA=",
+        "base64"
+      ],
+      "owner": "5VBiPX39xFTgwRaUbC3F3HCuVcM3VkTuYDkxwrhYby2u"
+    },
+    "9TUhCghD22tCjDHAgByAGsq2owQdiN1X788cBunrkqUT": {
+      "data": [
+        "VKdPw8xULpgDl57LI60qPSs2KBnK8c/TlAQtSoF43mHTpVBFJb0Fa2pPgqTG9O83xuv/MgnGl+giBYadQdIC34VrHRjBgdDWKgDzPW5XilqUjZBtpRRa4ZUxGzxf3bnSyG/2HlLP7atzM6qJl+lnXHQjBKNQqubBibsevgvwHqDiQt4jDNhZm6YAAAAAAAAAAOgDAAAAAAAAgDuxagAAAACAO7FqAAAAAP4AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA==",
+        "base64"
+      ],
+      "owner": "5VBiPX39xFTgwRaUbC3F3HCuVcM3VkTuYDkxwrhYby2u"
+    },
+    "9rhT4k8sri1SkHAhe8mn8sqcb3xSww5pXM4c8uJvrJJK": {
+      "data": [
+        "AVWRfCAG6iXPqObyAm4s8IZjKEt42F5nigaLcleShLGEigSiILhpZ8fwkuYaFjBUCA6QlOKdJ81sckdePWRNbAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAQAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAgcAAAA=",
+        "base64"
+      ],
+      "owner": "TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb"
+    },
+    "BCs11WFr4XrK6yJciVzeqENYEF1EYhgW13Z1RHvUThDs": {
+      "data": [
+        "mwyq4B76zIID84Rq36brT5PwTAWHuP7ONhmhMsREN2SyAhL1ZUVun8bzhGrfputPk/BMBYe4/s42GaEyxEQ3ZLICEvVlRW6fxgAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAK7Az0VKBiMUgUQLhe4jcPWbNcui2piGHK+YTNHtjJIYBVZF8IAbqJc+o5vICbizwhmMoS3jYXmeKBotyV5KEsUqphwjxy8cmEzJkuh+93OoTzS7wgNbtSzdR8T04PIaIAAAAApH67GnYXioXT2s4ohQRHj4dJl8AqZ7icS4XgOX8/gDyBSoBAAAAAMgXqAQAAABkAPQBAAAAAAAAAABYAgAAAAAAABkAECcAAAAACgAZf2sj4WyFMsaryDj6zV6nib4MdrKSAzQDm/qLPTaNYQAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAgPQg5rUAAAAAAAAAAAAAAAAAAAAAAAAAAAEAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAIA7sWoAAAAAAQAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA8gUqAQAAAIA7sWoAAAAAAAAAAAAAAADoAwAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=",
+        "base64"
+      ],
+      "owner": "5VBiPX39xFTgwRaUbC3F3HCuVcM3VkTuYDkxwrhYby2u"
+    },
+    "BDEuUbWRbKxfq8UcZTdRVrDjXwFb9SqLBtwHG13ER2xC": {
+      "data": [
+        "SqmHCPHLxyYTMmS6H73c6hPNLvCA1u1LN1HxPTg8hoj6alYho6M961Xp2NTPNCA+sOp4pqotiPBSpGLwbsq5r+gDAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAQAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAgcAAAA=",
+        "base64"
+      ],
+      "owner": "TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb"
+    },
+    "BszMXVSFVxwybov5Hm4mJzQjT2e8Ve4uzVVpMbDXshEs": {
+      "data": [
+        "dDcc0FgKDy2XnssjrSo9KzYoGcrxz9OUBC1KgXjeYdOlUEUlvQVrak+CpMb07zfG6/8yCcaX6CIFhp1B0gLfhWsdGMGB0NYqRQigeqlBcH8+stuUyIl6gLLBGXR2tt4hOsJz332GxP8AAAAAAAAAAAIAAAAAAAAA6AMAAAAAAACAO7FqAAAAAACNsmoAAAAAADC1agAAAAABAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA/w==",
+        "base64"
+      ],
+      "owner": "5VBiPX39xFTgwRaUbC3F3HCuVcM3VkTuYDkxwrhYby2u"
+    },
+    "HrWyCW8WCq7mAhcmvQR4WXfKsFimH6FJRx7nSUvHK7MY": {
+      "data": [
+        "y+dNyidnmOiXnssjrSo9KzYoGcrxz9OUBC1KgXjeYdOlUEUlvQVrakUIoHqpQXB/PrLblMiJeoCywRl0drbeITrCc999hsT/lHXGzw7aNAV1KNhpR4HsySrWOdfivSd2HtPvdJJL6wf86AMAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+        "base64"
+      ],
+      "owner": "5VBiPX39xFTgwRaUbC3F3HCuVcM3VkTuYDkxwrhYby2u"
+    },
+    "TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb": {
+      "data": [
+        "AgAAAL4zkcMPRYarxgednZ3r504XyexzY/JuY/2bbqm+blYz",
+        "base64"
+      ],
+      "owner": "BPFLoaderUpgradeab1e11111111111111111111111"
+    }
+  },
+  "reviewer": "AzXW61LgzhJTXN1so7rBR5auU2oCSzRyNEqFxPkZct3G",
+  "sweepAccounts": [
+    {
+      "address": "5eUm8K9YiCqAxtyZgmmN1NGhmD3D2C9Azp2Za7nxwhiN",
+      "signer": true,
+      "writable": true
+    },
+    {
+      "address": "HrWyCW8WCq7mAhcmvQR4WXfKsFimH6FJRx7nSUvHK7MY",
+      "signer": false,
+      "writable": true
+    },
+    {
+      "address": "7TEKoNzepPq5q6J5Y1HuTC7BKYfYVbpgVn1SiAPNm1aS",
+      "signer": false,
+      "writable": true
+    },
+    {
+      "address": "AAFyzWeSj1QimDThYcKvAM4bSReRGBtFoGNmNWMtdrHC",
+      "signer": false,
+      "writable": true
+    },
+    {
+      "address": "BDEuUbWRbKxfq8UcZTdRVrDjXwFb9SqLBtwHG13ER2xC",
+      "signer": false,
+      "writable": true
+    },
+    {
+      "address": "11111111111111111111111111111111",
+      "signer": false,
+      "writable": false
+    },
+    {
+      "address": "BCs11WFr4XrK6yJciVzeqENYEF1EYhgW13Z1RHvUThDs",
+      "signer": false,
+      "writable": true
+    },
+    {
+      "address": "9vNt3MfeM65gncQiPM6iLz5bDuw6335CWuVqoPdbetLB",
+      "signer": false,
+      "writable": false
+    },
+    {
+      "address": "9TUhCghD22tCjDHAgByAGsq2owQdiN1X788cBunrkqUT",
+      "signer": false,
+      "writable": true
+    },
+    {
+      "address": "62T6qQjNLPuJjbaUebXS6fL6aVAhjqhPX5BCx6hrGECF",
+      "signer": false,
+      "writable": false
+    },
+    {
+      "address": "14i87d4VRn8FUS9HuQxGL5ViMU9FDuALrvFNdDy1C3Le",
+      "signer": false,
+      "writable": true
+    },
+    {
+      "address": "762wwxTUoX2BAE8pyVVvRBxELvAWZ6LayJj7egpgVfHS",
+      "signer": false,
+      "writable": true
+    },
+    {
+      "address": "6D5v44mYvbj9VEd1PzK7bsVUHbbNcfC6XPoCuMsp8rc",
+      "signer": false,
+      "writable": false
+    },
+    {
+      "address": "9rhT4k8sri1SkHAhe8mn8sqcb3xSww5pXM4c8uJvrJJK",
+      "signer": false,
+      "writable": false
+    },
+    {
+      "address": "1117mWrzzrZr312ebPDHu8tbfMwFNvCvMbr6WepCNG",
+      "signer": false,
+      "writable": false
+    },
+    {
+      "address": "11157t3sqMV725NVRLrVQbAu98Jjfk1uCKehJnXXQs",
+      "signer": false,
+      "writable": false
+    },
+    {
+      "address": "11111111111111111111111111111111",
+      "signer": false,
+      "writable": false
+    },
+    {
+      "address": "11111111111111111111111111111111",
+      "signer": false,
+      "writable": false
+    },
+    {
+      "address": "TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb",
+      "signer": false,
+      "writable": false
+    }
+  ],
+  "sweepData": [
+    40,
+    23,
+    234,
+    175,
+    14,
+    61,
+    154,
+    177,
+    1,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    2,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    100,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    188,
+    59,
+    177,
+    106,
+    0,
+    0,
+    0,
+    0,
+    7,
+    7,
+    7,
+    7,
+    7,
+    7,
+    7,
+    7,
+    7,
+    7,
+    7,
+    7,
+    7,
+    7,
+    7,
+    7,
+    7,
+    7,
+    7,
+    7,
+    7,
+    7,
+    7,
+    7,
+    7,
+    7,
+    7,
+    7,
+    7,
+    7,
+    7,
+    7
+  ]
+}

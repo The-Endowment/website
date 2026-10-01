@@ -17,8 +17,8 @@ export function SiteHeader() {
           <Link href="/build">For projects</Link>
           <ProjectsNavLink />
           <Link href="/#questions">Questions</Link>
-          <Link href="/delegate" className="button">
-            Delegate
+          <Link href="/contributions" className="button">
+            Contributions
           </Link>
         </nav>
       </div>

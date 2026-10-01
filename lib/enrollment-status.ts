@@ -1,3 +1,6 @@
+import { consentIx, holdPda } from "./holding/client.ts";
+import { decodeAccount } from "./holding/codec.ts";
+import type { Consent } from "./holding/types.ts";
 import { isSome, type Address, type Instruction, type TransactionSigner } from "@solana/kit";
 import { fetchMaybeMint, fetchMaybeToken, getRevokeInstruction, TOKEN_2022_PROGRAM_ADDRESS } from "@solana-program/token-2022";
 import { ata, authorityPda, base64ToBytes, decodeConfig, decodeLandlord, deregisterLandlordIx, landlordPda, MIN_DELEGATION, type Instance, type LandlordRecord } from "./endowment.ts";
@@ -92,7 +95,17 @@ export async function ownerExitInstructions(rpc: unknown, inst: Instance, signer
     { source: fresh.dividendAccount, owner: signer },
     { programAddress: inst.dividendTokenProgram as typeof TOKEN_2022_PROGRAM_ADDRESS },
   ));
-  if (fresh.landlord) instructions.push(await deregisterLandlordIx(inst, signer));
+  if (fresh.landlord?.version === 3) {
+    // The holding branch keeps the stable v3 landlord prefix but adds a durable
+    // consent account. Failure to read it must not block direct token revocation.
+    try {
+      const consent = await programAccount(rpc, inst, await holdPda(inst, "consent", signer.address), data => decodeAccount<Consent>("CollectionConsent", data));
+      if (consent) {
+        if (consent.owner !== signer.address || consent.config !== inst.config) throw new Error("Consent identity mismatch");
+        instructions.push(await consentIx(inst, signer, "deregister_landlord"));
+      } else instructions.push(await deregisterLandlordIx(inst, signer));
+    } catch { /* Keep independently verified token revocation available. */ }
+  } else if (fresh.landlord) instructions.push(await deregisterLandlordIx(inst, signer));
   if (!instructions.length) throw new Error("No verified endowment approval or enrollment is available to remove.");
   return instructions;
 }

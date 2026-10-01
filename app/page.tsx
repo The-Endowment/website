@@ -11,31 +11,31 @@ const faqs = [
   },
   {
     q: "Is my wallet safe if I opt in?",
-    a: "You delegate one token account: your PUMP. From then on, new PUMP that arrives there goes to the endowment, whatever its source. It can't touch your $PENIS, your SOL, any other token, or the PUMP you held when you joined. Many landlords use a wallet that holds only $PENIS.",
+    a: "The draft collects verified future PENIS rewards paid in PUMP, then holds each collection for at least 24 hours before review and release. Your wallet grants a broad PUMP approval: trusted services identify rewards, and mistakes remain possible. You can reclaim pending funds before release. Your PENIS is not delegated. See the security page for the remaining risks.",
   },
   {
     q: "Can I commit only part of my $PENIS?",
-    a: "Yes. Commitment is per wallet: everything in the wallet you delegate counts, and all new PUMP arriving there goes to the endowment. Keep the $PENIS you want to commit in one wallet and the rest in another.",
+    a: "Commitment covers the PENIS in the registered wallet's token account and its eligible future PUMP rewards. To commit only part of your holdings, keep the rest in another wallet. Purchases and other coins' rewards are excluded by the proposed worker policy.",
   },
   {
     q: "Can I leave?",
-    a: "Yes, anytime. The Leave button revokes the delegation and removes your landlord record in one step, and revoking works from any Solana wallet without this site or anyone's permission.",
+    a: "Yes. Stop collection revokes the token approval and disables collection consent when those permissions are available. You can also revoke through your wallet without this site. Pending contributions remain reclaimable until release; released contributions are permanent.",
   },
   {
     q: "Who runs it?",
-    a: "No one, by design. After a public testing period, the key that can change the contract is destroyed, so no one can ever change its rules or move its $PENIS, including us. Every action is posted publicly, and the endowment has no connection to the coin's creators.",
+    a: "The proposal uses a collector, an independent reviewer and a keeper. The contract restricts their actions, but their evidence and the retained program upgrade authority remain trust assumptions. Role custody and any future removal of upgrade authority must be agreed before launch.",
   },
   {
     q: "What happens at 200 million?",
-    a: "Holder contributions stop permanently once the endowment's direct vault holds 200 million $PENIS. Direct donations count; coins in liquidity pools do not. Existing treasury funds and future treasury rewards continue buying $PENIS and adding permanent liquidity under the contract's rules.",
+    a: "New collections stop once the permanent treasury holds 200 million PENIS, including direct donations. Liquidity holdings do not count. Remaining pending contributions become refundable; already released treasury funds and future treasury rewards continue funding buybacks and permanent liquidity.",
   },
   {
     q: "Can I check the code?",
-    a: "Yes. The contract is open source on GitHub, and every rule on this page is enforced by it.",
+    a: "Yes. The contract and website are open source on GitHub. The security page distinguishes contract-enforced custody rules from trusted off-chain reward classification. The latest changes are drafts awaiting review.",
   },
   {
     q: "When does it open?",
-    a: "Sweeps switch on once committed landlords hold 30% of all $PENIS, as measured by a daily on-chain count. A landlord's $PENIS counts from its second count, once it has been held from one count to the next, and every landlord's record is public on-chain.",
+    a: "Enrollment and collection are closed pending review and a test deployment. After launch, collection requires the 30% commitment threshold; it pauses below 25% and resumes at 30%. Holdings and enabled consent are checked through the contract's sampled counting process.",
   },
 ];
 
@@ -58,8 +58,8 @@ export default function Home() {
             <Link href="#how" className="button button-primary">
               How it works
             </Link>
-            <Link href="/delegate" className="button">
-              Delegate your PUMP
+            <Link href="/contributions" className="button">
+              Review contributions
             </Link>
           </div>
         </div>
@@ -69,23 +69,23 @@ export default function Home() {
         <section id="how" className="row">
           <h2 className="row-label">How it works</h2>
           <div className="row-body">
-            <h3 className="statement">Landlords lend their rent. The endowment keeps the building.</h3>
+            <h3 className="statement">Landlords contribute their rent. The endowment keeps the building.</h3>
             <p>
-              The largest holders, the landlords, lend the endowment their PUMP rewards. The endowment turns that
-              income into $PENIS it can never sell.
+              Holders can pledge eligible PUMP rewards. After a holding period and review, released contributions
+              fund permanent PENIS holdings and liquidity. This collection system is still a draft.
             </p>
             <ol className="steps">
               <li>
-                <h3>Delegate</h3>
-                <p>One transaction gives the endowment access to your PUMP rewards and nothing else.</p>
+                <h3>Consent</h3>
+                <p>Review the pledge and sign with your wallet. PENIS stays with you; PUMP approval can be revoked.</p>
               </li>
               <li>
-                <h3>Sweep</h3>
-                <p>When dividends land, the new PUMP moves to the endowment within seconds.</p>
+                <h3>Collect and hold</h3>
+                <p>Verified rewards enter holding custody. Each collection stays reclaimable for at least 24 hours, until release.</p>
               </li>
               <li>
                 <h3>Compound</h3>
-                <p>It buys $PENIS in small amounts and locks it in the vault, where it stays forever.</p>
+                <p>Only reviewed amounts enter the spendable treasury. Incorrect or unresolved collections return to their holder.</p>
               </li>
             </ol>
           </div>
@@ -96,7 +96,7 @@ export default function Home() {
           <div className="row-body">
             <h3 className="statement">Every PUMP buys $PENIS.</h3>
             <p>
-              The endowment buys in small, spaced-out amounts with whatever PUMP it holds, each priced against the
+              The endowment buys in small, spaced-out amounts with spendable treasury PUMP, each priced against the
               pool&rsquo;s recent average. Nothing is sold, and nothing is spent on anything else.
             </p>
             <div className="figures">
@@ -117,9 +117,9 @@ export default function Home() {
         </section>
 
         <section className="row">
-          <h2 className="row-label">Guarantees</h2>
+          <h2 className="row-label">Safeguards</h2>
           <div className="row-body">
-            <h3 className="statement">Written into the contract, not promised in a thread.</h3>
+            <h3 className="statement">Restricted custody, with trust assumptions made public.</h3>
             <ul className="plain-list">
               <li>
                 <strong>It never sells</strong>
@@ -135,24 +135,23 @@ export default function Home() {
               </li>
               <li>
                 <strong>Rule changes are announced</strong>
-                <span>Any change to the limits, or retiring the endowment, waits 72 hours on-chain before it takes effect.</span>
+                <span>Admin parameter changes and retirement wait 72 hours. The separate program upgrade authority remains a trust assumption.</span>
               </li>
               <li>
-                <strong>Locked forever</strong>
-                <span>After a public testing period, the upgrade key is destroyed. No one can change the rules.</span>
+                <strong>Upgrade policy unresolved</strong>
+                <span>The draft has no discretionary principal withdrawal. Any decision to remove upgrade authority still needs review.</span>
               </li>
               <li>
                 <strong>Everything is public</strong>
                 <span>
-                  The <a href={links.github}>source code</a> is open, and every action is posted to{" "}
-                  <a href={links.x}>@PenisEndowment</a>.
+                  The <a href={links.github}>source code</a> and on-chain transactions are public. Off-chain payout evidence must also be retained for review.
                 </span>
               </li>
               <li>
-                <strong>Security reviewed</strong>
+                <strong>Review before launch</strong>
                 <span>
-                  Three rounds of AI-assisted adversarial review and a live launch rehearsal.{" "}
-                  <Link href="/security">See the review</Link>.
+                  This draft has automated tests and needs an independent review and test deployment.{" "}
+                  <Link href="/security">See the safeguards and limitations</Link>.
                 </span>
               </li>
             </ul>
@@ -209,9 +208,9 @@ export default function Home() {
         <section id="status" className="row">
           <h2 className="row-label">Status</h2>
           <div className="row-body">
-            <h3 className="statement">Built, tested, and ready for the landlords.</h3>
+            <h3 className="statement">A draft for review.</h3>
             <p>
-              Sweeps switch on once committed landlords hold 30% of all $PENIS, starting with the founding landlords.
+              Enrollment and collection remain closed while the refundable collection design is reviewed.
               Follow <a href={links.x}>@PenisEndowment</a> for the announcement.
             </p>
           </div>

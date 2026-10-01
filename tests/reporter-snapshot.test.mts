@@ -91,7 +91,7 @@ test("snapshot rejects old versions and mismatched consent or policy instances",
   ] as const) {
     const f = await fixture(); const data = index === 0 ? f.config : index === 1 ? f.landlord : f.policy;
     f.accounts[index] = account(idlAccount(name, { ...data, ...patch }));
-    await assert.rejects(chainSnapshot(f.rpc, inst, owner), /Unrecognized version, instance, or reward consent/);
+    await assert.rejects(chainSnapshot(f.rpc, inst, owner), /Unrecognized version, instance, or reward consent|Unknown config account/);
   }
 });
 

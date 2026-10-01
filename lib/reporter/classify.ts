@@ -35,7 +35,7 @@ function transfer(ix: ParsedInstruction): Transfer | null {
  * estimate or balance delta alone can create reward eligibility. */
 export function classify(tx: ParsedTransaction, account: string, owner: string, policy: SourcePolicy, feed: Map<string, Distribution>): Observation {
   const signature = tx.transaction.signatures[0];
-  const base = { signature, slot: tx.slot, before: "0", after: "0", amount: "0" };
+  const base = { signature, slot: tx.slot, receivedAt: tx.blockTime, before: "0", after: "0", amount: "0" };
   const uncertain = (reason: string): Observation => ({ ...base, kind: "uncertain", reason });
   if (!tx.meta) return uncertain("Missing transaction metadata");
   const keys = tx.transaction.message.accountKeys;
@@ -80,6 +80,7 @@ export function classify(tx: ParsedTransaction, account: string, owner: string, 
   if (delta < 0n || delta > incoming || (incoming === 0n && delta !== 0n)) return uncertain("Unexplained token balance change");
   const record = feed.get(signature);
   if (incoming > 0n && incoming === approvedIncoming && delta > 0n && record?.quoteMint === policy.mint
+      && (!policy.rewardMint || record.mint === policy.rewardMint)
       && raw(record.amountRaw) === batchTotal) {
     return { ...base, kind: "reward", amount: delta.toString(), reason: "Finalized distributor transfer matches public payout record" };
   }

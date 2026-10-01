@@ -1,4 +1,4 @@
-import { decodeReporterPolicy, reporterPolicyPda } from "./reward-client";
+import { collectionServiceReady } from "./holding/status";
 import "server-only";
 import { createSolanaRpc } from "@solana/kit";
 import { getTokenDecoder } from "@solana-program/token-2022";
@@ -17,14 +17,14 @@ export async function loadDailySnapshot() {
   const coinVault = await ata(authority, inst.coinMint, inst.coinTokenProgram);
   const abortSignal = AbortSignal.timeout(20_000);
   const [accounts, response] = await Promise.all([
-    rpc.getMultipleAccounts([inst.config, coinVault, await reporterPolicyPda(inst)], { encoding: "base64", commitment: "finalized" }).send({ abortSignal }),
+    rpc.getMultipleAccounts([inst.config, coinVault], { encoding: "base64", commitment: "finalized" }).send({ abortSignal }),
     fetch(`https://www.stonkfun.xyz/api/public/v1/tokens/${inst.coinMint}/rewards`, {
       cache: "no-store", signal: abortSignal,
     }),
   ]);
   if (!response.ok) throw new Error(`StonkFun rewards API returned HTTP ${response.status}`);
   const distribution = parseDistribution(await response.json(), inst.coinMint, inst.dividendMint);
-  const [configAccount, vaultAccount, policyAccount] = accounts.value;
+  const [configAccount, vaultAccount] = accounts.value;
   if (!configAccount || configAccount.owner !== inst.program || !vaultAccount || vaultAccount.owner !== inst.coinTokenProgram) {
     throw new Error("Missing or unexpected endowment accounts");
   }
@@ -33,8 +33,7 @@ export async function loadDailySnapshot() {
   if (!config || !isFlagshipConfig(config) || vault.mint !== inst.coinMint || vault.owner !== authority) {
     throw new Error("Endowment snapshot identity mismatch");
   }
-  const policy = policyAccount?.owner === inst.program ? decodeReporterPolicy(base64ToBytes(policyAccount.data[0])) : null;
-  const reporterReady = Boolean(policy && policy.config === inst.config && !policy.disabled);
+  const reporterReady = await collectionServiceReady(rpc, inst, config);
   const observedAt = new Date().toISOString();
   return parseSnapshot({
     version: 1,

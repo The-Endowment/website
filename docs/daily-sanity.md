@@ -1,6 +1,6 @@
 # Daily collection sanity check
 
-This is an approximate operational check. It compares daily growth in StonkFun's reported cumulative PENIS rewards with daily growth in the contract's cumulative holder collections. It cannot certify reward attribution, detect every failure or authorize corrective withdrawals. The existing baseline sweep still needs replacement before the approved reward-only pledge can launch.
+This is an approximate operational check. It compares daily growth in StonkFun's reported cumulative PENIS rewards with daily growth in the contract's cumulative holder collections. It cannot certify reward attribution, detect every failure or authorize corrective withdrawals. The [refundable collection draft](refundable-collection.md) adds separate custody and review; this aggregate check cannot authorize releasing held funds.
 
 While the application's collection hold is in place, otherwise-eligible snapshots report `routing_pending`. Comparisons involving that state are inconclusive rather than asserting that a full day of collection should have run. The raw distribution and collection deltas remain visible.
 
@@ -13,9 +13,9 @@ approximate commitment            = mean of the two sampled commitment percentag
 estimated PENIS contributions     = reported distributions × approximate commitment
 ```
 
-The collection counter records the net PUMP received by successful sweeps. Buybacks, treasury-owned rewards, gifts and changes in the treasury's balance do not change this counter. A future routing implementation must preserve this accounting or update the snapshot reader. A matching report does not establish that the legacy sweep collected only eligible rewards.
+The collection counter records gross historical PUMP received by successful sweeps, including amounts later refunded. Buybacks, treasury-owned rewards, gifts and changes in treasury balance do not change this counter. Use the collection policy's pending/released/refunded totals and settlement events to assess disposition. A matching daily report does not establish that collections were individually eligible or permanently retained.
 
-The estimate covers PENIS-generated PUMP. Actual holder contributions may also include rewards from other coins under the approved pledge. StonkFun eligibility rules, fees, delayed payments, commitment changes and pauses within the day can cause differences. Two endpoint snapshots cannot reconstruct these details.
+The estimate and this draft's collection policy cover PENIS-generated PUMP only. StonkFun eligibility rules, fees, delayed payments, commitment changes and pauses within the day can cause differences. Two endpoint snapshots cannot reconstruct these details.
 
 The default reporting tolerance is **50% of the estimate in either direction**, chosen as a broad initial sanity threshold, not a measured normal range. Operators can adjust `SANITY_TOLERANCE_BPS` (0–10000) after reviewing actual data. A `review` result prompts investigation; it never changes collection or moves money.
 

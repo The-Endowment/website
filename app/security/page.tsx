@@ -1,15 +1,12 @@
 import type { Metadata } from "next";
+import Link from "next/link";
 import { links } from "@/lib/site";
-
 export const metadata: Metadata = {
   title: "Security",
   description:
-    "The $PENIS Endowment's current review status, trusted reward reporter, contract safeguards and remaining launch requirements.",
+    "Refundable collection safeguards, trust assumptions and remaining launch requirements.",
 };
-
-const LEGACY_REVIEWED_COMMIT = "3bfce2c4aa4e8e560a94c749ebf273c3b53a7d58";
-const commitUrl = `https://github.com/The-Endowment/endowment/commit/${LEGACY_REVIEWED_COMMIT}`;
-
+const legacyCommit = "3bfce2c4aa4e8e560a94c749ebf273c3b53a7d58";
 export default function Security() {
   return (
     <>
@@ -17,202 +14,183 @@ export default function Security() {
         <div className="thesis-head">
           <h1 className="display h1">Safeguards, trust and review.</h1>
           <p className="lede">
-            The version 4 replacement is being developed and reviewed locally. New enrollment and automated
-            contributions remain closed here. The current work has not received an independent security audit
-            and is not an authorized production release.
+            The refundable collection system is a draft. New enrollment and
+            automated collection remain closed. It has automated tests, but has
+            not received an independent security audit and is not an authorized
+            production release.
           </p>
           <div className="actions">
-            <a href="/security-review.pdf" className="button button-primary" download>
-              Historical review (PDF)
-            </a>
-            <a href={commitUrl} className="button">
-              Legacy reviewed commit
+            <Link href="/contributions" className="button">
+              Pending contributions
+            </Link>
+            <a href={links.github} className="button">
+              Source code
             </a>
           </div>
         </div>
       </section>
-
       <div className="wrap">
         <section className="row">
-          <h2 className="row-label">Reward collection</h2>
+          <h2 className="row-label">Collection and review</h2>
           <div className="row-body">
-            <h3 className="statement">A trusted reporter identifies eligible PUMP.</h3>
             <ul className="plain-list">
               <li>
-                <strong>What the pledge covers</strong>
+                <strong>Proposed pledge</strong>
                 <span>
-                  All verified StonkFun rewards paid in PUMP after fresh enrollment while funding is active,
-                  including PUMP rewards from other coins in the same wallet. Rewards paid in STONK or other
-                  assets are excluded.
+                  Verified PENIS rewards paid in PUMP after consent while
+                  funding is active. Existing PUMP, purchases, ordinary
+                  transfers, other coins’ rewards, and inactive-period rewards
+                  do not create eligibility under this worker policy.
                 </span>
               </li>
               <li>
-                <strong>What the reporter must exclude</strong>
+                <strong>Trusted services</strong>
                 <span>
-                  Existing PUMP, purchases, ordinary transfers and rewards paid while funding is inactive do not
-                  create eligibility. Spending reduces eligible rewards; buying replacements does not restore them.
-                  This classification depends on the reporter, not on an on-chain proof of each reward.
+                  A collector identifies eligible rewards; a distinct reviewer
+                  checks finalized payout and spending history independently.
+                  The contract checks signatures, balances, consent, amounts and
+                  replay protection. It cannot prove the origin of fungible PUMP
+                  or authenticate an API response.
                 </span>
               </li>
               <li>
-                <strong>No daily wallet cap</strong>
+                <strong>Mistakes remain possible</strong>
                 <span>
-                  The pledge has no daily contribution cap per wallet. It uses a broad, revocable PUMP token
-                  approval. A mistaken or compromised reporter could collect PUMP that the policy excludes,
-                  within the available approval, balance and contract constraints.
+                  The wallet grants a broad, revocable PUMP token approval. A
+                  faulty collector can temporarily collect ineligible PUMP
+                  within contract limits. Honest review or holder reclaim
+                  provides a recovery path. Compromised services, shared
+                  evidence failures, or program upgrades can defeat these
+                  safeguards.
                 </span>
               </li>
               <li>
-                <strong>Checks on each collection</strong>
+                <strong>Estimates are diagnostics</strong>
                 <span>
-                  The replacement checks the authorized reporter, fresh consent, exact amount, expiry and replay
-                  protection, and sends contributions only to the configured treasury. These checks do not prove
-                  that the reporter classified the PUMP correctly.
-                </span>
-              </li>
-              <li>
-                <strong>Daily oversight</strong>
-                <span>
-                  An approximate daily comparison with StonkFun reward totals can flag discrepancies for
-                  investigation. Matching totals cannot prove that each wallet was charged correctly.
+                  Daily aggregate API deltas, volume estimates and midnight
+                  balance checkpoints can flag discrepancies. Matching totals
+                  cannot prove that each wallet was charged correctly. The
+                  retained optional allowance is an estimate, not proof of
+                  reward ownership.
                 </span>
               </li>
             </ul>
           </div>
         </section>
-
         <section className="row">
-          <h2 className="row-label">Review status</h2>
+          <h2 className="row-label">Holding and refunds</h2>
           <div className="row-body">
-            <table className="table">
-              <thead>
-                <tr>
-                  <th>Work</th>
-                  <th>Status</th>
-                </tr>
-              </thead>
-              <tbody>
-                <tr>
-                  <td>Version 4 contract, reporter and website</td>
-                  <td>Local implementation, automated tests and AI-assisted adversarial review in progress</td>
-                </tr>
-                <tr>
-                  <td>Independent security review</td>
-                  <td>Pending; AI-assisted review is not an independent audit or certification</td>
-                </tr>
-                <tr>
-                  <td>Treasury rewards and governance</td>
-                  <td>Program-owned treasury reward eligibility and the upgrade-authority policy still need verification and agreement</td>
-                </tr>
-                <tr>
-                  <td>Deployment and limited pilot</td>
-                  <td>Not authorized by these local changes; deployment identity and release checks remain outstanding</td>
-                </tr>
-              </tbody>
-            </table>
-          </div>
-        </section>
-
-        <section className="row">
-          <h2 className="row-label">Contract safeguards</h2>
-          <div className="row-body">
-            <h3 className="statement">Rules in the replacement under review.</h3>
             <ul className="plain-list">
               <li>
-                <strong>Restricted treasury use</strong>
+                <strong>Separate custody</strong>
                 <span>
-                  There is no admin or reporter withdrawal instruction. The buyback process can move $PENIS from
-                  the vault into permanently locked liquidity, so the direct vault balance can change.
+                  Holder collections enter a holding account that buybacks
+                  cannot spend. Each collection records its owner, amount and
+                  collection time, with its own 24-hour minimum hold. New
+                  deposits do not inherit an older deposit’s approval.
                 </span>
               </li>
               <li>
-                <strong>Holder $PENIS is not pledged</strong>
+                <strong>Approval and expiry</strong>
                 <span>
-                  Enrollment delegates PUMP collection, not access to the holder&rsquo;s $PENIS. Funding starts at
-                  30% committed, pauses below 25%, and resumes at 30%. Holder collection stops permanently when
-                  the direct treasury vault reaches 200 million $PENIS; liquidity holdings do not count toward that goal.
+                  Only reviewed amounts can reach the spendable treasury after
+                  the hold. A partial approval returns the excess to the
+                  original holder. At 72 hours, unreleased contributions become
+                  refund-only. A keeper or another caller must still submit a
+                  transaction; time passing does not move tokens.
                 </span>
               </li>
               <li>
-                <strong>Revocation remains available</strong>
+                <strong>Holder reclaim</strong>
                 <span>
-                  Holders can revoke the PUMP approval directly through the token program without the reporter or
-                  this site. Completed contributions are not refunded. Existing approvals require separate revocation;
-                  this website update does not change old deployments.
+                  You can reclaim a pending contribution before release, even if
+                  already approved. The first transaction to execute determines
+                  the outcome. A refund disables further collection until you
+                  consent again; that protection survives leaving and
+                  re-enrollment. Released contributions are permanent.
                 </span>
               </li>
               <li>
-                <strong>Changes are slow and public</strong>
+                <strong>Independent exit</strong>
                 <span>
-                  Parameter changes and reporter replacement use a 72-hour timelock in the current design.
-                  Retained program upgrade authority can replace the code and override these safeguards;
-                  the timelock does not constrain that separate authority.
-                </span>
-              </li>
-              <li>
-                <strong>Bounded buying</strong>
-                <span>
-                  Trade size, pool depth and recent average price constrain buys. These checks limit exposure but
-                  do not guarantee a fair market price or prevent all manipulation and losses.
-                </span>
-              </li>
-              <li>
-                <strong>Outside token controls</strong>
-                <span>
-                  The contract checks supported mint authorities and token settings before relevant operations.
-                  Third-party token controls remain a dependency; detecting a change and stopping an operation
-                  cannot guarantee that funds retain their value or that no loss occurs.
+                  Revoking the token delegation stops new collection without the
+                  keeper or this site. Disabling consent also cancels pending
+                  release. Refunds remain available during a program pause or
+                  retirement and after the original token account closes,
+                  subject to the token program’s transfer controls.
                 </span>
               </li>
             </ul>
           </div>
         </section>
-
         <section className="row">
-          <h2 className="row-label">Other dependencies</h2>
+          <h2 className="row-label">Treasury safeguards</h2>
           <div className="row-body">
             <ul className="plain-list">
               <li>
-                <strong>The refresher</strong>
+                <strong>PENIS stays with holders</strong>
                 <span>
-                  An automation key checks landlords before each daily count. It can&rsquo;t move funds, its role is
-                  recorded on-chain, and it can resign. This counting role is separate from the reporter that
-                  authorizes PUMP collection.
+                  Enrollment delegates PUMP collection, not the holder’s PENIS.
+                  Funding uses the 30% activation / 25% pause thresholds.
+                  Disabled collection consent counts zero at the next applicable
+                  count; balances and counts are sampled rather than
+                  continuously known.
                 </span>
               </li>
               <li>
-                <strong>Counts need fresh evidence</strong>
+                <strong>200 million goal</strong>
                 <span>
-                  Counted balances are public, but holdings can change between observations. Freshness checks and
-                  invalidation after refresher changes constrain when collection may proceed.
+                  Only PENIS actually held in the permanent treasury vault
+                  counts, including direct donations. Collection ends at the
+                  goal, and remaining pending contributions become refundable.
+                  Liquidity holdings do not count toward it.
                 </span>
               </li>
               <li>
-                <strong>Incomplete reward history</strong>
+                <strong>Restricted destinations</strong>
                 <span>
-                  Missing API records or uncertain wallet history leave the affected rewards with holders. The
-                  system may collect less than the full pledge; it does not infer a debt from a wallet balance.
+                  There is no discretionary admin withdrawal. Pending funds can
+                  go only to their original holder or the fixed spendable
+                  treasury. Permanent PENIS principal and LP holdings have no
+                  withdrawal path in this code. Bounded buybacks still carry
+                  price and market risks.
+                </span>
+              </li>
+              <li>
+                <strong>Keys and external controls</strong>
+                <span>
+                  The proposed collector and reviewer keys are immutable and
+                  distinct. Admin parameter changes retain their timelock, but a
+                  separate retained program upgrade authority can replace the
+                  code. PUMP’s transfer hook authority could delay refunds by
+                  enabling a hook. The endowment cannot override those external
+                  controls.
                 </span>
               </li>
             </ul>
           </div>
         </section>
-
         <section className="row">
-          <h2 className="row-label">Historical materials</h2>
+          <h2 className="row-label">Before launch</h2>
           <div className="row-body">
             <p>
-              The linked PDF describes an earlier AI-assisted review of legacy commit{" "}
-              <a href={commitUrl}>
-                <span className="mono">{LEGACY_REVIEWED_COMMIT.slice(0, 7)}</span>
-              </a>{" "}
-              of the <a href={links.github}>open-source contract</a>. Its test counts, findings and rehearsal results
-              do not cover or certify the version 4 replacement. The repository link provides published source;
-              the local replacement is still being prepared for review.
+              Agree the reward policy, 72-hour timeout and independent role
+              custody; verify that the program-owned treasury receives Stonk
+              rewards; exercise failures on a test deployment; and obtain an
+              independent security review. Deployment identity and
+              upgrade-authority policy remain unresolved. No key-destruction
+              date is promised.
             </p>
             <p>
-              Before launch, the reviewed release must be matched to the deployed program. Whether and when to
-              remove upgrade authority remains a governance decision; no key-destruction date is promised.
+              The <a href="/security-review.pdf">historical review</a> covers{" "}
+              <a
+                href={`https://github.com/The-Endowment/endowment/commit/${legacyCommit}`}
+              >
+                an earlier commit
+              </a>
+              , not this system. Its findings and test counts do not certify the
+              new work. Published pull requests are proposals until reviewed and
+              integrated.
             </p>
           </div>
         </section>

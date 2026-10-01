@@ -4,7 +4,7 @@ import { links } from "@/lib/site";
 export const metadata: Metadata = {
   title: "For projects",
   description:
-    "Explore the endowment's open-source design and historical guides. The version 4 replacement is under local review and is not ready for project launches.",
+    "Explore the endowment's open-source design and historical guides. The refundable collection draft is under local review and is not ready for project launches.",
 };
 
 export default function Build() {
@@ -14,8 +14,8 @@ export default function Build() {
         <div className="thesis-head">
           <h1 className="display h1">Your coin, your endowment.</h1>
           <p className="lede">
-            The endowment explores how holders can contribute dividend income to a shared treasury. The version 4
-            replacement is being developed and reviewed locally for $PENIS. New enrollment and collection remain
+            The endowment explores how holders can contribute dividend income to a shared treasury. The refundable
+            collection draft is being developed and reviewed locally for $PENIS. New enrollment and collection remain
             closed here; a reviewed shared deployment for other projects is not available through this site.
           </p>
           <div className="actions">
@@ -55,12 +55,12 @@ export default function Build() {
                 <h3>Explore the source</h3>
                 <p className="muted">
                   The contract, website and keeper are open source. The linked repository contains published code;
-                  the local version 4 replacement is still being prepared for review. Reading or copying the source
+                  the local refundable collection draft is still being prepared for review. Reading or copying the source
                   does not establish that it is ready to hold funds.
                 </p>
                 <ul>
                   <li>Source and tests are available on GitHub</li>
-                  <li>The linked guides describe the legacy system, not version 4 deployment instructions</li>
+                  <li>The linked guides describe the legacy system, not current deployment instructions</li>
                   <li>Independent security review and deployment validation remain necessary before launch</li>
                 </ul>
                 <div className="actions">
@@ -80,15 +80,14 @@ export default function Build() {
               <li>
                 <strong>Restricted treasury use</strong>
                 <span>
-                  The replacement has no admin or reporter withdrawal instruction. Buybacks can move treasury coins
-                  into permanently locked liquidity; they do not all remain in the direct vault.
+                  The replacement has no admin or reporter withdrawal instruction. Permanent coin holdings have no withdrawal path; buybacks can also create permanently locked liquidity.
                 </span>
               </li>
               <li>
                 <strong>A trusted reward reporter</strong>
                 <span>
-                  The $PENIS pledge covers all verified StonkFun rewards paid in PUMP while enrolled and funding is
-                  active, including rewards from other coins. There is no daily wallet cap. Broad PUMP approval is
+                  The current $PENIS proposal covers verified PENIS rewards paid in PUMP while enrolled and funding is
+                  active, with a separate holding and review stage. Broad PUMP approval is
                   revocable, but an incorrect report can collect PUMP outside the intended reward policy.
                 </span>
               </li>

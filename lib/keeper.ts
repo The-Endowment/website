@@ -1,4 +1,4 @@
-import { fetchReporterPolicy } from "./reward-client";
+import { collectionServiceReady } from "./holding/status";
 import "server-only";
 import { createHmac, randomInt } from "node:crypto";
 import {
@@ -318,7 +318,7 @@ export async function runBuy(k: Keeper) {
     }),
   ];
   const buy = (minOut: bigint) =>
-    buybackIx(k.inst, config.pool, poolAccounts, k.signer, keeperDividend, flagshipVault, donates, flagship, minOut);
+    buybackIx(k.inst, config.pool, poolAccounts, k.signer, keeperDividend, flagshipVault, donates, flagship, minOut, config.holding);
 
   // Simulate with no minimum, reading the coin vault afterwards.
   const coinBefore = await fetchMaybeToken(k.rpc, coinVault);
@@ -345,9 +345,9 @@ export async function runBuy(k: Keeper) {
 
 // ---- The refresher's pass (the anti-shuffle attestation) ----
 
-/** Landlords per count or refresh transaction: three accounts each. */
-const BATCH = 8;
-const batchUnits = (n: number) => 30_000 + 15_000 * n;
+/** Landlords per count or refresh transaction: four accounts each for refundable collection. */
+const BATCH = 6;
+const batchUnits = (n: number) => 35_000 + 25_000 * n;
 
 /**
  * The refresher reads every landlord (or those given), in a fresh random order,
@@ -361,16 +361,16 @@ const batchUnits = (n: number) => 30_000 + 15_000 * n;
  */
 async function refreshPass(k: Keeper, deadline: number, only?: LandlordRow[]) {
   const landlords = only ?? (await listLandlords(k.rpc, k.inst.program, k.inst.config));
-  const jobs = chunk(shuffled(landlords), BATCH).map((batch) => ({
+  const jobs = await Promise.all(chunk(shuffled(landlords), BATCH).map(async (batch) => ({
     item: batch,
-    ixs: [refreshLandlordsIx(k.inst, k.signer, batch)],
+    ixs: [await refreshLandlordsIx(k.inst, k.signer, batch)],
     computeUnits: batchUnits(batch.length),
-  }));
+  })));
   const outcomes = await sendAll(k, jobs, deadline);
   const retry = outcomes.filter((o) => o.error).flatMap((o) => o.item);
   const singles = await sendAll(
     k,
-    retry.map((row) => ({ item: row, ixs: [refreshLandlordsIx(k.inst, k.signer, [row])], computeUnits: batchUnits(1) })),
+    await Promise.all(retry.map(async (row) => ({ item: row, ixs: [await refreshLandlordsIx(k.inst, k.signer, [row])], computeUnits: batchUnits(1) }))),
     deadline,
   );
   const failures = singles.filter((o) => o.error).map((o) => ({ landlord: o.item.address, error: o.error! }));
@@ -456,11 +456,11 @@ export async function runCount(k: Keeper) {
   }
   const outcomes = await sendAll(
     k,
-    chunk(shuffled(pending), BATCH).map((batch) => ({
+    await Promise.all(chunk(shuffled(pending), BATCH).map(async (batch) => ({
       item: batch,
-      ixs: [countLandlordsIx(k.inst, batch)],
+      ixs: [await countLandlordsIx(k.inst, batch)],
       computeUnits: batchUnits(batch.length),
-    })),
+    }))),
     deadline,
   );
   signatures.push(...outcomes.flatMap((o) => (o.error ? [] : [o.signature!])));
@@ -468,7 +468,7 @@ export async function runCount(k: Keeper) {
   const retry = outcomes.filter((o) => o.error).flatMap((o) => o.item);
   const singles = await sendAll(
     k,
-    retry.map((row) => ({ item: row, ixs: [countLandlordsIx(k.inst, [row])], computeUnits: batchUnits(1) })),
+    await Promise.all(retry.map(async (row) => ({ item: row, ixs: [await countLandlordsIx(k.inst, [row])], computeUnits: batchUnits(1) }))),
     deadline,
   );
   signatures.push(...singles.flatMap((o) => (o.error ? [] : [o.signature!])));
@@ -551,8 +551,8 @@ export async function runPrune(k: Keeper) {
 export async function countHealth(k: Keeper) {
   const config = await readConfig(k);
   const now = nowSecs();
-  const reporter = await fetchReporterPolicy(k.rpc, k.inst);
-  const state = fundingState(config, await directCoinBalance(k), now, Boolean(reporter && !reporter.disabled));
+  const reporterReady = await collectionServiceReady(k.rpc, k.inst, config);
+  const state = fundingState(config, await directCoinBalance(k), now, reporterReady);
   const age = (t: bigint) => (t > BigInt(0) ? now - Number(t) : null);
   const countAge = age(config.lastCountAt);
   const attestAge = age(config.lastAttestedAt);

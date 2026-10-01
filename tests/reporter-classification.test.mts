@@ -87,3 +87,11 @@ test("amount and API validation preserve exact integers and reject malformed/con
   assert.throws(() => distributions({ data: {} }));
   assert.throws(() => distributions({ data: { recentDistributions: [payout, { ...payout, amountRaw: "99" }] } }));
 });
+
+
+test("PENIS-only holding policy excludes other coins and preserves wallet arrival time", () => {
+  const narrow = { ...policy, rewardMint: payout.mint };
+  assert.equal(classify(tx(), account, owner, narrow, feed()).kind, "reward");
+  assert.equal(classify(tx(), account, owner, narrow, feed()).receivedAt, 1_800_000_000);
+  assert.equal(classify(tx(), account, owner, narrow, new Map([[signature, { ...payout, mint: owner }]])).kind, "other");
+});

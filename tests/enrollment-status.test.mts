@@ -6,6 +6,9 @@ import { ata, authorityPda, DISC, landlordPda, PENIS_MINT, PUMP_MINT, type Insta
 import { loadEnrollmentDetails, loadExitStatus, ownerExitInstructions } from "../lib/enrollment-status.ts";
 import { reporterPolicyPda } from "../lib/reward-client.ts";
 import { idlAccount } from "./helpers/idldata.ts";
+import { stopCollection } from "../lib/holding/exit.ts";
+import { encode, concat, schema } from "../lib/holding/codec.ts";
+import type { RpcCall } from "../lib/reporter/rpc.ts";
 
 const owner = address("HpsRzXK3xWQxD1Px1KoExP5KYWs5gByEu47z6Ne6gDNf");
 const other = address("HuBMeYW3aDn8BH65fo8xxbP4oiexyup8udzKyccgi8Ga");
@@ -15,6 +18,32 @@ const signer = createNoopSigner(owner);
 const keyBytes = (key: Address) => new Uint8Array(getAddressEncoder().encode(key));
 type Account = { owner: Address; data: [string, string]; lamports: bigint; executable: boolean; rentEpoch: bigint };
 const account = (data: Uint8Array, owner: Address = program): Account => ({ owner, data: [Buffer.from(data).toString("base64"), "base64"], lamports: 1n, executable: false, rentEpoch: 0n });
+
+test("holding consent failures cannot block independently verified token revocation", async () => {
+  for (const bad of [null, account(new Uint8Array(8)), account(new Uint8Array(8), other), new Error("Offline")]) {
+    const f = await fixture();
+    const rawRpc: RpcCall = async <T,>() => {
+      if (bad instanceof Error) throw bad;
+      return {value:bad} as T;
+    };
+    const ixs=await stopCollection(f.rpc,rawRpc,inst,signer);
+    assert.equal(ixs.length,1);assertRevoke(ixs[0],f.source);
+    f.accounts.set(f.source,new Error("Token read failed"));
+    await assert.rejects(stopCollection(f.rpc,rawRpc,inst,signer),/Could not verify any permission/);
+  }
+});
+
+test("durable holding consent can be disabled after token and enrollment reads fail", async () => {
+  const f=await fixture();
+  f.accounts.set(f.source,new Error("Token closed/read failed"));
+  f.accounts.set(f.landlord,new Error("Enrollment unavailable"));
+  const data=concat(Uint8Array.from(schema.accounts.CollectionConsent),encode({defined:{name:"CollectionConsent"}},
+    {config:inst.config,owner,bump:1,enabled:true,epoch:1n,next_nonce:2n,started_at:1n}));
+  const rawRpc: RpcCall=async <T,>()=>({value:account(data)}) as T;
+  const ixs=await stopCollection(f.rpc,rawRpc,inst,signer);
+  assert.equal(ixs.length,1);
+  assert.deepEqual([...ixs[0].data!],schema.instructions.disable_collection.discriminator);
+});
 
 function token(mint: Address, holder: Address, delegate?: Address, allowance = (1n << 64n) - 1n) {
   const data = Buffer.alloc(165);

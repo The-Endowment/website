@@ -36,7 +36,7 @@ export async function chainSnapshot(rpc: RpcCall, inst: Instance, owner: Address
   const config = decodeConfig(bytes(c, inst.program));
   const record = l ? decodeLandlord(bytes(l, inst.program)) : null;
   const policy = decodeReporterPolicy(bytes(p, inst.program));
-  if (!config || !policy || config.version !== 4 || config.pool !== expected.pool || config.coinMint !== inst.coinMint
+  if (!config || !policy || (l && !record) || config.version !== 4 || config.pool !== expected.pool || config.coinMint !== inst.coinMint
       || config.dividendMint !== inst.dividendMint || policy.config !== inst.config
       || (record && (record.version !== 4 || record.config !== inst.config || record.owner !== owner || record.dividendAccount !== source))) {
     throw new Error("Unrecognized version, instance, or reward consent");

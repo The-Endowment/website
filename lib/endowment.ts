@@ -1,3 +1,4 @@
+import { decodeAccount as decodeHoldingAccount } from "./holding/codec.ts";
 /**
  * The endowment program's client: addresses, account decoders and instruction
  * builders, written against the program source (programs/endowment/src). Used by
@@ -267,8 +268,8 @@ function hasDiscriminator(bytes: Uint8Array, disc: number[]) {
   return disc.every((b, i) => bytes[i] === b);
 }
 
-export type EndowmentConfig = ReturnType<typeof configDecoder.decode>;
-export type LandlordRecord = ReturnType<typeof landlordDecoder.decode>;
+export type EndowmentConfig = ReturnType<typeof configDecoder.decode> & { holding?: boolean };
+export type LandlordRecord = ReturnType<typeof landlordDecoder.decode> & { holding?: boolean };
 
 /** A landlord's refresher reads, as the program counts them: only those made under the current refresher. */
 export function attestationsOf(config: EndowmentConfig, record: LandlordRecord): number {
@@ -282,10 +283,29 @@ export function refilledAllowance(config: EndowmentConfig, now: number): bigint 
   return refilled < config.params.maxBuyPerTx ? refilled : config.params.maxBuyPerTx;
 }
 
+function camelFields(value: unknown): unknown {
+  if (Array.isArray(value)) return value.map(camelFields);
+  if (value && typeof value === "object") return Object.fromEntries(Object.entries(value).map(([k,v])=>[k.replace(/_([a-z])/g,(_,c:string)=>c.toUpperCase()),camelFields(v)]));
+  return value;
+}
 export function decodeConfig(bytes: Uint8Array): EndowmentConfig | null {
+  if (bytes[8] === 3 && hasDiscriminator(bytes, DISC.configAccount)) {
+    // Exact IDL length/discriminator distinguish the PR #3/#4 layout from the
+    // earlier generic endowment layout. A mixed rollout is not supported.
+    try {
+      const raw = camelFields(decodeHoldingAccount("Config", bytes)) as Record<string, unknown>;
+      const pending = raw.pending as { params: unknown; effectiveAt: bigint };
+      return { ...raw, pendingParams: pending.params, pendingEffectiveAt: pending.effectiveAt,
+        donationBps: 0, totalDonated: 0n, collectionEpoch: 0n, nextConsentId: 0n, discriminator: bytes.slice(0,8), holding: true } as unknown as EndowmentConfig;
+    } catch { return null; }
+  }
   return hasDiscriminator(bytes, DISC.configAccount) ? configDecoder.decode(bytes) : null;
 }
 export function decodeLandlord(bytes: Uint8Array): LandlordRecord | null {
+  if (bytes[8] === 3 && hasDiscriminator(bytes, DISC.landlordAccount)) {
+    try { return { ...camelFields(decodeHoldingAccount("Landlord", bytes)) as object, consentId: 0n, lastReportNonce: 0n,
+      discriminator: bytes.slice(0,8), holding: true } as unknown as LandlordRecord; } catch { return null; }
+  }
   return hasDiscriminator(bytes, DISC.landlordAccount) ? landlordDecoder.decode(bytes) : null;
 }
 
@@ -376,7 +396,9 @@ export async function buybackIx(
   donates: boolean,
   flagshipConfigAddress: Address | null,
   minOut: bigint,
+  holding = false,
 ) {
+  if (holding && donates) throw new Error("The holding contract has no cross-project donation path");
   if (donates && !flagshipConfigAddress) throw new Error("A donating buy needs the flagship config");
   const authority = await authorityPda(inst.program, inst.config);
   const [cpmmAuthority] = await getProgramDerivedAddress({
@@ -406,7 +428,7 @@ export async function buybackIx(
       { address: poolAccounts.observation, role: W },
       { address: poolAccounts.lpMint, role: W },
       { address: await ata(authority, poolAccounts.lpMint, LEGACY_TOKEN_PROGRAM), role: W },
-      { address: flagshipDividendVault, role: donates ? W : R },
+      ...(!holding ? [{ address: flagshipDividendVault, role: donates ? W : R }] : []),
       { address: inst.dividendTokenProgram, role: R },
       { address: inst.coinTokenProgram, role: R },
       { address: LEGACY_TOKEN_PROGRAM, role: R },
@@ -434,14 +456,15 @@ export function beginCountIx(inst: Instance) {
 }
 
 /** Counts a batch of landlords: each as its record, coin account and dividend account. */
-export function countLandlordsIx(inst: Instance, landlords: LandlordRow[]) {
+export async function countLandlordsIx(inst: Instance, landlords: LandlordRow[]) {
   return ix(inst.program, DISC.countLandlords, [
     { address: inst.config, role: W },
-    ...landlords.flatMap((l) => [
+    ...(await Promise.all(landlords.map(async (l) => [
       { address: l.address, role: W },
       { address: l.record.coinAccount, role: R },
       { address: l.record.dividendAccount, role: R },
-    ]),
+      ...(l.record.holding ? [{ address: await pda(inst.program, "collection_consent", inst.config, l.record.owner), role: R }] : []),
+    ]))).flat(),
   ]);
 }
 
@@ -454,15 +477,16 @@ export function finishCountIx(inst: Instance) {
  * refresher, it also attests them: a landlord counts after REQUIRED_ATTESTATIONS
  * such reads, at least MIN_ATTEST_SPACING_SECS apart.
  */
-export function refreshLandlordsIx(inst: Instance, caller: TransactionSigner, landlords: LandlordRow[]) {
+export async function refreshLandlordsIx(inst: Instance, caller: TransactionSigner, landlords: LandlordRow[]) {
   return ix(inst.program, DISC.refreshLandlords, [
     { address: inst.config, role: W },
     signer(caller, false),
-    ...landlords.flatMap((l) => [
+    ...(await Promise.all(landlords.map(async (l) => [
       { address: l.address, role: W },
       { address: l.record.coinAccount, role: R },
       { address: l.record.dividendAccount, role: R },
-    ]),
+      ...(l.record.holding ? [{ address: await pda(inst.program, "collection_consent", inst.config, l.record.owner), role: R }] : []),
+    ]))).flat(),
   ]);
 }
 

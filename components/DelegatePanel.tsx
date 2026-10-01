@@ -185,7 +185,7 @@ function Connected({ inst }: { inst: Instance }) {
       </dl>
 
       <p className="small">{COLLECTION_PENDING_NOTICE}</p>
-      {status?.enrollment && status.enrollment.config.version !== 4 && (status.delegatedToEndowment || status.delegationTooSmall) && (
+      {status?.enrollment && !status.enrollment.config.holding && status.enrollment.config.version !== 4 && (status.delegatedToEndowment || status.delegationTooSmall) && (
         <p className="muted small">
           Your existing PUMP approval remains on-chain. The old contract can collect PUMP above its baseline,
           including purchases. Use Leave to revoke this endowment&rsquo;s approval and remove your enrollment.
@@ -193,9 +193,9 @@ function Connected({ inst }: { inst: Instance }) {
       )}
 
       <p className="small">
-        A project-operated reporter identifies new StonkFun rewards paid in PUMP, including rewards from other coins.
+        This page manages earlier approvals. The current refundable-collection proposal covers verified PENIS rewards paid in PUMP; review it on the Contributions page.
         Existing PUMP, purchases, ordinary transfers, and inactive-period rewards are excluded by that service&rsquo;s policy.
-        The contract trusts the reporter: a mistake or compromised key can collect other PUMP. There is no per-wallet daily cap.
+        The contract trusts the reporter: a mistake or compromised key can collect other PUMP. Collection limits do not prove the origin of PUMP.
         Your wallet grants a broad, revocable PUMP allowance; PENIS is not delegated. Retained program upgrade authority can change these protections.
       </p>
       {status?.enrollment?.policy && <p className="muted small">Reporter: <span className="address">{status.enrollment.policy.reporter}</span></p>}

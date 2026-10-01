@@ -5,7 +5,7 @@ export type TokenBalance = {
   uiTokenAmount: { amount: string; decimals: number };
 };
 export type ParsedInstruction = {
-  programId: string; accounts?: string[];
+  programId: string; accounts?: string[]; data?: string;
   parsed?: { type: string; info: Record<string, unknown> };
 };
 export type ParsedTransaction = {
@@ -16,9 +16,9 @@ export type ParsedTransaction = {
     innerInstructions: { index: number; instructions: ParsedInstruction[] }[] | null;
   };
 };
-export type SourcePolicy = { mint: string; tokenProgram: string; authority: string; source: string };
+export type SourcePolicy = { mint: string; tokenProgram: string; authority: string; source: string; rewardMint?: string };
 export type Observation = {
-  signature: string; slot: number; before: string; after: string;
+  signature: string; slot: number; receivedAt?: number | null; before: string; after: string;
   kind: "reward" | "outflow" | "other" | "failed" | "uncertain";
   amount: string; reason: string;
 };
