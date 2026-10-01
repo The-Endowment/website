@@ -9,14 +9,13 @@ export function SiteHeader() {
       <div className="wrap header-inner">
         <Link href="/" className="brand">
           <SolidLogo className="brand-mark" />
-          <span>The $PENIS Endowment</span>
+          <span>$PENIS</span>
         </Link>
         <nav aria-label="Primary" className="nav">
-          <Link href="/#how">How it works</Link>
+          <Link href="/endowment">The endowment</Link>
           <Link href="/thesis">Thesis</Link>
-          <Link href="/build">For projects</Link>
+          <Link href="/#coin">The coin</Link>
           <ProjectsNavLink />
-          <Link href="/#questions">Questions</Link>
           <Link href="/delegate" className="button">
             Delegate
           </Link>

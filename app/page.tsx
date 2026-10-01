@@ -3,234 +3,197 @@ import { CopyAddress } from "@/components/CopyAddress";
 import { Campaign } from "@/components/Campaign";
 import { DotLogo } from "@/components/Logo";
 import { links, PENIS_MINT } from "@/lib/site";
+import { loadHolderRewards } from "@/lib/stonk";
+
+// The holder-rewards figures come from stonk.fun's public API; refresh them at most every five minutes.
+export const revalidate = 300;
+
+const whole = (n: number) => Math.round(n).toLocaleString("en-US");
 
 const faqs = [
   {
+    q: "What is $PENIS?",
+    a: "A meme coin on Solana, launched on stonk.fun. Every trade pays a fee, and that fee is paid out to every holder in PUMP. It is the oldest joke there is, with the best possible ticker.",
+  },
+  {
     q: "What is PUMP?",
-    a: "The token of pump.fun. Every $PENIS trade pays a fee, and that fee is paid out to every $PENIS holder in PUMP. The endowment runs on that income.",
+    a: "The token of pump.fun. It's what $PENIS pays its holders, and what the endowment runs on.",
   },
   {
-    q: "Is my wallet safe if I opt in?",
-    a: "You delegate one token account: your PUMP. From then on, new PUMP that arrives there goes to the endowment, whatever its source. It can't touch your $PENIS, your SOL, any other token, or the PUMP you held when you joined. Many landlords use a wallet that holds only $PENIS.",
+    q: "How do I earn PUMP?",
+    a: "Hold $PENIS in your wallet. Payouts arrive automatically, with nothing to claim, and each holder's share follows how much $PENIS they hold.",
   },
   {
-    q: "Can I commit only part of my $PENIS?",
-    a: "Yes. Commitment is per wallet: everything in the wallet you delegate counts, and all new PUMP arriving there goes to the endowment. Keep the $PENIS you want to commit in one wallet and the rest in another.",
+    q: "What is the endowment?",
+    a: "A contract that turns PUMP rewards into $PENIS and holds it forever. The largest holders lend it their rewards, it buys $PENIS in small amounts, and it never sells. Its goal is 200 million $PENIS, a fifth of the supply.",
   },
   {
-    q: "Can I leave?",
-    a: "Yes, anytime. The Leave button revokes the delegation and removes your landlord record in one step, and revoking works from any Solana wallet without this site or anyone's permission.",
-  },
-  {
-    q: "Who runs it?",
-    a: "No one, by design. After a public testing period, the key that can change the contract is destroyed, so no one can ever change its rules or move its $PENIS, including us. Every action is posted publicly, and the endowment has no connection to the coin's creators.",
-  },
-  {
-    q: "What happens at 200 million?",
-    a: "It's a milestone, not an end. Contributions keep flowing, and from then on part of every buy becomes permanent liquidity in the $PENIS pool that can never be withdrawn.",
-  },
-  {
-    q: "Can I check the code?",
-    a: "Yes. The contract is open source on GitHub, and every rule on this page is enforced by it.",
-  },
-  {
-    q: "When does it open?",
-    a: "Sweeps switch on once committed landlords hold 30% of all $PENIS, as measured by a daily on-chain count. A landlord's $PENIS counts from its second count, once it has been held from one count to the next, and every landlord's record is public on-chain.",
+    q: "Who is behind this site?",
+    a: "Holders. The site and the endowment are independent of the coin's creators, the code is open source, and every endowment action is posted to @PenisEndowment.",
   },
 ];
 
-export default function Home() {
+export default async function Home() {
+  const rewards = await loadHolderRewards();
   return (
-    <>
-      <div className="wrap">
+    <div className="wrap">
       <section className="hero">
         <div className="hero-copy">
           <h1 className="display h1">
-            Permanent capital.
+            The coin that
             <br />
-            <em>Firm</em> commitments.
+            <em>pays</em> rent.
           </h1>
           <p className="lede">
-            The $PENIS Endowment turns every PUMP it earns into more $PENIS, and holds it forever. It is the one
-            holder that can never pull out.
+            $PENIS is a meme coin on Solana. Every trade pays a fee, and every holder receives it in PUMP. Its largest
+            holders are building an endowment that never sells.
           </p>
           <div className="actions">
-            <Link href="#how" className="button button-primary">
-              How it works
-            </Link>
-            <Link href="/delegate" className="button">
-              Delegate your PUMP
+            <a href={links.stonkfun} className="button button-primary">
+              Get $PENIS
+            </a>
+            <Link href="/endowment" className="button">
+              The endowment
             </Link>
           </div>
         </div>
-        <DotLogo className="hero-art" label="The endowment's mark, a temple drawn in dots" />
+        <DotLogo className="hero-art" label="$PENIS, a temple drawn in dots" />
       </section>
-        <Campaign />
-        <section id="how" className="row">
-          <h2 className="row-label">How it works</h2>
-          <div className="row-body">
-            <h3 className="statement">Landlords lend their rent. The endowment keeps the building.</h3>
-            <p>
-              The largest holders, the landlords, lend the endowment their PUMP rewards. The endowment turns that
-              income into $PENIS it can never sell.
-            </p>
-            <ol className="steps">
-              <li>
-                <h3>Delegate</h3>
-                <p>One transaction gives the endowment access to your PUMP rewards and nothing else.</p>
-              </li>
-              <li>
-                <h3>Sweep</h3>
-                <p>When dividends land, the new PUMP moves to the endowment within seconds.</p>
-              </li>
-              <li>
-                <h3>Compound</h3>
-                <p>It buys $PENIS in small amounts and locks it in the vault, where it stays forever.</p>
-              </li>
-            </ol>
-          </div>
-        </section>
 
+      {rewards && (
         <section className="row">
-          <h2 className="row-label">How it spends</h2>
+          <h2 className="row-label">Paid to holders</h2>
           <div className="row-body">
-            <h3 className="statement">Every PUMP buys $PENIS.</h3>
-            <p>
-              The endowment buys in small, spaced-out amounts with whatever PUMP it holds, each priced against the
-              pool&rsquo;s recent average. Nothing is sold, and nothing is spent on anything else.
-            </p>
             <div className="figures">
               <div className="figure">
-                <span className="figure-value">200,000,000</span>
-                <span className="figure-label">$PENIS, the first milestone</span>
+                <span className="figure-value">{whole(rewards.distributed)}</span>
+                <span className="figure-label">PUMP paid to $PENIS holders</span>
               </div>
               <div className="figure">
-                <span className="figure-value">20%</span>
-                <span className="figure-label">of all $PENIS, held forever</span>
+                <span className="figure-value">{whole(rewards.holders)}</span>
+                <span className="figure-label">holders paid</span>
               </div>
             </div>
-            <p>
-              After the milestone, contributions keep flowing and part of every buy becomes permanent liquidity that
-              can never be withdrawn.
-            </p>
+            <p className="muted small">Live from stonk.fun&rsquo;s public reward totals.</p>
           </div>
         </section>
+      )}
 
-        <section className="row">
-          <h2 className="row-label">Guarantees</h2>
-          <div className="row-body">
-            <h3 className="statement">Written into the contract, not promised in a thread.</h3>
-            <ul className="plain-list">
-              <li>
-                <strong>It never sells</strong>
-                <span>The contract has no function that can sell or withdraw its $PENIS.</span>
-              </li>
-              <li>
-                <strong>You can always leave</strong>
-                <span>Revoke straight from your wallet, anytime, with no permission needed.</span>
-              </li>
-              <li>
-                <strong>The pause is limited</strong>
-                <span>It can&rsquo;t move funds, lifts on its own after seven days, and can&rsquo;t be renewed back to back.</span>
-              </li>
-              <li>
-                <strong>Rule changes are announced</strong>
-                <span>Any change to the limits, or retiring the endowment, waits 72 hours on-chain before it takes effect.</span>
-              </li>
-              <li>
-                <strong>Locked forever</strong>
-                <span>After a public testing period, the upgrade key is destroyed. No one can change the rules.</span>
-              </li>
-              <li>
-                <strong>Everything is public</strong>
-                <span>
-                  The <a href={links.github}>source code</a> is open, and every action is posted to{" "}
-                  <a href={links.x}>@PenisEndowment</a>.
-                </span>
-              </li>
-              <li>
-                <strong>Security reviewed</strong>
-                <span>
-                  Three rounds of AI-assisted adversarial review and a live launch rehearsal.{" "}
-                  <Link href="/security">See the review</Link>.
-                </span>
-              </li>
-            </ul>
-          </div>
-        </section>
-
-        <section className="band">
-          <blockquote>
-            Trading creates rent. <span>Rent keeps supply off the market.</span>
-          </blockquote>
-          <Link href="/thesis" className="muted">
-            Read the landlord thesis
-          </Link>
-        </section>
-
-        <section id="coin" className="row">
-          <h2 className="row-label">The coin</h2>
-          <div className="row-body">
-            <h3 className="statement">$PENIS pays rent in PUMP.</h3>
-            <p>
-              $PENIS is a meme coin on Solana, launched on stonk.fun. Every trade pays a fee, and holders receive it as
-              PUMP. It is the oldest joke there is with the best possible ticker, and a penis that pays you in PUMP.
-            </p>
-            <dl className="facts">
-              <div className="fact">
-                <dt>Mint address</dt>
-                <dd>
-                  <CopyAddress address={PENIS_MINT} />
-                </dd>
-              </div>
-              <div className="fact">
-                <dt>Supply</dt>
-                <dd>About 1 billion. Minting and freezing are permanently disabled.</dd>
-              </div>
-              <div className="fact">
-                <dt>Dividends</dt>
-                <dd>A 3% fee on every transfer, paid to holders in PUMP</dd>
-              </div>
-              <div className="fact">
-                <dt>Main market</dt>
-                <dd>
-                  PENIS/PUMP on Raydium. <a href={links.dexscreener}>Chart</a>, <a href={links.solscan}>Solscan</a>
-                </dd>
-              </div>
-            </dl>
-            <div className="actions">
-              <a href={links.stonkfun} className="button">
-                $PENIS on stonk.fun
-              </a>
+      <section id="endowment" className="row">
+        <h2 className="row-label">The endowment</h2>
+        <div className="row-body">
+          <h3 className="statement">The holder that can never sell.</h3>
+          <p>
+            The $PENIS Endowment turns PUMP rewards into $PENIS and holds it forever. The largest holders, the
+            landlords, lend it the PUMP their $PENIS earns. It buys in small, careful amounts, and the contract has no
+            way to sell.
+          </p>
+          <div className="figures">
+            <div className="figure">
+              <span className="figure-value">200,000,000</span>
+              <span className="figure-label">$PENIS, the endowment&rsquo;s goal</span>
+            </div>
+            <div className="figure">
+              <span className="figure-value">20%</span>
+              <span className="figure-label">of all $PENIS, held forever</span>
             </div>
           </div>
-        </section>
-
-        <section id="status" className="row">
-          <h2 className="row-label">Status</h2>
-          <div className="row-body">
-            <h3 className="statement">Built, tested, and ready for the landlords.</h3>
-            <p>
-              Sweeps switch on once committed landlords hold 30% of all $PENIS, starting with the founding landlords.
-              Follow <a href={links.x}>@PenisEndowment</a> for the announcement.
-            </p>
+          <div className="actions">
+            <Link href="/endowment" className="button button-primary">
+              How the endowment works
+            </Link>
+            <Link href="/delegate" className="button">
+              Become a landlord
+            </Link>
           </div>
-        </section>
+        </div>
+      </section>
+      <Campaign />
 
-        <section id="questions" className="row">
-          <h2 className="row-label">Questions</h2>
-          <div className="row-body">
-            <div className="faq">
-              {faqs.map((f) => (
-                <details key={f.q}>
-                  <summary>{f.q}</summary>
-                  <p>{f.a}</p>
-                </details>
-              ))}
+      <section id="rent" className="row">
+        <h2 className="row-label">How $PENIS pays</h2>
+        <div className="row-body">
+          <h3 className="statement">Every trade pays rent.</h3>
+          <ul className="plain-list">
+            <li>
+              <strong>A fee on every trade</strong>
+              <span>Each $PENIS transfer carries a 3% fee, and that fee goes to holders.</span>
+            </li>
+            <li>
+              <strong>Paid in PUMP</strong>
+              <span>stonk.fun pays it out in PUMP, straight to holders&rsquo; wallets, with nothing to claim.</span>
+            </li>
+            <li>
+              <strong>In proportion</strong>
+              <span>Each holder&rsquo;s share follows how much $PENIS they hold. More $PENIS, more rent.</span>
+            </li>
+          </ul>
+        </div>
+      </section>
+
+      <section className="band">
+        <blockquote>
+          Trading creates rent. <span>Rent keeps supply off the market.</span>
+        </blockquote>
+        <Link href="/thesis" className="muted">
+          Read the landlord thesis
+        </Link>
+      </section>
+
+      <section id="coin" className="row">
+        <h2 className="row-label">The coin</h2>
+        <div className="row-body">
+          <h3 className="statement">$PENIS, on Solana.</h3>
+          <dl className="facts">
+            <div className="fact">
+              <dt>Mint address</dt>
+              <dd>
+                <CopyAddress address={PENIS_MINT} />
+              </dd>
             </div>
+            <div className="fact">
+              <dt>Supply</dt>
+              <dd>About 1 billion. Minting and freezing are permanently disabled.</dd>
+            </div>
+            <div className="fact">
+              <dt>Rewards</dt>
+              <dd>A 3% fee on every transfer, paid to holders in PUMP</dd>
+            </div>
+            <div className="fact">
+              <dt>Main market</dt>
+              <dd>
+                PENIS/PUMP on Raydium. <a href={links.dexscreener}>Chart</a>, <a href={links.solscan}>Solscan</a>
+              </dd>
+            </div>
+          </dl>
+          <div className="actions">
+            <a href={links.stonkfun} className="button button-primary">
+              Get $PENIS on stonk.fun
+            </a>
+            <a href={links.x} className="button">
+              Follow @PenisEndowment
+            </a>
           </div>
-        </section>
-      </div>
-    </>
+          <p className="muted small">Always check the mint address above before you buy.</p>
+        </div>
+      </section>
+
+      <section id="questions" className="row">
+        <h2 className="row-label">Questions</h2>
+        <div className="row-body">
+          <div className="faq">
+            {faqs.map((f) => (
+              <details key={f.q}>
+                <summary>{f.q}</summary>
+                <p>{f.a}</p>
+              </details>
+            ))}
+          </div>
+          <p className="muted small">
+            Questions about delegating? See the <Link href="/endowment#questions">endowment&rsquo;s questions</Link>.
+          </p>
+        </div>
+      </section>
+    </div>
   );
 }

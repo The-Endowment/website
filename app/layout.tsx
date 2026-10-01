@@ -15,9 +15,9 @@ const instrumentSerif = Instrument_Serif({
 export const metadata: Metadata = {
   metadataBase: new URL("https://peniscoin.meme"),
   alternates: { canonical: "/" },
-  title: { default: "The $PENIS Endowment", template: "%s · The $PENIS Endowment" },
+  title: { default: "$PENIS: the coin that pays rent", template: "%s · $PENIS" },
   description:
-    "Permanent capital. Landlords delegate their PUMP rewards, and the endowment turns every PUMP into $PENIS it holds forever.",
+    "$PENIS pays its holders PUMP on every trade, and its largest holders are building an endowment that turns that rent into $PENIS held forever.",
   // Pre-launch: keep it out of search until the landlords sign off.
   robots: { index: false, follow: false },
 };

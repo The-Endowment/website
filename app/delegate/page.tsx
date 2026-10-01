@@ -15,8 +15,8 @@ export default function Delegate() {
         <div className="thesis-head">
           <h1 className="display h1">Delegate your rent.</h1>
           <p className="lede">
-            One transaction lets the endowment collect the new PUMP that arrives in your PUMP account from now on. Your
-            $PENIS, your SOL and the PUMP you hold when you join stay yours. Leave at any time.
+            One transaction lets the endowment collect the PUMP your $PENIS earns, and never more. Your $PENIS, your SOL
+            and the PUMP you hold when you join stay yours. Leave at any time.
           </p>
           <CommitmentBar />
         </div>
@@ -34,12 +34,12 @@ export default function Delegate() {
           <h2 className="row-label">Your wallet is the commitment</h2>
           <div className="row-body">
             <p>
-              Everything in the wallet you delegate is committed: its $PENIS counts toward the 30%, and all new PUMP that
-              arrives in it goes to the endowment. Want to commit part of your holdings? Keep the rest in another wallet.
+              The $PENIS in the wallet you delegate counts toward the 30%, and the PUMP it earns goes to the endowment.
+              Each day the contract works out what that $PENIS earned and collects at most that, so PUMP you buy or earn
+              from other coins stays yours. Want to commit part of your holdings? Keep the rest in another wallet.
             </p>
             <p className="muted small">
-              We recommend a wallet that holds only the $PENIS you&rsquo;re committing and no other PUMP, so everything
-              that arrives there is your $PENIS rent.
+              We recommend a wallet that holds just the $PENIS you&rsquo;re committing, so your records stay simple.
             </p>
           </div>
         </section>
@@ -94,7 +94,7 @@ export default function Delegate() {
               </li>
               <li>
                 <strong>The threshold</strong>
-                <span>Sweeps switch on at 30% of supply committed and pause below 25%.</span>
+                <span>Collection switches on at 30% of supply committed and pauses below 25%.</span>
               </li>
               <li>
                 <strong>Checked between counts</strong>

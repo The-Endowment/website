@@ -104,8 +104,8 @@ function Raising({ c }: { c: Launched }) {
       <div className="row-body">
         <h3 className="statement">The endowment switches on at {pct(x)}.</h3>
         <p className="lede">
-          Every landlord who delegates moves the bar. When committed wallets hold {pct(x)} of all $PENIS, sweeps and
-          buybacks start, and the endowment starts buying $PENIS that is never sold.
+          Every landlord who delegates moves the bar. When committed wallets hold {pct(x)} of all $PENIS, collection
+          and buybacks start, and the endowment starts buying $PENIS that is never sold.
         </p>
 
         <div className="goal">
@@ -245,14 +245,14 @@ function Live({ c }: { c: Launched }) {
               big={compact(bought)}
               of={`of ${compact(cap)} $PENIS bought and locked`}
               fill={ratio(bought, cap)}
-              label={`$PENIS bought toward the ${compact(cap)} milestone`}
+              label={`$PENIS bought toward the ${compact(cap)} goal`}
               max={Number(cap / UNIT)}
               now={Number(bought / UNIT)}
               ticks={[
                 { at: 25, label: quarter(1) },
                 { at: 50, label: quarter(2) },
                 { at: 75, label: quarter(3) },
-                { at: 100, label: compact(cap), note: "milestone", end: true },
+                { at: 100, label: compact(cap), note: "goal", end: true },
               ]}
             />
           ) : (

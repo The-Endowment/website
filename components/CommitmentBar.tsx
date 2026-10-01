@@ -36,7 +36,7 @@ export function CommitmentBar() {
       <div className="commitment-head">
         <span className="figure-value">{bpsToPercent(committed)}%</span>
         <span className="figure-label">
-          of supply committed{config.active ? ". Sweeps are on." : ` → sweeps switch on at ${bpsToPercent(threshold)}%`}
+          of supply committed{config.active ? ". Collection is on." : ` → collection switches on at ${bpsToPercent(threshold)}%`}
         </span>
       </div>
       <div className="bar" role="progressbar" aria-valuemin={0} aria-valuemax={100} aria-valuenow={Math.round(filled)}>

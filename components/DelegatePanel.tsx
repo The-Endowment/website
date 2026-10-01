@@ -141,6 +141,7 @@ function Connected({ inst }: { inst: Instance }) {
   const { dispatch: disconnect } = useDisconnect(client);
   const [status, setStatus] = useState<Status | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
+  const [agreed, setAgreed] = useState(false);
   const owner = connected?.account.address as Address | undefined;
 
   const refresh = useCallback(async () => {
@@ -266,10 +267,9 @@ function Connected({ inst }: { inst: Instance }) {
 
       {status && !isIn && (
         <p className="muted small">
-          Everything in the wallet you delegate is committed: its $PENIS counts toward the 30%, and all new PUMP that
-          arrives in it goes to the endowment, whatever its source. The PUMP it holds today stays yours. Want to commit
-          part of your holdings? Keep the rest in another wallet. We recommend a wallet that holds only the $PENIS
-          you&rsquo;re committing and no other PUMP.
+          The $PENIS in the wallet you delegate counts toward the 30%, and the endowment collects the PUMP it earns: at
+          most what your $PENIS earned each day, never the PUMP the wallet holds today. Want to commit part of your
+          holdings? Keep the rest in another wallet.
         </p>
       )}
       {status && status.delegate && !status.delegatedToEndowment && !status.delegationTooSmall && (
@@ -283,13 +283,22 @@ function Connected({ inst }: { inst: Instance }) {
         <p className="muted small">Your approval is smaller than the endowment needs to count you. Rejoin to renew it.</p>
       )}
       {status && !isIn && reason && <p className="small">{reason}</p>}
+      {status && !isIn && !reason && (
+        <label className="consent">
+          <input type="checkbox" checked={agreed} onChange={(e) => setAgreed(e.target.checked)} disabled={busy} />
+          <span>
+            I understand: the $PENIS in this wallet is committed, and each day the endowment collects the PUMP it
+            earned, never more. The PUMP I hold today stays mine, and I can leave at any time.
+          </span>
+        </label>
+      )}
 
       <div className="actions">
         {!isIn && (
           <button
             type="button"
             className="button button-primary"
-            disabled={busy || !status || Boolean(reason)}
+            disabled={busy || !status || Boolean(reason) || !agreed}
             onClick={() => optIn.dispatch()}
           >
             {optIn.isRunning ? "Confirm in your wallet…" : status?.landlord ? "Rejoin" : "Delegate my PUMP rewards"}

@@ -188,6 +188,8 @@ button.button-primary { background: var(--bone); }
 .count-details summary { cursor: pointer; }
 .count-details summary:hover { color: var(--bone); }
 .count-details .table-scroll { margin: 14px 0; }
+.consent { display: flex; gap: 12px; align-items: flex-start; max-width: 40em; padding: 16px; border: 1px solid var(--rule); border-radius: 6px; font-size: 15px; color: var(--body); cursor: pointer; }
+.consent input { margin-top: 4px; accent-color: var(--accent); flex-shrink: 0; }
 .link-button { font: inherit; color: inherit; background: none; border: 0; padding: 0; cursor: pointer; text-decoration: underline; text-decoration-color: var(--rule); text-underline-offset: 3px; }
 .link-button:hover { color: var(--accent); }
 .buys { display: grid; }
