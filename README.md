@@ -2,7 +2,7 @@
 
 This branch accompanies the contract change that permanently stops holder collection at the direct-vault goal. Deploy it only with that contract version. The goal uses the spendable coin balance in the derived endowment vault, including direct donations; cumulative purchases and liquidity holdings are separate. The website, enrollment check, keeper, and health endpoint share one lifecycle calculation. A pending direct donation can end collection before a transaction records the completion flag. The contract remains the authority for every transfer.
 
-The campaign endpoint is a cached snapshot (up to five minutes between revalidations); enrollment rechecks the vault immediately before requesting approval, and each keeper pass reads it afresh. Existing treasury funds continue through the buy/liquidity policy. This change does not solve attribution of PENIS-derived PUMP or confirm that the live distributor will reward a program-owned treasury.
+The campaign endpoint is a cached snapshot (up to five minutes between revalidations); enrollment rechecks the vault immediately before requesting approval, and each keeper pass reads it afresh. Existing treasury funds continue through the buy/liquidity policy. This change does not implement the newly accepted policy of collecting all verified StonkFun PUMP rewards only while enrolled and active, or confirm program-owned treasury reward eligibility. Current enrollment still grants broad PUMP delegation. The contract's `docs/reward-routing-v1.md` specifies the proposed replacement and release blockers; do not advertise purchased-PUMP protection from this website change alone.
 
 Use Node.js 24 or later for the built-in TypeScript test runner:
 
