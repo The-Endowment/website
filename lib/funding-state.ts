@@ -1,14 +1,15 @@
 import type { EndowmentConfig } from "./endowment";
+import { COLLECTION_PENDING_NOTICE } from "./collection-policy.ts";
 
 /** Match the contract's ACTIVE_MAX_AGE_SECS. */
 export const ACTIVE_MAX_AGE_SECS = 3 * 24 * 60 * 60;
 
-export type FundingState = "complete" | "retired" | "paused" | "unavailable" | "waiting" | "stale" | "enabled";
+export type FundingState = "complete" | "retired" | "paused" | "unavailable" | "waiting" | "stale" | "routing_pending" | "enabled";
 type FundingConfig = Pick<EndowmentConfig, "milestoneReached" | "retired" | "pausedUntil" | "contributionCap" | "active" | "lastCountAt"> & {
   params: Pick<EndowmentConfig["params"], "activateBps">;
 };
 
-/** Lifecycle eligibility only; a sweep still has to pass market and token checks. */
+/** Lifecycle plus the application hold pending a reviewed reward-routing implementation. */
 export function fundingState(config: FundingConfig, directBalance: bigint | null, now: number): FundingState {
   if (config.milestoneReached || (directBalance !== null && directBalance >= config.contributionCap)) return "complete";
   if (config.retired) return "retired";
@@ -16,7 +17,7 @@ export function fundingState(config: FundingConfig, directBalance: bigint | null
   if (directBalance === null) return "unavailable";
   if (!config.active) return "waiting";
   if (config.params.activateBps > 0 && now - Number(config.lastCountAt) > ACTIVE_MAX_AGE_SECS) return "stale";
-  return "enabled";
+  return "routing_pending";
 }
 
 export const fundingStatus: Record<FundingState, string> = {
@@ -27,4 +28,5 @@ export const fundingStatus: Record<FundingState, string> = {
   waiting: "Waiting for enough eligible commitment before holder contributions can run.",
   stale: "Holder contributions are paused until a fresh commitment count completes.",
   enabled: "Holder contributions are enabled, subject to market and token checks.",
+  routing_pending: COLLECTION_PENDING_NOTICE,
 };

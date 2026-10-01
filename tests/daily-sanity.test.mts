@@ -61,7 +61,7 @@ test("changed commitment uses an explicitly approximate endpoint mean", () => {
 });
 
 test("inactive, paused, stale, unavailable and completed endpoints have no full-day estimate", () => {
-  for (const fundingState of ["waiting", "paused", "stale", "unavailable", "complete", "retired"]) {
+  for (const fundingState of ["waiting", "paused", "stale", "unavailable", "complete", "retired", "routing_pending"]) {
     for (const report of [dailySanity({ ...start, fundingState }, end), dailySanity(start, { ...end, fundingState })]) {
       assert.equal(report.status, "inconclusive");
       assert.equal(report.estimatedPenisPumpRaw, null);

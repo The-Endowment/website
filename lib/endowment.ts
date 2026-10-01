@@ -328,68 +328,11 @@ export type Instance = {
   dividendTokenProgram: Address;
 };
 
-export async function registerLandlordIx(
-  inst: Instance,
-  owner: TransactionSigner,
-  dividendAccount: Address,
-  coinAccount: Address,
-) {
-  return ix(inst.program, DISC.registerLandlord, [
-    signer(owner, true),
-    { address: inst.config, role: W },
-    { address: await authorityPda(inst.program, inst.config), role: R },
-    { address: await landlordPda(inst.program, inst.config, owner.address), role: W },
-    { address: inst.dividendMint, role: R },
-    { address: dividendAccount, role: R },
-    { address: inst.coinMint, role: R },
-    { address: coinAccount, role: R },
-    { address: inst.dividendTokenProgram, role: R },
-    { address: inst.coinTokenProgram, role: R },
-    { address: SYSTEM_PROGRAM, role: R },
-  ]);
-}
-
-export async function resyncBaselineIx(inst: Instance, owner: TransactionSigner, dividendAccount: Address) {
-  return ix(inst.program, DISC.resyncBaseline, [
-    signer(owner, false),
-    { address: inst.config, role: R },
-    { address: await landlordPda(inst.program, inst.config, owner.address), role: W },
-    { address: dividendAccount, role: R },
-  ]);
-}
-
 export async function deregisterLandlordIx(inst: Instance, owner: TransactionSigner) {
   return ix(inst.program, DISC.deregisterLandlord, [
     signer(owner, true),
     { address: inst.config, role: W },
     { address: await landlordPda(inst.program, inst.config, owner.address), role: W },
-  ]);
-}
-
-/** A sweep also passes (read-only) what a buyback would trade through, so it fails closed when buybacks can't run. */
-export async function sweepIx(
-  inst: Instance,
-  pool: Address,
-  poolAccounts: PoolAccounts,
-  landlord: Address,
-  dividendAccount: Address,
-) {
-  const authority = await authorityPda(inst.program, inst.config);
-  const dividendIndex = poolAccounts.mints[0] === inst.dividendMint ? 0 : 1;
-  return ix(inst.program, DISC.sweep, [
-    { address: inst.config, role: W },
-    { address: authority, role: R },
-    { address: landlord, role: W },
-    { address: inst.dividendMint, role: R },
-    { address: dividendAccount, role: W },
-    { address: await ata(authority, inst.dividendMint, inst.dividendTokenProgram), role: W },
-    { address: inst.coinMint, role: R },
-    { address: await ata(authority, inst.coinMint, inst.coinTokenProgram), role: R },
-    { address: pool, role: R },
-    { address: poolAccounts.ammConfig, role: R },
-    { address: poolAccounts.vaults[dividendIndex], role: R },
-    { address: poolAccounts.vaults[1 - dividendIndex], role: R },
-    { address: inst.dividendTokenProgram, role: R },
   ]);
 }
 

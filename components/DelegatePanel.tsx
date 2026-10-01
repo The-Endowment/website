@@ -10,10 +10,7 @@ import {
 } from "@solana/kit-plugin-wallet/react";
 import { useAction } from "@solana/react";
 import {
-  fetchMaybeMint,
   fetchMaybeToken,
-  getApproveCheckedInstruction,
-  getCreateAssociatedTokenIdempotentInstruction,
   getRevokeInstruction,
   TOKEN_2022_PROGRAM_ADDRESS,
 } from "@solana-program/token-2022";
@@ -22,7 +19,6 @@ import { client } from "@/components/WalletClient";
 import {
   ata,
   authorityPda,
-  bpsToPercent,
   decodeConfig,
   decodeLandlord,
   deregisterLandlordIx,
@@ -30,46 +26,26 @@ import {
   isFlagshipConfig,
   landlordPda,
   MIN_DELEGATION,
-  registerLandlordIx,
-  resyncBaselineIx,
-  type EndowmentConfig,
   type Instance,
   type LandlordRecord,
 } from "@/lib/endowment";
 import type { EndowmentSummary } from "@/app/api/endowments/route";
 import { flagshipInstance, formatTokens } from "@/lib/solana";
-import { fundingState } from "@/lib/funding-state";
-
-/**
- * The delegation is unlimited on purpose. The program counts a landlord, and
- * lets them register, only while at least half of u64::MAX is still approved
- * (`MIN_DELEGATION`), so a bounded approval would silently stop counting once
- * rewards used it up. What limits the endowment is the program, not the amount:
- * it can only move PUMP above the landlord's baseline, into its own vault.
- * We use ApproveChecked so the wallet shows the token and decimals being approved.
- */
-const UNLIMITED = BigInt("18446744073709551615");
+import { COLLECTION_PENDING_NOTICE } from "@/lib/collection-policy";
 
 type Status = {
   inst: Instance;
-  config: EndowmentConfig;
   landlord: LandlordRecord | null;
   dividendAccount: Address;
-  coinAccount: Address;
   dividendBalance: bigint;
   coinBalance: bigint;
-  coinSupply: bigint;
-  directHeld: bigint | null;
-  dividendDecimals: number;
   delegate: Address | null;
   /** Delegated to this endowment, in full (the program needs at least MIN_DELEGATION). */
   delegatedToEndowment: boolean;
-  /** Delegated to this endowment, but for less than it needs (re-approve to fix). */
+  /** Delegated to this endowment, but for less than the legacy count requires. */
   delegationTooSmall: boolean;
   /** When the delegate is another endowment on the contract, its coin's symbol. */
   otherEndowment: string | null;
-  minStake: bigint;
-  now: number;
 };
 
 /** The coin symbol of the endowment whose authority is `delegate`, if it's one on this contract. */
@@ -90,57 +66,29 @@ async function endowmentNamed(program: Address, delegate: Address): Promise<stri
 async function loadStatus(inst: Instance, owner: Address): Promise<Status> {
   const dividendAccount = await ata(owner, inst.dividendMint, inst.dividendTokenProgram);
   const coinAccount = await ata(owner, inst.coinMint, inst.coinTokenProgram);
-  const [config, landlord, dividend, coin, mint, dividendMint] = await Promise.all([
+  const [config, landlord, dividend, coin] = await Promise.all([
     fetchDecoded(client.rpc, inst.config, decodeConfig),
     fetchDecoded(client.rpc, await landlordPda(inst.program, inst.config, owner), decodeLandlord),
     fetchMaybeToken(client.rpc, dividendAccount),
     fetchMaybeToken(client.rpc, coinAccount),
-    fetchMaybeMint(client.rpc, inst.coinMint),
-    fetchMaybeMint(client.rpc, inst.dividendMint),
   ]);
-  // Only ever offer opt-in to the real flagship (audit KW-09).
+  // Only manage legacy enrollment for the verified flagship.
   if (!config || !isFlagshipConfig(config)) throw new Error("The endowment isn't live yet.");
   const authority = await authorityPda(inst.program, inst.config);
-  const coinVault = await fetchMaybeToken(client.rpc, await ata(authority, inst.coinMint, inst.coinTokenProgram));
   const delegate = dividend.exists && isSome(dividend.data.delegate) ? dividend.data.delegate.value : null;
   const delegatedAmount = dividend.exists ? dividend.data.delegatedAmount : BigInt(0);
   const ours = delegate === authority;
-  const coinSupply = mint.exists ? mint.data.supply : BigInt(0);
-  const minStake = (coinSupply * BigInt(config.params.minStakeBps) + BigInt(9_999)) / BigInt(10_000);
   return {
     inst,
-    config,
     landlord,
     dividendAccount,
-    coinAccount,
     dividendBalance: dividend.exists ? dividend.data.amount : BigInt(0),
     coinBalance: coin.exists ? coin.data.amount : BigInt(0),
-    coinSupply,
-    directHeld: coinVault.exists ? coinVault.data.amount : null,
-    dividendDecimals: dividendMint.exists ? dividendMint.data.decimals : 6,
     delegate,
     delegatedToEndowment: ours && delegatedAmount >= MIN_DELEGATION,
     delegationTooSmall: ours && delegatedAmount < MIN_DELEGATION,
     otherEndowment: delegate && !ours ? await endowmentNamed(inst.program, delegate) : null,
-    minStake,
-    now: Math.floor(Date.now() / 1000),
   };
-}
-
-/** Why opting in isn't possible right now, in plain words; null if it is. */
-function blocker(s: Status): string | null {
-  const state = fundingState(s.config, s.directHeld, s.now);
-  if (state === "complete") return "The funding goal has been reached. Holder contributions have ended permanently; you can still revoke and leave.";
-  if (state === "unavailable") return "The endowment vault balance cannot be verified. Please try again before joining.";
-  if (s.config.retired) return "The endowment has closed to new landlords.";
-  if (s.now < Number(s.config.pausedUntil)) {
-    const until = new Date(Number(s.config.pausedUntil) * 1000).toLocaleString();
-    return `Joining is paused until ${until}. You can still leave at any time.`;
-  }
-  if (s.coinBalance < s.minStake) {
-    return `Landlords hold at least ${formatTokens(s.minStake)} $PENIS (${bpsToPercent(s.config.params.minStakeBps)}% of supply). This wallet holds ${formatTokens(s.coinBalance)}.`;
-  }
-  return null;
 }
 
 function Connected({ inst }: { inst: Instance }) {
@@ -167,53 +115,6 @@ function Connected({ inst }: { inst: Instance }) {
     refresh();
   }, [refresh]);
 
-  const optIn = useAction(async (signal: AbortSignal) => {
-    if (!status) throw new Error("No status");
-    const signer = client.identity;
-    // Recheck completion immediately before requesting any token approval.
-    const latest = await loadStatus(inst, signer.address);
-    const reason = blocker(latest);
-    if (reason) throw new Error(reason);
-    const authority = await authorityPda(inst.program, inst.config);
-    const ixs: Instruction[] = [
-      getCreateAssociatedTokenIdempotentInstruction({
-        payer: signer,
-        owner: signer.address,
-        mint: inst.dividendMint,
-        ata: latest.dividendAccount,
-        tokenProgram: inst.dividendTokenProgram,
-      }),
-      // Registering needs the coin account to exist, even while it's empty (audit L-12).
-      getCreateAssociatedTokenIdempotentInstruction({
-        payer: signer,
-        owner: signer.address,
-        mint: inst.coinMint,
-        ata: latest.coinAccount,
-        tokenProgram: inst.coinTokenProgram,
-      }),
-      getApproveCheckedInstruction(
-        {
-          source: latest.dividendAccount,
-          mint: inst.dividendMint,
-          delegate: authority,
-          owner: signer,
-          amount: UNLIMITED,
-          decimals: latest.dividendDecimals,
-        },
-        { programAddress: inst.dividendTokenProgram as typeof TOKEN_2022_PROGRAM_ADDRESS },
-      ),
-    ];
-    if (latest.landlord) {
-      // Coming back: reset the baseline so everything this account holds now stays the landlord's.
-      ixs.push(await resyncBaselineIx(inst, signer, latest.dividendAccount));
-    } else {
-      ixs.push(await registerLandlordIx(inst, signer, latest.dividendAccount, latest.coinAccount));
-    }
-    const result = await client.sendTransaction(ixs, { abortSignal: signal });
-    await refresh();
-    return result.context.signature;
-  });
-
   const leave = useAction(async (signal: AbortSignal) => {
     if (!status) throw new Error("No status");
     const signer = client.identity;
@@ -234,11 +135,10 @@ function Connected({ inst }: { inst: Instance }) {
   });
 
   if (!connected || !owner) return null;
-  const busy = optIn.isRunning || leave.isRunning;
-  const lastSignature = optIn.data ?? leave.data;
-  const error = optIn.error ?? leave.error;
+  const busy = leave.isRunning;
+  const lastSignature = leave.data;
+  const error = leave.error;
   const isIn = Boolean(status?.landlord && status.delegatedToEndowment);
-  const reason = status ? blocker(status) : null;
 
   let delegation = "Not delegated";
   if (status?.delegatedToEndowment) delegation = "Delegated to the endowment";
@@ -278,40 +178,19 @@ function Connected({ inst }: { inst: Instance }) {
         )}
       </dl>
 
-      {status && !isIn && (
+      <p className="small">{COLLECTION_PENDING_NOTICE}</p>
+      {status && (status.delegatedToEndowment || status.delegationTooSmall) && (
         <p className="muted small">
-          Everything in the wallet you delegate is committed: its $PENIS counts toward the 30%, and all new PUMP that
-          arrives in it goes to the endowment, whatever its source. The PUMP it holds today stays yours. Want to commit
-          part of your holdings? Keep the rest in another wallet. We recommend a wallet that holds only the $PENIS
-          you&rsquo;re committing and no other PUMP.
+          Your existing PUMP approval remains on-chain. The old contract can collect PUMP above its baseline,
+          including purchases. Use Leave to revoke this endowment&rsquo;s approval and remove your enrollment.
         </p>
       )}
-      {status && status.delegate && !status.delegatedToEndowment && !status.delegationTooSmall && (
-        <p className="muted small">
-          {status.otherEndowment
-            ? `A PUMP account can have one delegate. Joining ends this wallet's delegation to the ${status.otherEndowment} endowment, and it stops counting there.`
-            : "Joining replaces the other app\u2019s delegation on your PUMP account."}
-        </p>
-      )}
-      {status?.delegationTooSmall && (
-        <p className="muted small">Your approval is smaller than the endowment needs to count you. Rejoin to renew it.</p>
-      )}
-      {status && !isIn && reason && <p className="small">{reason}</p>}
 
       <div className="actions">
-        {!isIn && (
-          <button
-            type="button"
-            className="button button-primary"
-            disabled={busy || !status || Boolean(reason)}
-            onClick={() => optIn.dispatch()}
-          >
-            {optIn.isRunning ? "Confirm in your wallet…" : status?.landlord ? "Rejoin" : "Delegate my PUMP rewards"}
-          </button>
-        )}
+        {!isIn && <button type="button" className="button button-primary" disabled>Enrollment closed</button>}
         {isIn && (
           <button type="button" className="button button-primary" disabled>
-            You&rsquo;re a landlord
+            Existing enrollment
           </button>
         )}
         {status && (status.delegatedToEndowment || status.delegationTooSmall || status.landlord) && (
@@ -347,7 +226,7 @@ function Chooser({ inst }: { inst: Instance }) {
   }
   return (
     <div className="row-body">
-      <p>Connect the wallet that holds your $PENIS.</p>
+      <p>Connect your wallet to review an existing enrollment or leave.</p>
       <div className="actions">
         {wallets.map((wallet) => (
           <button key={wallet.name} type="button" className="button" disabled={isRunning} onClick={() => connect(wallet)}>
@@ -369,7 +248,7 @@ export function DelegatePanel() {
   if (inst === null) {
     return (
       <div className="row-body">
-        <p>Delegation opens at launch. Follow @PenisEndowment for the announcement.</p>
+        <p>{COLLECTION_PENDING_NOTICE}</p>
       </div>
     );
   }

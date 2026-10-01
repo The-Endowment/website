@@ -40,7 +40,6 @@ import {
   flagshipConfig,
   LEGACY_TOKEN_PROGRAM,
   listLandlords,
-  MAX_VAULT_DAYS_OF_BUYS,
   MIN_ATTEST_SPACING_SECS,
   MIN_DELEGATION,
   parsePool,
@@ -49,7 +48,6 @@ import {
   refilledAllowance,
   refreshLandlordsIx,
   REQUIRED_ATTESTATIONS,
-  sweepIx,
   type EndowmentConfig,
   type Instance,
   type LandlordRow,
@@ -57,7 +55,7 @@ import {
 } from "@/lib/endowment";
 import { deviationBps, reservedFees, spotPriceX32, twapPriceX32, x32ToNumber } from "@/lib/price";
 import { flagshipInstance } from "@/lib/solana";
-import { fundingState, fundingStatus } from "@/lib/funding-state";
+import { fundingState } from "@/lib/funding-state";
 
 type Rpc = ReturnType<typeof createSolanaRpc>;
 
@@ -218,56 +216,6 @@ async function directCoinBalance(k: Keeper): Promise<bigint | null> {
   const authority = await authorityPda(k.inst.program, k.inst.config);
   const vault = await fetchMaybeToken(k.rpc, await ata(authority, k.inst.coinMint, k.inst.coinTokenProgram));
   return vault.exists ? vault.data.amount : null;
-}
-
-// ---- Sweeps (audit L-06, I-16) ----
-
-/**
- * Sweep every landlord whose PUMP account holds more than its baseline. Sweeps
- * are sent together, a failed batch is retried one landlord at a time, and one
- * bad landlord never stops the others. The contract refuses sweeps whenever a
- * buyback couldn't run, so those land here as errors and nothing moves.
- */
-export async function runSweeps(k: Keeper) {
-  const deadline = Date.now() + BUDGET_MS;
-  const config = await readConfig(k);
-  const now = nowSecs();
-  const state = fundingState(config, await directCoinBalance(k), now);
-  if (state !== "enabled") return { skipped: fundingStatus[state] };
-
-  const [authority, poolAccounts, rows] = await Promise.all([
-    authorityPda(k.inst.program, k.inst.config),
-    readPool(k, config),
-    listLandlords(k.rpc, k.inst.program, k.inst.config),
-  ]);
-  // The contract clips sweeps so the vault never holds more than MAX_VAULT_DAYS_OF_BUYS
-  // days of buys; once it's full, a sweep moves nothing, so don't pay for one.
-  const vault = await fetchMaybeToken(k.rpc, await ata(authority, k.inst.dividendMint, k.inst.dividendTokenProgram));
-  const cap = config.params.maxBuyPerDay * BigInt(MAX_VAULT_DAYS_OF_BUYS);
-  if (vault.exists && vault.data.amount >= cap) return { skipped: "vault full (waiting for buys)", vault: vault.data.amount.toString() };
-  const tokens = await Promise.all(rows.map((r) => fetchMaybeToken(k.rpc, r.record.dividendAccount)));
-  const due = rows.filter((row, i) => {
-    const token = tokens[i];
-    if (!token.exists || token.data.amount <= row.record.baseline) return false;
-    const d = token.data.delegate;
-    return d.__option === "Some" && d.value === authority;
-  });
-
-  const sweep = (row: LandlordRow) => sweepIx(k.inst, config.pool, poolAccounts, row.address, row.record.dividendAccount);
-  const batches = await Promise.all(
-    chunk(due, 3).map(async (batch) => ({ item: batch, ixs: await Promise.all(batch.map(sweep)), computeUnits: 80_000 * batch.length })),
-  );
-  const outcomes = await sendAll(k, batches, deadline);
-  const signatures = outcomes.flatMap((o) => (o.error ? [] : [o.signature!]));
-  const retry = outcomes.filter((o) => o.error).flatMap((o) => o.item);
-  const singles = await sendAll(
-    k,
-    await Promise.all(retry.map(async (row) => ({ item: row, ixs: [await sweep(row)], computeUnits: 80_000 }))),
-    deadline,
-  );
-  const failures = singles.filter((o) => o.error).map((o) => ({ landlord: o.item.address, error: o.error! }));
-  signatures.push(...singles.flatMap((o) => (o.error ? [] : [o.signature!])));
-  return { due: due.length, signatures, failures };
 }
 
 // ---- Buys (audit I-14, KW-11, R3-TW-02) ----

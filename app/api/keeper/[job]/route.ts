@@ -1,6 +1,7 @@
 import { timingSafeEqual } from "node:crypto";
-import { countHealth, loadKeeper, runBuy, runCount, runPrune, runRefresh, runSweeps } from "@/lib/keeper";
+import { countHealth, loadKeeper, runBuy, runCount, runPrune, runRefresh } from "@/lib/keeper";
 import { loadDailySnapshot } from "@/lib/daily-snapshot";
+import { unavailableSweep } from "@/lib/collection-policy";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 60;
@@ -14,6 +15,7 @@ function matches(header: string | null, secret: string | undefined) {
 }
 
 async function run(job: string) {
+  if (job === "sweep") return Response.json(unavailableSweep());
   if (job === "daily-snapshot") {
     try {
       return Response.json(await loadDailySnapshot(), { headers: { "Cache-Control": "no-store" } });
@@ -24,7 +26,6 @@ async function run(job: string) {
   const keeper = await loadKeeper();
   if (!keeper) return Response.json({ skipped: "not launched" }, { status: 503 });
   try {
-    if (job === "sweep") return Response.json(await runSweeps(keeper));
     if (job === "buy") return Response.json(await runBuy(keeper));
     if (job === "count") return Response.json(await runCount(keeper));
     if (job === "refresh") return Response.json(await runRefresh(keeper));

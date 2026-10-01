@@ -18,7 +18,7 @@ export type DailySnapshot = {
 const raw = (value: unknown): value is string => typeof value === "string" && /^(0|[1-9][0-9]*)$/.test(value);
 const timestamp = (value: unknown): value is string =>
   typeof value === "string" && Number.isFinite(Date.parse(value)) && new Date(value).toISOString() === value;
-const states = ["enabled", "complete", "retired", "paused", "unavailable", "waiting", "stale"];
+const states = ["enabled", "complete", "retired", "paused", "unavailable", "waiting", "stale", "routing_pending"];
 
 export function parseSnapshot(value: unknown): DailySnapshot {
   if (!value || typeof value !== "object") throw new Error("Missing daily snapshot");

@@ -2,10 +2,11 @@ import type { Metadata } from "next";
 import { CommitmentBar } from "@/components/CommitmentBar";
 import { DelegatePanel } from "@/components/DelegatePanel";
 import { WalletProvider } from "@/components/WalletClient";
+import { COLLECTION_PENDING_NOTICE } from "@/lib/collection-policy";
 
 export const metadata: Metadata = {
-  title: "Delegate",
-  description: "Delegate your PUMP rewards to the $PENIS Endowment, or leave at any time.",
+  title: "Enrollment",
+  description: "Review an existing endowment enrollment or leave. New enrollment is closed while reward routing is reviewed.",
 };
 
 export default function Delegate() {
@@ -13,106 +14,46 @@ export default function Delegate() {
     <>
       <section className="wrap">
         <div className="thesis-head">
-          <h1 className="display h1">Delegate your rent.</h1>
-          <p className="lede">
-            One transaction lets the endowment collect the new PUMP that arrives in your PUMP account from now on. Your
-            $PENIS, your SOL and the PUMP you hold when you join stay yours. Leave at any time.
-          </p>
+          <h1 className="display h1">Manage your enrollment.</h1>
+          <p className="lede">{COLLECTION_PENDING_NOTICE} Existing participants can still revoke and leave.</p>
           <CommitmentBar />
         </div>
       </section>
-
       <div className="wrap">
         <section className="row">
           <h2 className="row-label">Your wallet</h2>
-          <WalletProvider>
-            <DelegatePanel />
-          </WalletProvider>
+          <WalletProvider><DelegatePanel /></WalletProvider>
         </section>
-
         <section className="row">
-          <h2 className="row-label">Your wallet is the commitment</h2>
+          <h2 className="row-label">Existing approvals</h2>
           <div className="row-body">
             <p>
-              Everything in the wallet you delegate is committed: its $PENIS counts toward the 30%, and all new PUMP that
-              arrives in it goes to the endowment. Want to commit part of your holdings? Keep the rest in another wallet.
+              Closing enrollment and stopping this website&rsquo;s automated collector does not revoke existing approvals.
+              The old contract can still collect PUMP above its recorded balance baseline, including purchased PUMP,
+              if someone else calls it. Existing participants should revoke that approval before relying on reward-only protection.
             </p>
-            <p className="muted small">
-              We recommend a wallet that holds only the $PENIS you&rsquo;re committing and no other PUMP, so everything
-              that arrives there is your $PENIS rent.
+            <p>
+              Leave revokes this endowment&rsquo;s PUMP approval and removes its enrollment record.
+              You can also revoke the token approval directly through your wallet; this stops further delegated collection.
+              Previously completed contributions are not refunded.
             </p>
           </div>
         </section>
-
         <section className="row">
-          <h2 className="row-label">What you sign</h2>
+          <h2 className="row-label">Planned pledge</h2>
           <div className="row-body">
-            <ul className="plain-list">
-              <li>
-                <strong>A delegation</strong>
-                <span>
-                  A standard token approval on your PUMP account only, shown in your wallet with the token and amount. No
-                  other token is included.
-                </span>
-              </li>
-              <li>
-                <strong>A landlord record</strong>
-                <span>
-                  It notes the PUMP you hold when you join, which always stays yours, and tracks your contribution. If you
-                  leave and come back later, it resets to your balance at that moment.
-                </span>
-              </li>
-              <li>
-                <strong>A small deposit</strong>
-                <span>About 0.003 SOL to store your landlord record on-chain, returned when you leave.</span>
-              </li>
-              <li>
-                <strong>During the test period</strong>
-                <span>
-                  The contract&rsquo;s upgrade key is held by the team&rsquo;s multisig until it is destroyed at the end of
-                  the public test period, and every upgrade is announced first. Leave at any time.
-                </span>
-              </li>
-            </ul>
+            <p>
+              The planned system will contribute verified StonkFun rewards paid in PUMP, including rewards from other
+              coins in the same wallet, while you are enrolled and funding is active. Existing PUMP, purchased PUMP,
+              ordinary transfers and rewards already paid while funding is inactive must stay with you.
+            </p>
+            <p>
+              Your $PENIS will stay in your wallet. Funding starts at 30% committed, pauses below 25%, and resumes at 30%.
+              Holder contributions end permanently when the endowment directly holds 200 million $PENIS.
+              These are requirements for the replacement; reward-only collection is not available in the current contract.
+            </p>
           </div>
         </section>
-
-        <section id="counting" className="row">
-          <h2 className="row-label">How counting works</h2>
-          <div className="row-body">
-            <ul className="plain-list">
-              <li>
-                <strong>A daily count</strong>
-                <span>Once a day the contract reads every landlord&rsquo;s $PENIS. There&rsquo;s no limit on landlords.</span>
-              </li>
-              <li>
-                <strong>Held, not borrowed</strong>
-                <span>
-                  Each landlord counts for the lower of today&rsquo;s balance and the previous count&rsquo;s, so new or
-                  added $PENIS counts from the following count, and your first count only records your balance.
-                </span>
-              </li>
-              <li>
-                <strong>The threshold</strong>
-                <span>Sweeps switch on at 30% of supply committed and pause below 25%.</span>
-              </li>
-              <li>
-                <strong>Checked between counts</strong>
-                <span>
-                  Several times a day, at unannounced times, the endowment&rsquo;s refresher reads every landlord at once. A
-                  wallet counts after three of these checks since its last count, each finding it still delegated, and
-                  only for the lowest balance any of them saw. $PENIS moved between wallets counts once, and every check
-                  is public on-chain.
-                </span>
-              </li>
-              <li>
-                <strong>Public tally</strong>
-                <span>Every landlord&rsquo;s record is on-chain for anyone to check.</span>
-              </li>
-            </ul>
-          </div>
-        </section>
-
       </div>
     </>
   );

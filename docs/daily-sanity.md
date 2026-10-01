@@ -2,6 +2,8 @@
 
 This is an approximate operational check. It compares daily growth in StonkFun's reported cumulative PENIS rewards with daily growth in the contract's cumulative holder collections. It cannot certify reward attribution, detect every failure or authorize corrective withdrawals. The existing baseline sweep still needs replacement before the approved reward-only pledge can launch.
 
+While the application's collection hold is in place, otherwise-eligible snapshots report `routing_pending`. Comparisons involving that state are inconclusive rather than asserting that a full day of collection should have run. The raw distribution and collection deltas remain visible.
+
 ## Calculation
 
 ```text

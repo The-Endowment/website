@@ -1,5 +1,7 @@
 # Keeper runbook
 
+**Collection is held pending reward routing.** This branch removes legacy sweep construction. Authenticated GET and POST sweep requests return `routing_pending` without loading a keeper key or submitting a transaction. New website enrollment is also closed; existing approvals are not revoked automatically, and the old on-chain sweep remains callable by other clients. Reopening requires a reviewed replacement contract and client, not an environment-variable change. The sweep schedules below are placeholders for that future integration; buys, counting, refresh, pruning and monitoring retain their existing behavior.
+
 The keeper triggers the endowment's permissionless instructions: sweeps, buybacks, the refresher's passes and the daily commitment count. Its key pays network fees and receives the buyback tip. It is also the flagship's **refresher**: a landlord counts only after three of its refresh reads, at least 30 minutes apart, since its last count. That key can't move funds, but it is trusted: whoever holds it chooses when landlords are read, so a leaked key could be used to time reads and count one holding in several wallets, or to leave landlords out. Treat it as sensitive (see Key custody), and keep it running: if it stops, nobody counts (see Health).
 
 Routes: `/api/keeper/sweep`, `/api/keeper/buy`, `/api/keeper/count`, `/api/keeper/refresh`, `/api/keeper/prune`, `/api/keeper/health`. Code: `lib/keeper.ts`. Every job returns within about 50 seconds with whatever it managed, and resumes on its next call.
@@ -47,13 +49,13 @@ Vercel sends `Authorization: Bearer $CRON_SECRET` automatically.
 - **Count:** attempted every 15 minutes. Once 24 hours have passed since the last round began, it runs a refresher pass (the contract only lets a round begin after one), begins a round, then counts. While a round is open, each call first re-reads the landlords it still expects that are short of their three reads (30 minutes after their last read), then sends every count batch (eight landlords each, shuffled) before confirming any, retries failed batches one landlord at a time, and finishes once all are counted or the four-hour timeout has passed. The contract leaves a landlord still short of reads pending rather than counting it as zero, so a round started early by someone else simply takes a little longer. It doesn't prune first: a landlord that no longer qualifies simply counts zero.
 - **Refresh:** called every 15 minutes, but proceeds only on a secret-seeded random draw, about `KEEPER_REFRESHES_PER_DAY` times a day. Each pass reads every landlord in a fresh random order, in batches of eight, every batch sent before any is confirmed so they land within a slot or two of each other, and retries failed batches one landlord at a time. To count one holding in two wallets, someone would have to move it between the two wallets' batches in each of three independently shuffled passes.
 - **Prune:** every 6 hours. Reads landlords in parallel and removes those that revoked or fell below the minimum stake.
-- **Sweep:** every 15 minutes, as a fallback to the webhook.
+- **Sweep:** currently returns a skipped result. A future authenticated routing integration must define its own scheduling requirements before this job is restored.
 
 Alternative without Vercel Pro: the GitHub Actions workflow in `docs/keeper-schedule.yml` does the same with `curl`. Copy it to `.github/workflows/` and add `KEEPER_URL` and `CRON_SECRET` as repository secrets. GitHub delays scheduled runs under load, so a paid scheduler is better for the refresh and count, and set `KEEPER_REFRESH_TICK_MINUTES` to the real cadence.
 
 ## Dividend-drop webhook
 
-Create a Helius webhook on the dividend distributor's address (for $PENIS: `HuBMeYW3aDn8BH65fo8xxbP4oiexyup8udzKyccgi8Ga`) that POSTs to `/api/keeper/sweep` with the header `Authorization: Bearer $WEBHOOK_SECRET`. Sweeps then run within seconds of each drop.
+The observed dividend distributor address for $PENIS is `HuBMeYW3aDn8BH65fo8xxbP4oiexyup8udzKyccgi8Ga`. A Helius webhook can POST to `/api/keeper/sweep` with `Authorization: Bearer $WEBHOOK_SECRET`, but this branch deliberately returns a skipped result. A payout notification does not authorize a wallet debit; do not restore the removed legacy sweep in response to a webhook.
 
 ## Count cost
 
