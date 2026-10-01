@@ -29,6 +29,10 @@ const faqs = [
     a: "A contract that turns PUMP rewards into $PENIS and holds it forever. The largest holders lend it their rewards, it buys $PENIS in small amounts, and it never sells. Its goal is 200 million $PENIS, a fifth of the supply.",
   },
   {
+    q: "Can other projects have an endowment?",
+    a: "Yes. The endowment's contract, website and automation are open source, and any project with a dividend-paying coin is welcome to take the code and run its own.",
+  },
+  {
     q: "Who is behind this site?",
     a: "Holders. The site and the endowment are independent of the coin's creators, the code is open source, and every endowment action is posted to @PenisEndowment.",
   },

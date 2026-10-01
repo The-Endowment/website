@@ -188,9 +188,22 @@ export default function Endowment() {
             Collection switches on once committed landlords hold 30% of all $PENIS, starting with the founding
             landlords. Follow <a href={links.x}>@PenisEndowment</a> for the announcement.
           </p>
-          <p className="muted small">
-            Building on another dividend coin? <Link href="/build">Start an endowment for your project</Link>.
+        </div>
+      </section>
+
+      <section id="open-source" className="row">
+        <h2 className="row-label">Open source</h2>
+        <div className="row-body">
+          <h3 className="statement">Built in the open, for anyone to use.</h3>
+          <p>
+            The endowment&rsquo;s contract, website and automation are open source under the Apache-2.0 license. Any
+            project with a dividend-paying coin is welcome to take the code and run an endowment of its own.
           </p>
+          <div className="actions">
+            <a href={links.github} className="button">
+              View the source on GitHub
+            </a>
+          </div>
         </div>
       </section>
 

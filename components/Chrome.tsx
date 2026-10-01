@@ -1,7 +1,6 @@
 import Link from "next/link";
 import { DelegateButton } from "@/components/DelegateButton";
 import { SolidLogo } from "@/components/Logo";
-import { ProjectsNavLink } from "@/components/ProjectsList";
 import { links } from "@/lib/site";
 
 export function SiteHeader() {
@@ -16,7 +15,6 @@ export function SiteHeader() {
           <Link href="/endowment">The endowment</Link>
           <Link href="/thesis">Thesis</Link>
           <Link href="/#coin">The coin</Link>
-          <ProjectsNavLink />
           <DelegateButton label="Delegate" />
         </nav>
       </div>
@@ -33,8 +31,6 @@ export function SiteFooter() {
           <a href={links.x}>X</a>
           <a href={links.github}>Source code</a>
           <Link href="/security">Security</Link>
-          <Link href="/build">For projects</Link>
-          <a href="/endowment-guide.md">Guide</a>
           <a href={links.stonkfun}>$PENIS on stonk.fun</a>
         </span>
       </div>

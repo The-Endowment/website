@@ -1,6 +1,8 @@
 {
   "framework": "nextjs",
   "redirects": [
+    { "source": "/build", "destination": "/endowment#open-source", "permanent": true },
+    { "source": "/projects", "destination": "/endowment#open-source", "permanent": true },
     {
       "source": "/:path*",
       "has": [{ "type": "host", "value": "www.peniscoin.meme" }],
