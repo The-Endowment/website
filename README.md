@@ -4,6 +4,8 @@ This branch accompanies the contract change that permanently stops holder collec
 
 The campaign endpoint is a cached snapshot (up to five minutes between revalidations); enrollment rechecks the vault immediately before requesting approval, and each keeper pass reads it afresh. Existing treasury funds continue through the buy/liquidity policy. This change does not implement the newly accepted policy of collecting all verified StonkFun PUMP rewards only while enrolled and active, or confirm program-owned treasury reward eligibility. Current enrollment still grants broad PUMP delegation. The contract's `docs/reward-routing-v1.md` specifies the proposed replacement and release blockers; do not advertise purchased-PUMP protection from this website change alone.
 
+A [daily sanity check](docs/daily-sanity.md) compares StonkFun's reported distributions with the recorded holder-contribution counter using approximate participation. It saves daily observations on a persistent runner, flags large differences and missing data, and never initiates transfers. It is included for operator review; no live schedule is enabled.
+
 Use Node.js 24 or later for the built-in TypeScript test runner:
 
 ```sh

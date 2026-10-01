@@ -7,7 +7,8 @@
     "build": "next build",
     "start": "next start",
     "lint": "eslint",
-    "test": "node --test tests/*.test.mts"
+    "test": "node --test tests/*.test.mts",
+    "sanity:daily": "node scripts/daily-sanity.mts"
   },
   "dependencies": {
     "@solana-program/compute-budget": "^0.19.0",

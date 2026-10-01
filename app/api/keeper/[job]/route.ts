@@ -1,5 +1,6 @@
 import { timingSafeEqual } from "node:crypto";
 import { countHealth, loadKeeper, runBuy, runCount, runPrune, runRefresh, runSweeps } from "@/lib/keeper";
+import { loadDailySnapshot } from "@/lib/daily-snapshot";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 60;
@@ -13,6 +14,13 @@ function matches(header: string | null, secret: string | undefined) {
 }
 
 async function run(job: string) {
+  if (job === "daily-snapshot") {
+    try {
+      return Response.json(await loadDailySnapshot(), { headers: { "Cache-Control": "no-store" } });
+    } catch {
+      return Response.json({ error: "Daily snapshot unavailable; no valid observation was recorded" }, { status: 503 });
+    }
+  }
   const keeper = await loadKeeper();
   if (!keeper) return Response.json({ skipped: "not launched" }, { status: 503 });
   try {

@@ -12,6 +12,7 @@
 
 # testing
 /coverage
+/.daily-sanity/
 
 # next.js
 /.next/

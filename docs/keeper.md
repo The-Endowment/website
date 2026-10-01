@@ -4,6 +4,8 @@ The keeper triggers the endowment's permissionless instructions: sweeps, buyback
 
 Routes: `/api/keeper/sweep`, `/api/keeper/buy`, `/api/keeper/count`, `/api/keeper/refresh`, `/api/keeper/prune`, `/api/keeper/health`. Code: `lib/keeper.ts`. Every job returns within about 50 seconds with whatever it managed, and resumes on its next call.
 
+Read-only daily monitoring uses `/api/keeper/daily-snapshot` and `npm run sanity:daily`. The [daily sanity-check runbook](daily-sanity.md) describes durable snapshots, approximate expected contributions and reporting tolerances. This job needs no keeper signing key and does not run sweeps. It requires a persistent runner; a stateless cron request alone cannot compare days.
+
 ## Environment variables
 
 | Variable | Purpose |
