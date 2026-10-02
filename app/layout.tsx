@@ -15,9 +15,15 @@ const instrumentSerif = Instrument_Serif({
 export const metadata: Metadata = {
   metadataBase: new URL("https://peniscoin.meme"),
   alternates: { canonical: "/" },
-  title: { default: "$PENIS: the coin that pays rent", template: "%s · $PENIS" },
+  title: { default: "$PENIS: the coin that pays you to hold", template: "%s · $PENIS" },
   description:
-    "$PENIS pays its holders PUMP on every trade, and its largest holders are building an endowment that turns that rent into $PENIS held forever.",
+    "Hold your $PENIS. Earn $PUMP. Launched on stonk.fun, with holder rewards and a community goal of a 200 million $PENIS endowment.",
+  openGraph: {
+    title: "$PENIS: the coin that pays you to hold",
+    description: "Hold your $PENIS. Earn $PUMP. Explore the coin on stonk.fun and the community-funded endowment.",
+    type: "website",
+  },
+  twitter: { card: "summary", title: "$PENIS: the coin that pays you to hold" },
   // Pre-launch: keep it out of search until the landlords sign off.
   robots: { index: false, follow: false },
 };

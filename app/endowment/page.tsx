@@ -1,235 +1,90 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import { Campaign } from "@/components/Campaign";
-import { DelegateButton, DelegationNote } from "@/components/DelegateButton";
-import { DotLogo } from "@/components/Logo";
+import { EndowmentProgress } from "@/components/EndowmentProgress";
+import { DonationButton } from "@/components/DonationButton";
 import { links } from "@/lib/site";
 
 export const metadata: Metadata = {
-  title: { absolute: "The $PENIS Endowment" },
-  description:
-    "Permanent capital. Landlords lend the endowment their PUMP rewards, and it turns them into $PENIS it holds forever.",
+  title: "The endowment",
+  alternates: { canonical: "/endowment" },
+  description: "Explore the community’s plan for a 200 million $PENIS endowment, voluntary reward contributions, and the safeguards under review.",
 };
 
 const faqs = [
-  {
-    q: "What does the endowment collect?",
-    a: "Only the PUMP your $PENIS earns. Each day the contract works out what every committed wallet's $PENIS earned from stonk.fun's public reward total, and collects at most that. The PUMP you held when you joined is never collected.",
-  },
-  {
-    q: "What if I buy PUMP or hold other coins in the same wallet?",
-    a: "The endowment only ever collects up to what your $PENIS earned, so PUMP you buy and rewards from other coins stay yours. We still recommend a wallet that holds just the $PENIS you're committing, so your records stay simple.",
-  },
-  {
-    q: "Can I commit only part of my $PENIS?",
-    a: "Yes. Commitment is per wallet: the $PENIS in the wallet you delegate counts, and its rewards go to the endowment. Keep the $PENIS you want to commit in one wallet and the rest in another.",
-  },
-  {
-    q: "Can I take a collection back?",
-    a: "Yes. Every collection is held for 24 hours before the endowment uses it, and until then you can take it back with one click on the Delegate page. A second, independent check reviews each collection before it is released.",
-  },
-  {
-    q: "Can I leave?",
-    a: "Yes, anytime. The Leave button revokes the delegation and removes your landlord record in one step, and revoking works from any Solana wallet without this site or anyone's permission.",
-  },
-  {
-    q: "Who runs it?",
-    a: "No one, by design. After a public testing period, the key that can change the contract is destroyed, so no one can ever change its rules or move its $PENIS, including us. Every action is posted publicly, and the endowment has no connection to the coin's creators.",
-  },
-  {
-    q: "What happens at 200 million?",
-    a: "The endowment reaches its goal. Once it holds 200 million $PENIS, whether bought or sent to it directly, it stops taking contributions and holds everything it has forever.",
-  },
-  {
-    q: "Can I check the code?",
-    a: "Yes. The contract is open source on GitHub, and every rule on this page is enforced by it.",
-  },
-  {
-    q: "When does it open?",
-    a: "Collection switches on once committed landlords hold 30% of all $PENIS, as measured by a daily on-chain count. A landlord's $PENIS counts from its second count, once it has been held from one count to the next, and every landlord's record is public on-chain.",
-  },
+  { q: "What am I contributing?", a: "The proposed pledge contributes 100% of eligible PUMP rewards from the $PENIS in your participating wallet. Your $PENIS stays in your wallet. Cleared rewards are contributions, not loans and not a claim on the endowment." },
+  { q: "Can I donate $PENIS instead of pledging rewards?", a: "A one-time donation is a planned second way to contribute. It permanently transfers the donated PENIS into the endowment, without ongoing collection permission. Only the amount received after transfer fees counts toward 200 million. Direct donations do not have the pending PUMP reclaim window. The donation flow is not open yet." },
+  { q: "Can someone pledge using just my wallet address?", a: "No. Joining requires authorization signed by your wallet. A public address alone does not authorize collection. Pledging is currently closed while the contract and participation flow are finalized." },
+  { q: "Does a daily allowance prove which PUMP is a reward?", a: "No. PUMP tokens are interchangeable. A balance or daily allowance alone cannot distinguish rewards from purchases. The collection work under review combines payout evidence, wallet history, contract limits and a refundable holding period. This reduces risk but does not guarantee error-free classification." },
+  { q: "Can I leave or get a contribution back?", a: "The proposed flow allows you to stop future collections and reclaim your own pending contributions before they are released. Taking a pending contribution back also switches off collection for your wallet until you enable it again. Once a contribution is cleared and released for spending, that reclaim path ends. The final signing screen must explain these separate actions before pledging opens." },
+  { q: "What counts toward 200 million?", a: "Only PENIS actually held in the endowment’s principal vault. Pledged wallet balances, pending PUMP and coins committed to liquidity do not count. Direct PENIS donations received by that vault count, but no donation address is published here before the deployment is verified." },
+  { q: "When does collection start and stop?", a: "The plan is to begin once the on-chain participation count reaches 30% of supply, pause below 25%, and resume at 30%. Other consent and safety checks must also pass. Reaching 200 million PENIS in the vault stops further reward collection." },
+  { q: "Who operates it?", a: "The design includes collection, review and maintenance roles. Those roles and any remaining administrative or upgrade permissions need to be disclosed for the actual deployment. Renouncing an administrator role is different from removing the program’s upgrade authority; neither removes all operating roles." },
 ];
 
 export default function Endowment() {
   return (
     <div className="wrap">
-      <section className="hero">
-        <div className="hero-copy">
-          <h1 className="display h1">
-            Permanent capital.
-            <br />
-            <em>Firm</em> commitments.
-          </h1>
-          <p className="lede">
-            The $PENIS Endowment turns every PUMP it earns into more $PENIS, and holds it forever. It is the one holder
-            that can never pull out.
-          </p>
-          <div className="actions">
-            <DelegateButton label="Delegate your PUMP" primary />
-            <Link href="#how" className="button">
-              How it works
-            </Link>
-          </div>
-          <DelegationNote />
-        </div>
-        <DotLogo className="hero-art" label="The endowment's mark, a temple drawn in dots" />
+      <section className="thesis-head">
+        <p className="eyebrow">The $PENIS endowment</p>
+        <h1 className="display h1">Built by holders.<br /><em>For the long term.</em></h1>
+        <p className="lede">Holders building a lasting reserve of $PENIS, together.
+          The goal is 200 million coins. The path starts with voluntary contributions and rules people can inspect.</p>
+        <div className="actions"><Link href="#endowment" className="button">See ways to contribute</Link></div>
       </section>
-      <Campaign />
-      <section id="how" className="row">
-        <h2 className="row-label">How it works</h2>
+      <EndowmentProgress detailPage />
+      <section className="row" id="how">
+        <h2 className="row-label">The proposed flow</h2>
         <div className="row-body">
-          <h3 className="statement">Landlords lend their rent. The endowment keeps the building.</h3>
-          <p>
-            The largest holders, the landlords, lend the endowment their PUMP rewards. The endowment turns that income
-            into $PENIS it can never sell.
-          </p>
+          <h3 className="statement">Keep your coins. Help build the reserve.</h3>
           <ol className="steps">
-            <li>
-              <h3>Delegate</h3>
-              <p>One transaction gives the endowment access to your PUMP rewards and nothing else.</p>
-            </li>
-            <li>
-              <h3>Collect</h3>
-              <p>It collects the PUMP your $PENIS earned, and never more.</p>
-            </li>
-            <li>
-              <h3>Compound</h3>
-              <p>It buys $PENIS in small amounts and locks it in the vault, where it stays forever.</p>
-            </li>
+            <li><h3>Choose to pledge</h3><p>Read the terms and sign with your wallet. Your PENIS remains yours; eligible PUMP rewards support the endowment.</p></li>
+            <li><h3>Collect, hold, review</h3><p>Collected PUMP is held separately from spendable funds for at least 24 hours. Pending contributions can be reviewed, refunded or reclaimed.</p></li>
+            <li><h3>Release and build</h3><p>Only cleared amounts become spendable for buybacks and liquidity. Unresolved amounts become refund-only when their review window expires.</p></li>
           </ol>
+          <p className="note">This describes the collection design under review, not an invitation to grant wallet permissions today.</p>
         </div>
       </section>
-
-      <section className="row">
-        <h2 className="row-label">How it spends</h2>
+      <section className="row" id="donate">
+        <h2 className="row-label">Direct donations</h2>
         <div className="row-body">
-          <h3 className="statement">Every PUMP buys $PENIS.</h3>
-          <p>
-            The endowment buys in small, spaced-out amounts with whatever PUMP it holds, each priced against the
-            pool&rsquo;s recent average. Nothing is sold, and nothing is spent on anything else.
-          </p>
-          <div className="figures">
-            <div className="figure">
-              <span className="figure-value">200,000,000</span>
-              <span className="figure-label">$PENIS, the endowment&rsquo;s goal</span>
-            </div>
-            <div className="figure">
-              <span className="figure-value">20%</span>
-              <span className="figure-label">of all $PENIS, held forever</span>
-            </div>
-          </div>
-          <p>
-            $PENIS sent to the endowment directly counts toward the goal too. At 200 million it stops taking
-            contributions, and everything it holds stays locked.
-          </p>
-        </div>
-      </section>
-
-      <section className="row">
-        <h2 className="row-label">Guarantees</h2>
-        <div className="row-body">
-          <h3 className="statement">Written into the contract, not promised in a thread.</h3>
+          <h3 className="statement">A one-time gift. A lasting contribution.</h3>
+          <p>We’re planning a second way to help build the endowment: donate $PENIS directly.
+            You choose an amount for a single transfer, with no ongoing collection permission.</p>
           <ul className="plain-list">
-            <li>
-              <strong>Only what your $PENIS earned</strong>
-              <span>
-                The contract never collects more than your $PENIS earned, and never touches the PUMP you
-                held when you joined.
-              </span>
-            </li>
-            <li>
-              <strong>Held for 24 hours</strong>
-              <span>
-                Every collection waits a day and is checked a second time before it is used. Until then you can take
-                it back.
-              </span>
-            </li>
-            <li>
-              <strong>It never sells</strong>
-              <span>The contract has no function that can sell or withdraw its $PENIS.</span>
-            </li>
-            <li>
-              <strong>You can always leave</strong>
-              <span>Revoke straight from your wallet, anytime, with no permission needed.</span>
-            </li>
-            <li>
-              <strong>The pause is limited</strong>
-              <span>It can&rsquo;t move funds, lifts on its own after seven days, and can&rsquo;t be renewed back to back.</span>
-            </li>
-            <li>
-              <strong>Rule changes are announced</strong>
-              <span>Any change to the limits, or retiring the endowment, waits 72 hours on-chain before it takes effect.</span>
-            </li>
-            <li>
-              <strong>Locked forever</strong>
-              <span>After a public testing period, the upgrade key is destroyed. No one can change the rules.</span>
-            </li>
-            <li>
-              <strong>Everything is public</strong>
-              <span>
-                The <a href={links.github}>source code</a> is open, and every collection and buy is posted to{" "}
-                <a href={links.x}>@PenisEndowment</a>.
-              </span>
-            </li>
-            <li>
-              <strong>Security reviewed</strong>
-              <span>
-                Three rounds of AI-assisted adversarial review and a live launch rehearsal.{" "}
-                <Link href="/security">See the review</Link>.
-              </span>
-            </li>
+            <li><strong>Permanent contribution</strong><span>The donated coins leave your wallet and become part of the endowment. They cannot be reclaimed through the pending PUMP refund process.</span></li>
+            <li><strong>Counted after fees</strong><span>Only $PENIS actually received in the vault after transfer fees advances the 200M goal. A direct donation does not enroll your wallet in reward pledging.</span></li>
+            <li><strong>Review before signing</strong><span>The donation flow will show the amount sent, expected amount received, fees and verified destination before you authorize a transfer.</span></li>
           </ul>
+          <p className="note">Direct donations are not open yet. The vault and donation flow need to be verified before we publish a destination or enable transfers.</p>
+          <div className="actions"><DonationButton /><Link href="#how" className="button">Compare with pledging rewards</Link></div>
         </div>
       </section>
-
-      <section className="band">
-        <blockquote>
-          Trading creates rent. <span>Rent keeps supply off the market.</span>
-        </blockquote>
-        <Link href="/thesis" className="muted">
-          Read the landlord thesis
-        </Link>
-      </section>
-
-      <section id="status" className="row">
-        <h2 className="row-label">Status</h2>
+      <section className="row" id="safeguards">
+        <h2 className="row-label">Safety &amp; transparency</h2>
         <div className="row-body">
-          <h3 className="statement">Built, tested, and ready for the landlords.</h3>
-          <p>
-            Collection switches on once committed landlords hold 30% of all $PENIS, starting with the founding
-            landlords. Follow <a href={links.x}>@PenisEndowment</a> for the announcement.
-          </p>
+          <h3 className="statement">Clear choices. Public records.</h3>
+          <ul className="plain-list">
+            <li><strong>Voluntary participation</strong><span>Holding $PENIS does not enroll you. Pledging requires a separate wallet authorization.</span></li>
+            <li><strong>Evidence before spending</strong><span>Payout evidence and wallet history support collection and review. The daily aggregate check is a sanity check, not proof of an individual wallet’s rewards.</span></li>
+            <li><strong>A recovery window</strong><span>The holding design separates pending funds from spendable funds and allows the owner to reclaim before release. Refund and release transactions still need someone to submit them.</span></li>
+            <li><strong>An explicit finish line</strong><span>The 200M target uses the actual principal vault balance. Buying coins into a liquidity position does not advance that counter.</span></li>
+            <li><strong>Permissions made visible</strong><span>Before launch, publish the program and vault addresses, the deployed code version and the remaining operating and upgrade permissions.</span></li>
+          </ul>
+          <div className="actions"><Link href="/security" className="button">Review history</Link><a href={links.github} className="button">Read the source ↗</a></div>
         </div>
       </section>
-
-      <section id="open-source" className="row">
-        <h2 className="row-label">Open source</h2>
+      <section className="row" id="status">
+        <h2 className="row-label">Launch status</h2>
         <div className="row-body">
-          <h3 className="statement">Built in the open, for anyone to use.</h3>
-          <p>
-            The endowment&rsquo;s contract, website and automation are open source under the Apache-2.0 license. Any
-            project with a dividend-paying coin is welcome to take the code and run an endowment of its own.
-          </p>
-          <div className="actions">
-            <a href={links.github} className="button">
-              View the source on GitHub
-            </a>
-          </div>
+          <h3 className="statement">Built in public. Still under review.</h3>
+          <p>The endowment is in development. The final collection rules, wallet controls and deployment details need to be verified before pledging opens.
+            This site will publish those details and the participation terms.</p>
+          <p>Follow <a href={links.x}>@PenisEndowment</a> for updates, or inspect the <a href={links.github}>open-source work</a>.</p>
         </div>
       </section>
-
-      <section id="questions" className="row">
+      <section className="row" id="questions">
         <h2 className="row-label">Questions</h2>
-        <div className="row-body">
-          <div className="faq">
-            {faqs.map((f) => (
-              <details key={f.q}>
-                <summary>{f.q}</summary>
-                <p>{f.a}</p>
-              </details>
-            ))}
-          </div>
-        </div>
+        <div className="row-body"><div className="faq">{faqs.map(f => <details key={f.q}><summary>{f.q}</summary><p>{f.a}</p></details>)}</div></div>
       </section>
     </div>
   );
