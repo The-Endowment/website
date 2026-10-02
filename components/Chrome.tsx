@@ -7,15 +7,15 @@ export function SiteHeader() {
   return (
     <header className="site-header">
       <div className="wrap header-inner">
-        <Link href="/" className="brand">
+        <Link href="/" className="brand" aria-label="$PENIS home">
           <SolidLogo className="brand-mark" />
           <span>$PENIS</span>
         </Link>
         <nav aria-label="Primary" className="nav">
-          <Link href="/endowment">The endowment</Link>
+          <Link href="/#endowment" className="nav-endowment">Endowment</Link>
           <Link href="/thesis">Thesis</Link>
           <Link href="/#coin">The coin</Link>
-          <DelegateButton label="Delegate" />
+          <DelegateButton label="Pledge rewards" />
         </nav>
       </div>
     </header>

@@ -3,7 +3,7 @@ export const MAIN_POOL = "AXTq4JHNYHSnooqjoDmtL9WW5eEgnkkMSWq76Kznidnz";
 
 /** Delegation stays closed until the contract is live: set NEXT_PUBLIC_DELEGATION_OPEN=true to open it. */
 export const DELEGATION_OPEN = process.env.NEXT_PUBLIC_DELEGATION_OPEN === "true";
-export const DELEGATION_CLOSED_NOTE = "Delegation opens as soon as the contract goes live.";
+export const DELEGATION_CLOSED_NOTE = "Pledging is not open yet. Launch details and participation terms will be published here.";
 
 export const links = {
   x: "https://x.com/PenisEndowment",

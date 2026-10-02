@@ -4,7 +4,7 @@ import { links } from "@/lib/site";
 export const metadata: Metadata = {
   title: "Security",
   description:
-    "How the $PENIS Endowment contract was reviewed: an AI-assisted adversarial security review in three rounds, a final check and a live launch rehearsal.",
+    "An earlier AI-assisted review of the $PENIS Endowment, its scope, and the work still needed to verify the final deployment.",
 };
 
 const REVIEWED_COMMIT = "3bfce2c4aa4e8e560a94c749ebf273c3b53a7d58";
@@ -23,15 +23,17 @@ export default function Security() {
     <>
       <section className="wrap">
         <div className="thesis-head">
-          <h1 className="display h1">Reviewed, then reviewed again.</h1>
+          <h1 className="display h1">Review history. Clear scope.</h1>
           <p className="lede">
-            The contract was put through an AI-assisted adversarial security review: three rounds, a final focused
-            check, and a full launch rehearsal on a fork of mainnet. Every finding was resolved or is a documented
-            design choice.
+            This page records an earlier AI-assisted review of commit {REVIEWED_COMMIT.slice(0, 7)}.
+            The figures and report below belong to that version; they do not certify later collection changes or a live deployment.
           </p>
+          <p className="note">AI-assisted review is not an independent professional audit.
+            Before launch, the final contract, worker and wallet flow need verification together,
+            with a public record of the exact deployed version and remaining permissions.</p>
           <div className="actions">
             <a href="/security-review.pdf" className="button button-primary" download>
-              Download the summary (PDF)
+              Earlier review summary (PDF)
             </a>
             <a href={commitUrl} className="button">
               Reviewed code
@@ -49,7 +51,7 @@ export default function Security() {
               <li>
                 <strong>Scoped reviewers</strong>
                 <span>
-                  Independent reviewers, one per attack surface: access control, token handling, pricing, counting,
+                  Separate AI reviewers, one per attack surface: access control, token handling, pricing, counting,
                   governance, economic attacks, and the automation and website.
                 </span>
               </li>
@@ -88,8 +90,8 @@ export default function Security() {
                 <span className="figure-label">automated tests, including one for every exploit found</span>
               </div>
               <div className="figure">
-                <span className="figure-value">0</span>
-                <span className="figure-label">ways found, in any round, for anyone to take funds</span>
+                <span className="figure-value mono">{REVIEWED_COMMIT.slice(0, 7)}</span>
+                <span className="figure-label">reviewed version — not a claim about later code</span>
               </div>
             </div>
             <table className="table">
@@ -116,7 +118,7 @@ export default function Security() {
         <section className="row">
           <h2 className="row-label">Verified</h2>
           <div className="row-body">
-            <h3 className="statement">What the contract guarantees.</h3>
+            <h3 className="statement">Controls assessed in that version.</h3>
             <ul className="plain-list">
               <li>
                 <strong>$PENIS never leaves</strong>
@@ -125,8 +127,8 @@ export default function Security() {
               <li>
                 <strong>Landlords keep what they hold</strong>
                 <span>
-                  The endowment can only take new PUMP above the balance a landlord held when joining, and nothing
-                  else in the wallet.
+                  The earlier balance-floor mechanism limited collection above a joining balance.
+                  It did not prove that every collected PUMP was a PENIS reward; that is part of the later collection work.
                 </span>
               </li>
               <li>
@@ -150,8 +152,7 @@ export default function Security() {
               <li>
                 <strong>Fair prices</strong>
                 <span>
-                  Buys are priced against the pool&rsquo;s own recent average and sized to its depth, so a trade placed
-                  just before a buy can&rsquo;t push the price against the endowment.
+                  Price and trade-size checks aim to limit adverse execution. They are not a guarantee against price manipulation or loss.
                 </span>
               </li>
             </ul>
@@ -180,7 +181,7 @@ export default function Security() {
                 <strong>Outside token settings</strong>
                 <span>
                   PUMP and $PENIS each have a setting controlled by a third party. If either changes, the endowment
-                  pauses buying and sweeping on its own, and nothing is lost.
+                  pauses buying and sweeping on its own, to reduce exposure; this is not a guarantee against losses.
                 </span>
               </li>
             </ul>
@@ -195,9 +196,9 @@ export default function Security() {
               <a href={commitUrl}>
                 <span className="mono">{REVIEWED_COMMIT.slice(0, 7)}</span>
               </a>{" "}
-              of the <a href={links.github}>open-source contract</a>. The deployed program will be a verifiable build of
-              that code, so anyone can confirm what is running matches what was reviewed. Once the founders&rsquo; test is
-              complete, the upgrade key is destroyed and the code can never change.
+              of the <a href={links.github}>open-source contract</a>. Later changes need their own review evidence.
+              The final deployment must be checked against its published source version. Upgrade authority,
+              administration and operating roles should each be disclosed; this page does not claim that any keys have been removed.
             </p>
           </div>
         </section>

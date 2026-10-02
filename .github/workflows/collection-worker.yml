@@ -21,4 +21,5 @@ jobs:
       - run: npx tsc --noEmit
       # Existing DelegatePanel lint error on main is outside this worker PR.
       - run: npx eslint lib/holding lib/reporter lib/endowment.ts lib/keeper.ts scripts tests
+      - run: npx eslint app/page.tsx app/layout.tsx app/endowment/page.tsx app/security/page.tsx app/api/progress/route.ts components/EndowmentProgress.tsx components/Chrome.tsx lib/progress.ts lib/progress-read.ts lib/site.ts
       - run: npm run build
