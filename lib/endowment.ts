@@ -1,3 +1,5 @@
+import { decodeAccount } from "./holding/codec.ts";
+import type { Config as ConfigAccount, Landlord as LandlordAccount } from "./holding/accounts.ts";
 /**
  * The endowment program's client: addresses, account decoders and instruction
  * builders, written against the program source (programs/endowment/src). Used by
@@ -6,20 +8,11 @@
 import {
   AccountRole,
   address,
-  fixDecoderSize,
   getAddressDecoder,
   getAddressEncoder,
   getBase58Decoder,
-  getBooleanDecoder,
-  getBytesDecoder,
-  getI64Decoder,
   getProgramDerivedAddress,
-  getStructDecoder,
-  getU16Decoder,
-  getU32Decoder,
-  getU64Decoder,
   getU64Encoder,
-  getU8Decoder,
   type Address,
   type Instruction,
   type TransactionSigner,
@@ -162,108 +155,16 @@ export function isFlagshipConfig(config: EndowmentConfig) {
 
 // ---- Account decoders (layouts from programs/endowment/src/state.rs) ----
 
-const paramsDecoder = getStructDecoder([
-  ["maxBuyPerTx", getU64Decoder()],
-  ["maxBuyPerDay", getU64Decoder()],
-  ["maxPriceImpactBps", getU16Decoder()],
-  ["maxTwapDeviationBps", getU16Decoder()],
-  ["minBuyAmount", getU64Decoder()],
-  ["minBuyIntervalSecs", getI64Decoder()],
-  ["tipBps", getU16Decoder()],
-  ["buyBps", getU16Decoder()],
-  ["activateBps", getU16Decoder()],
-  ["deactivateBps", getU16Decoder()],
-  ["minStakeBps", getU16Decoder()],
-  ["refresher", getAddressDecoder()],
-]);
-
-const configDecoder = getStructDecoder([
-  ["discriminator", fixDecoderSize(getBytesDecoder(), 8)],
-  ["version", getU8Decoder()],
-  ["creator", getAddressDecoder()],
-  ["admin", getAddressDecoder()],
-  ["pendingAdmin", getAddressDecoder()],
-  ["guardian", getAddressDecoder()],
-  ["coinMint", getAddressDecoder()],
-  ["dividendMint", getAddressDecoder()],
-  ["pool", getAddressDecoder()],
-  ["bump", getU8Decoder()],
-  ["authorityBump", getU8Decoder()],
-  ["params", paramsDecoder],
-  ["pendingParams", paramsDecoder],
-  ["pendingEffectiveAt", getI64Decoder()],
-  ["donationBps", getU16Decoder()],
-  ["contributionCap", getU64Decoder()],
-  ["pausedUntil", getI64Decoder()],
-  ["retired", getBooleanDecoder()],
-  ["retireAt", getI64Decoder()],
-  ["milestoneReached", getBooleanDecoder()],
-  ["active", getBooleanDecoder()],
-  ["lastCountAt", getI64Decoder()],
-  ["lastCountBps", getU16Decoder()],
-  ["lastCommitted", getU64Decoder()],
-  ["lastAttestedAt", getI64Decoder()],
-  ["lastSweepAt", getI64Decoder()],
-  ["landlordCount", getU32Decoder()],
-  [
-    "count",
-    getStructDecoder([
-      ["round", getU64Decoder()],
-      ["open", getBooleanDecoder()],
-      ["startedAt", getI64Decoder()],
-      ["supply", getU64Decoder()],
-      ["expected", getU32Decoder()],
-      ["counted", getU32Decoder()],
-      ["committed", getU64Decoder()],
-      ["minStake", getU64Decoder()],
-    ]),
-  ],
-  ["buyAllowance", getU64Decoder()],
-  ["allowanceUpdatedAt", getI64Decoder()],
-  ["lastBuyAt", getI64Decoder()],
-  ["totalSwept", getU64Decoder()],
-  ["totalDividendSpent", getU64Decoder()],
-  ["totalCoinBought", getU64Decoder()],
-  ["totalCoinRetained", getU64Decoder()],
-  ["totalLiquidityDividend", getU64Decoder()],
-  ["totalLiquidityCoin", getU64Decoder()],
-  ["totalLpTokens", getU64Decoder()],
-  ["totalTips", getU64Decoder()],
-  ["totalDonated", getU64Decoder()],
-  /** Bumped whenever the refresher changes; reads from an earlier epoch don't count (FC-R3-03). */
-  ["refresherEpoch", getU32Decoder()],
-]);
-
-const landlordDecoder = getStructDecoder([
-  ["discriminator", fixDecoderSize(getBytesDecoder(), 8)],
-  ["version", getU8Decoder()],
-  ["config", getAddressDecoder()],
-  ["owner", getAddressDecoder()],
-  ["dividendAccount", getAddressDecoder()],
-  ["coinAccount", getAddressDecoder()],
-  ["baseline", getU64Decoder()],
-  ["totalContributed", getU64Decoder()],
-  ["registeredAt", getI64Decoder()],
-  ["lastSweepAt", getI64Decoder()],
-  ["bump", getU8Decoder()],
-  ["joinedRound", getU64Decoder()],
-  ["countedRound", getU64Decoder()],
-  ["countedAmount", getU64Decoder()],
-  ["snapshot", getU64Decoder()],
-  ["snapshotValid", getBooleanDecoder()],
-  /** Spaced refresher reads since its last count; it counts at REQUIRED_ATTESTATIONS. */
-  ["attestations", getU8Decoder()],
-  ["lastAttestedAt", getI64Decoder()],
-  /** The config's `refresherEpoch` when those reads were made. */
-  ["attestationEpoch", getU32Decoder()],
-]);
-
-function hasDiscriminator(bytes: Uint8Array, disc: number[]) {
-  return disc.every((b, i) => bytes[i] === b);
-}
-
-export type EndowmentConfig = ReturnType<typeof configDecoder.decode>;
-export type LandlordRecord = ReturnType<typeof landlordDecoder.decode>;
+type CamelKey<S extends string> = S extends `${infer A}_${infer B}` ? `${A}${Capitalize<CamelKey<B>>}` : S;
+type Camel<T> = T extends string | number | bigint | boolean ? T : T extends readonly (infer U)[] ? Camel<U>[] : T extends object ? { [K in keyof T as K extends string ? CamelKey<K> : K]: Camel<T[K]> } : T;
+export type EndowmentConfig = Camel<ConfigAccount> & {
+  holding: true;
+  pendingParams: Camel<ConfigAccount>["params"];
+  pendingEffectiveAt: bigint;
+  donationBps: number;
+  totalDonated: bigint;
+};
+export type LandlordRecord = Camel<LandlordAccount> & { holding: true };
 
 /** A landlord's refresher reads, as the program counts them: only those made under the current refresher. */
 export function attestationsOf(config: EndowmentConfig, record: LandlordRecord): number {
@@ -277,11 +178,27 @@ export function refilledAllowance(config: EndowmentConfig, now: number): bigint 
   return refilled < config.params.maxBuyPerTx ? refilled : config.params.maxBuyPerTx;
 }
 
+function camelFields(value: unknown): unknown {
+  if (Array.isArray(value)) return value.map(camelFields);
+  if (value && typeof value === "object") return Object.fromEntries(Object.entries(value).map(([k,v]) =>
+    [k.replace(/_([a-z])/g, (_, c: string) => c.toUpperCase()), camelFields(v)]));
+  return value;
+}
+/** Only the pinned holding-contract layout is supported; no legacy fallback. */
 export function decodeConfig(bytes: Uint8Array): EndowmentConfig | null {
-  return hasDiscriminator(bytes, DISC.configAccount) ? configDecoder.decode(bytes) : null;
+  try {
+    const raw = decodeAccount<ConfigAccount>("Config", bytes);
+    if (raw.version !== 3) return null;
+    const config = camelFields(raw) as Camel<ConfigAccount>;
+    return { ...config, holding: true, pendingParams: config.pending.params,
+      pendingEffectiveAt: config.pending.effectiveAt, donationBps: 0, totalDonated: 0n };
+  } catch { return null; }
 }
 export function decodeLandlord(bytes: Uint8Array): LandlordRecord | null {
-  return hasDiscriminator(bytes, DISC.landlordAccount) ? landlordDecoder.decode(bytes) : null;
+  try {
+    const raw = decodeAccount<LandlordAccount>("Landlord", bytes);
+    return raw.version === 3 ? { ...camelFields(raw) as Camel<LandlordAccount>, holding: true } : null;
+  } catch { return null; }
 }
 
 export function base64ToBytes(b64: string): Uint8Array {
@@ -338,6 +255,7 @@ export async function registerLandlordIx(
     { address: inst.config, role: W },
     { address: await authorityPda(inst.program, inst.config), role: R },
     { address: await landlordPda(inst.program, inst.config, owner.address), role: W },
+    { address: await pda(inst.program, "collection_consent", inst.config, owner.address), role: W },
     { address: inst.dividendMint, role: R },
     { address: dividendAccount, role: R },
     { address: inst.coinMint, role: R },
@@ -351,6 +269,7 @@ export async function registerLandlordIx(
 export async function resyncBaselineIx(inst: Instance, owner: TransactionSigner, dividendAccount: Address) {
   return ix(inst.program, DISC.resyncBaseline, [
     signer(owner, false),
+    { address: await pda(inst.program, "collection_consent", inst.config, owner.address), role: W },
     { address: inst.config, role: R },
     { address: await landlordPda(inst.program, inst.config, owner.address), role: W },
     { address: dividendAccount, role: R },
@@ -360,35 +279,9 @@ export async function resyncBaselineIx(inst: Instance, owner: TransactionSigner,
 export async function deregisterLandlordIx(inst: Instance, owner: TransactionSigner) {
   return ix(inst.program, DISC.deregisterLandlord, [
     signer(owner, true),
+    { address: await pda(inst.program, "collection_consent", inst.config, owner.address), role: W },
     { address: inst.config, role: W },
     { address: await landlordPda(inst.program, inst.config, owner.address), role: W },
-  ]);
-}
-
-/** A sweep also passes (read-only) what a buyback would trade through, so it fails closed when buybacks can't run. */
-export async function sweepIx(
-  inst: Instance,
-  pool: Address,
-  poolAccounts: PoolAccounts,
-  landlord: Address,
-  dividendAccount: Address,
-) {
-  const authority = await authorityPda(inst.program, inst.config);
-  const dividendIndex = poolAccounts.mints[0] === inst.dividendMint ? 0 : 1;
-  return ix(inst.program, DISC.sweep, [
-    { address: inst.config, role: W },
-    { address: authority, role: R },
-    { address: landlord, role: W },
-    { address: inst.dividendMint, role: R },
-    { address: dividendAccount, role: W },
-    { address: await ata(authority, inst.dividendMint, inst.dividendTokenProgram), role: W },
-    { address: inst.coinMint, role: R },
-    { address: await ata(authority, inst.coinMint, inst.coinTokenProgram), role: R },
-    { address: pool, role: R },
-    { address: poolAccounts.ammConfig, role: R },
-    { address: poolAccounts.vaults[dividendIndex], role: R },
-    { address: poolAccounts.vaults[1 - dividendIndex], role: R },
-    { address: inst.dividendTokenProgram, role: R },
   ]);
 }
 
@@ -419,17 +312,8 @@ export async function buybackIx(
   poolAccounts: PoolAccounts,
   caller: TransactionSigner,
   callerDividendAccount: Address,
-  flagshipDividendVault: Address,
-  /**
-   * Only a donating endowment passes the flagship's vault writable (audit
-   * R2-ISO-09), then the flagship's coin mint (R3-MINT-03) and config, whose
-   * vault cap limits the donation (R3-MINT-01).
-   */
-  donates: boolean,
-  flagshipConfigAddress: Address | null,
   minOut: bigint,
 ) {
-  if (donates && !flagshipConfigAddress) throw new Error("A donating buy needs the flagship config");
   const authority = await authorityPda(inst.program, inst.config);
   const [cpmmAuthority] = await getProgramDerivedAddress({
     programAddress: CPMM_PROGRAM,
@@ -458,17 +342,10 @@ export async function buybackIx(
       { address: poolAccounts.observation, role: W },
       { address: poolAccounts.lpMint, role: W },
       { address: await ata(authority, poolAccounts.lpMint, LEGACY_TOKEN_PROGRAM), role: W },
-      { address: flagshipDividendVault, role: donates ? W : R },
       { address: inst.dividendTokenProgram, role: R },
       { address: inst.coinTokenProgram, role: R },
       { address: LEGACY_TOKEN_PROGRAM, role: R },
       { address: TOKEN_2022_PROGRAM_ADDRESS, role: R },
-      ...(donates && flagshipConfigAddress
-        ? [
-            { address: PROGRAM_FLAGSHIP_COIN_MINT, role: R },
-            { address: flagshipConfigAddress, role: R },
-          ]
-        : []),
     ],
     getU64Encoder().encode(minOut) as Uint8Array,
   );
@@ -485,15 +362,16 @@ export function beginCountIx(inst: Instance) {
   ]);
 }
 
-/** Counts a batch of landlords: each as its record, coin account and dividend account. */
-export function countLandlordsIx(inst: Instance, landlords: LandlordRow[]) {
+/** Counts a batch of landlords: each as its record, coin account, dividend account and consent. */
+export async function countLandlordsIx(inst: Instance, landlords: LandlordRow[]) {
   return ix(inst.program, DISC.countLandlords, [
     { address: inst.config, role: W },
-    ...landlords.flatMap((l) => [
+    ...(await Promise.all(landlords.map(async (l) => [
       { address: l.address, role: W },
       { address: l.record.coinAccount, role: R },
       { address: l.record.dividendAccount, role: R },
-    ]),
+      { address: await pda(inst.program, "collection_consent", inst.config, l.record.owner), role: R },
+    ]))).flat(),
   ]);
 }
 
@@ -506,15 +384,16 @@ export function finishCountIx(inst: Instance) {
  * refresher, it also attests them: a landlord counts after REQUIRED_ATTESTATIONS
  * such reads, at least MIN_ATTEST_SPACING_SECS apart.
  */
-export function refreshLandlordsIx(inst: Instance, caller: TransactionSigner, landlords: LandlordRow[]) {
+export async function refreshLandlordsIx(inst: Instance, caller: TransactionSigner, landlords: LandlordRow[]) {
   return ix(inst.program, DISC.refreshLandlords, [
     { address: inst.config, role: W },
     signer(caller, false),
-    ...landlords.flatMap((l) => [
+    ...(await Promise.all(landlords.map(async (l) => [
       { address: l.address, role: W },
       { address: l.record.coinAccount, role: R },
       { address: l.record.dividendAccount, role: R },
-    ]),
+      { address: await pda(inst.program, "collection_consent", inst.config, l.record.owner), role: R },
+    ]))).flat(),
   ]);
 }
 

@@ -1,4 +1,5 @@
 import "server-only";
+import { HOLD_COLLECTION_RELEASED } from "./holding/release";
 import { createHmac, randomInt } from "node:crypto";
 import {
   appendTransactionMessageInstructions,
@@ -12,7 +13,6 @@ import {
   setTransactionMessageFeePayerSigner,
   setTransactionMessageLifetimeUsingBlockhash,
   signTransactionMessageWithSigners,
-  type Address,
   type Instruction,
   type KeyPairSigner,
 } from "@solana/kit";
@@ -39,10 +39,8 @@ import {
   decodeConfig,
   fetchDecoded,
   finishCountIx,
-  flagshipConfig,
   LEGACY_TOKEN_PROGRAM,
   listLandlords,
-  MAX_VAULT_DAYS_OF_BUYS,
   MIN_ATTEST_SPACING_SECS,
   MIN_DELEGATION,
   parsePool,
@@ -51,7 +49,6 @@ import {
   refilledAllowance,
   refreshLandlordsIx,
   REQUIRED_ATTESTATIONS,
-  sweepIx,
   type EndowmentConfig,
   type Instance,
   type LandlordRow,
@@ -220,55 +217,10 @@ function sweepsOn(config: EndowmentConfig, now: number) {
   return config.active && (config.params.activateBps === 0 || now - Number(config.lastCountAt) <= ACTIVE_MAX_AGE_SECS);
 }
 
-// ---- Sweeps (audit L-06, I-16) ----
-
-/**
- * Sweep every landlord whose PUMP account holds more than its baseline. Sweeps
- * are sent together, a failed batch is retried one landlord at a time, and one
- * bad landlord never stops the others. The contract refuses sweeps whenever a
- * buyback couldn't run, so those land here as errors and nothing moves.
- */
+/** Collections require the separate, stateful collector/reviewer services. */
 export async function runSweeps(k: Keeper) {
-  const deadline = Date.now() + BUDGET_MS;
-  const config = await readConfig(k);
-  const now = nowSecs();
-  if (config.retired) return { skipped: "retired" };
-  if (now < Number(config.pausedUntil)) return { skipped: "paused" };
-  if (!sweepsOn(config, now)) return { skipped: "sweeps are off (commitment below the threshold, or no recent count)" };
-
-  const [authority, poolAccounts, rows] = await Promise.all([
-    authorityPda(k.inst.program, k.inst.config),
-    readPool(k, config),
-    listLandlords(k.rpc, k.inst.program, k.inst.config),
-  ]);
-  // The contract clips sweeps so the vault never holds more than MAX_VAULT_DAYS_OF_BUYS
-  // days of buys; once it's full, a sweep moves nothing, so don't pay for one.
-  const vault = await fetchMaybeToken(k.rpc, await ata(authority, k.inst.dividendMint, k.inst.dividendTokenProgram));
-  const cap = config.params.maxBuyPerDay * BigInt(MAX_VAULT_DAYS_OF_BUYS);
-  if (vault.exists && vault.data.amount >= cap) return { skipped: "vault full (waiting for buys)", vault: vault.data.amount.toString() };
-  const tokens = await Promise.all(rows.map((r) => fetchMaybeToken(k.rpc, r.record.dividendAccount)));
-  const due = rows.filter((row, i) => {
-    const token = tokens[i];
-    if (!token.exists || token.data.amount <= row.record.baseline) return false;
-    const d = token.data.delegate;
-    return d.__option === "Some" && d.value === authority;
-  });
-
-  const sweep = (row: LandlordRow) => sweepIx(k.inst, config.pool, poolAccounts, row.address, row.record.dividendAccount);
-  const batches = await Promise.all(
-    chunk(due, 3).map(async (batch) => ({ item: batch, ixs: await Promise.all(batch.map(sweep)), computeUnits: 80_000 * batch.length })),
-  );
-  const outcomes = await sendAll(k, batches, deadline);
-  const signatures = outcomes.flatMap((o) => (o.error ? [] : [o.signature!]));
-  const retry = outcomes.filter((o) => o.error).flatMap((o) => o.item);
-  const singles = await sendAll(
-    k,
-    await Promise.all(retry.map(async (row) => ({ item: row, ixs: [await sweep(row)], computeUnits: 80_000 }))),
-    deadline,
-  );
-  const failures = singles.filter((o) => o.error).map((o) => ({ landlord: o.item.address, error: o.error! }));
-  signatures.push(...singles.flatMap((o) => (o.error ? [] : [o.signature!])));
-  return { due: due.length, signatures, failures };
+  void k;
+  return { skipped: "Use the refundable collection worker; legacy balance sweeps are disabled" };
 }
 
 // ---- Buys (audit I-14, KW-11, R3-TW-02) ----
@@ -342,16 +294,6 @@ export async function runBuy(k: Keeper) {
   const keeperDividend = await ata(k.signer.address, k.inst.dividendMint, k.inst.dividendTokenProgram);
   const lpVault = await ata(authority, poolAccounts.lpMint, LEGACY_TOKEN_PROGRAM);
   const coinVault = await ata(authority, k.inst.coinMint, k.inst.coinTokenProgram);
-  // The flagship's vault, derived exactly as the program derives it (pinned constants). The
-  // program only checks it for an endowment that donates; any other passes it read-only and
-  // unchecked, so a missing flagship setting must not stop those buys.
-  const donates = config.donationBps > 0;
-  const flagship = await flagshipConfig();
-  if (donates && !flagship) throw new Error("Flagship config unknown");
-  const flagshipVault = flagship
-    ? await ata(await authorityPda(k.inst.program, flagship), k.inst.dividendMint, k.inst.dividendTokenProgram)
-    : authority;
-
   const setup: Instruction[] = [
     getCreateAssociatedTokenIdempotentInstruction({
       payer: k.signer,
@@ -370,7 +312,7 @@ export async function runBuy(k: Keeper) {
     }),
   ];
   const buy = (minOut: bigint) =>
-    buybackIx(k.inst, config.pool, poolAccounts, k.signer, keeperDividend, flagshipVault, donates, flagship, minOut);
+    buybackIx(k.inst, config.pool, poolAccounts, k.signer, keeperDividend, minOut);
 
   // Simulate with no minimum, reading the coin vault afterwards.
   const coinBefore = await fetchMaybeToken(k.rpc, coinVault);
@@ -397,9 +339,9 @@ export async function runBuy(k: Keeper) {
 
 // ---- The refresher's pass (the anti-shuffle attestation) ----
 
-/** Landlords per count or refresh transaction: three accounts each. */
-const BATCH = 8;
-const batchUnits = (n: number) => 30_000 + 15_000 * n;
+/** Landlords per count or refresh transaction: four accounts each. */
+const BATCH = 6;
+const batchUnits = (n: number) => 35_000 + 25_000 * n;
 
 /**
  * The refresher reads every landlord (or those given), in a fresh random order,
@@ -413,16 +355,16 @@ const batchUnits = (n: number) => 30_000 + 15_000 * n;
  */
 async function refreshPass(k: Keeper, deadline: number, only?: LandlordRow[]) {
   const landlords = only ?? (await listLandlords(k.rpc, k.inst.program, k.inst.config));
-  const jobs = chunk(shuffled(landlords), BATCH).map((batch) => ({
+  const jobs = await Promise.all(chunk(shuffled(landlords), BATCH).map(async (batch) => ({
     item: batch,
-    ixs: [refreshLandlordsIx(k.inst, k.signer, batch)],
+    ixs: [await refreshLandlordsIx(k.inst, k.signer, batch)],
     computeUnits: batchUnits(batch.length),
-  }));
+  })));
   const outcomes = await sendAll(k, jobs, deadline);
   const retry = outcomes.filter((o) => o.error).flatMap((o) => o.item);
   const singles = await sendAll(
     k,
-    retry.map((row) => ({ item: row, ixs: [refreshLandlordsIx(k.inst, k.signer, [row])], computeUnits: batchUnits(1) })),
+    await Promise.all(retry.map(async (row) => ({ item: row, ixs: [await refreshLandlordsIx(k.inst, k.signer, [row])], computeUnits: batchUnits(1) }))),
     deadline,
   );
   const failures = singles.filter((o) => o.error).map((o) => ({ landlord: o.item.address, error: o.error! }));
@@ -508,11 +450,11 @@ export async function runCount(k: Keeper) {
   }
   const outcomes = await sendAll(
     k,
-    chunk(shuffled(pending), BATCH).map((batch) => ({
+    await Promise.all(chunk(shuffled(pending), BATCH).map(async (batch) => ({
       item: batch,
-      ixs: [countLandlordsIx(k.inst, batch)],
+      ixs: [await countLandlordsIx(k.inst, batch)],
       computeUnits: batchUnits(batch.length),
-    })),
+    }))),
     deadline,
   );
   signatures.push(...outcomes.flatMap((o) => (o.error ? [] : [o.signature!])));
@@ -520,7 +462,7 @@ export async function runCount(k: Keeper) {
   const retry = outcomes.filter((o) => o.error).flatMap((o) => o.item);
   const singles = await sendAll(
     k,
-    retry.map((row) => ({ item: row, ixs: [countLandlordsIx(k.inst, [row])], computeUnits: batchUnits(1) })),
+    await Promise.all(retry.map(async (row) => ({ item: row, ixs: [await countLandlordsIx(k.inst, [row])], computeUnits: batchUnits(1) }))),
     deadline,
   );
   signatures.push(...singles.flatMap((o) => (o.error ? [] : [o.signature!])));
@@ -621,7 +563,8 @@ export async function countHealth(k: Keeper) {
     refresherIsKeeper,
     lastAttestedAt: Number(config.lastAttestedAt),
     attestAgeSecs: attestAge,
-    sweepsOn: sweepsOn(config, now),
+    sweepsOn: HOLD_COLLECTION_RELEASED && sweepsOn(config, now),
+    collectionWorkerReleased: HOLD_COLLECTION_RELEASED,
     lastSweepAt: Number(config.lastSweepAt),
     sweepAgeSecs: age(config.lastSweepAt),
     stale: countStale || attestStale,

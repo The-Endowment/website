@@ -39,3 +39,9 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# Private worker state and signing material
+.holding/
+.reporter/
+*.keypair.json
+*.journal.jsonl

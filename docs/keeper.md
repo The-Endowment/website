@@ -1,6 +1,6 @@
 # Keeper runbook
 
-The keeper triggers the endowment's permissionless instructions: sweeps, buybacks, the refresher's passes and the daily commitment count. Its key pays network fees and receives the buyback tip. It is also the flagship's **refresher**: a landlord counts only after three of its refresh reads, at least 30 minutes apart, since its last count. That key can't move funds, but it is trusted: whoever holds it chooses when landlords are read, so a leaked key could be used to time reads and count one holding in several wallets, or to leave landlords out. Treat it as sensitive (see Key custody), and keep it running: if it stops, nobody counts (see Health).
+The web keeper triggers buybacks, refresher passes and the daily commitment count. Refundable collections run in separate durable services; see [collection-worker.md](collection-worker.md). The legacy `/api/keeper/sweep` route now returns a skipped result. Its key pays network fees and receives the buyback tip. It is also the flagship's **refresher**: a landlord counts only after three of its refresh reads, at least 30 minutes apart, since its last count. That key can't move funds, but it is trusted: whoever holds it chooses when landlords are read, so a leaked key could be used to time reads and count one holding in several wallets, or to leave landlords out. Treat it as sensitive (see Key custody), and keep it running: if it stops, nobody counts (see Health).
 
 Routes: `/api/keeper/sweep`, `/api/keeper/buy`, `/api/keeper/count`, `/api/keeper/refresh`, `/api/keeper/prune`, `/api/keeper/health`. Code: `lib/keeper.ts`. Every job returns within about 50 seconds with whatever it managed, and resumes on its next call.
 
@@ -32,7 +32,6 @@ Sub-daily Vercel Cron jobs need the Pro plan. Once the project is on Pro, add th
   "framework": "nextjs",
   "crons": [
     { "path": "/api/keeper/buy", "schedule": "*/5 * * * *" },
-    { "path": "/api/keeper/sweep", "schedule": "*/15 * * * *" },
     { "path": "/api/keeper/count", "schedule": "*/15 * * * *" },
     { "path": "/api/keeper/refresh", "schedule": "*/15 * * * *" },
     { "path": "/api/keeper/prune", "schedule": "0 */6 * * *" }
@@ -52,7 +51,7 @@ Alternative without Vercel Pro: the GitHub Actions workflow in `docs/keeper-sche
 
 ## Dividend-drop webhook
 
-Create a Helius webhook on the dividend distributor's address (for $PENIS: `HuBMeYW3aDn8BH65fo8xxbP4oiexyup8udzKyccgi8Ga`) that POSTs to `/api/keeper/sweep` with the header `Authorization: Bearer $WEBHOOK_SECRET`. Sweeps then run within seconds of each drop.
+Do not point a webhook at `/api/keeper/sweep`; it no longer collects funds. A distributor webhook may wake the durable collector, but the worker still verifies finalized history and PENIS-specific feed records. Cadence, retry handling and independent reviewer scheduling must be configured and measured before launch.
 
 ## Count cost
 
@@ -61,7 +60,7 @@ There is no limit on landlords. Each count or refresh batch reads eight landlord
 ## Runbook
 
 - **Buys refused on price:** the buy response shows `skipped` (for example `PriceAboveTwap`, `PriceBelowTwap`, `FloorAboveQuote` or `TwapUnavailable`) and `price` (spot, TWAP, deviation and the band). Occasional refusals are expected on a volatile pool. If they last most of the day, consider proposing a wider `max_twap_deviation_bps` (bounded at 10%, timelocked 72 hours).
-- **Health:** `GET /api/keeper/health` reports the round, the last count, the last refresher pass (`attestAgeSecs`), whether sweeps are on and the last sweep. `stale: true` if the last count is over 48 hours old, a round has been open past its timeout, or (with landlords) no refresher pass has landed in 12 hours. Point an uptime monitor at it: without refresher passes nobody counts, and sweeps switch off three days after the last count.
+- **Health:** `GET /api/keeper/health` reports the round, the last count, the last refresher pass (`attestAgeSecs`), whether collection is released in this build, whether sweeps are on and the last sweep. `stale: true` if the last count is over 48 hours old, a round has been open past its timeout, or (with landlords) no refresher pass has landed in 12 hours. Point an uptime monitor at it: without refresher passes nobody counts, and sweeps switch off three days after the last count.
 - **A count was run by someone else:** nothing to do. Counting is permissionless; the job continues any open round and otherwise reports "counted recently".
 - **A landlord failed to count:** the response lists it with the error. The round still finishes after its timeout, without that landlord.
 - **A sweep failed:** the response lists failing landlords with the error. Common causes: the landlord revoked, or the endowment is paused or not yet active. Other landlords are unaffected.
