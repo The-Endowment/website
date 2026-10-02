@@ -250,7 +250,7 @@ function Connected({ inst }: { inst: Instance }) {
       {status && !isIn && (
         <p className="muted small">
           The $PENIS in the wallet you delegate counts toward the 30%, and the endowment collects the PUMP it earns: at
-          most what your $PENIS earned each day, never the PUMP the wallet holds today. Want to commit part of your
+          most what your $PENIS earned, never the PUMP the wallet holds today. Want to commit part of your
           holdings? Keep the rest in another wallet.
         </p>
       )}
@@ -265,7 +265,7 @@ function Connected({ inst }: { inst: Instance }) {
         <label className="consent">
           <input type="checkbox" checked={agreed} onChange={(e) => setAgreed(e.target.checked)} disabled={busy} />
           <span>
-            I understand: the $PENIS in this wallet is committed, and each day the endowment collects the PUMP it
+            I understand: the $PENIS in this wallet is committed, and the endowment collects the PUMP it
             earned, never more. The PUMP I hold today stays mine, and I can leave at any time.
           </span>
         </label>

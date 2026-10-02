@@ -86,7 +86,7 @@ export default function Endowment() {
             </li>
             <li>
               <h3>Collect</h3>
-              <p>Once a day, it collects the PUMP your $PENIS earned that day, and never more.</p>
+              <p>It collects the PUMP your $PENIS earned, and never more.</p>
             </li>
             <li>
               <h3>Compound</h3>
@@ -129,7 +129,7 @@ export default function Endowment() {
             <li>
               <strong>Only what your $PENIS earned</strong>
               <span>
-                The contract caps each day&rsquo;s collection at what your $PENIS earned, and never touches the PUMP you
+                The contract never collects more than your $PENIS earned, and never touches the PUMP you
                 held when you joined.
               </span>
             </li>
