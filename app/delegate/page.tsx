@@ -16,8 +16,9 @@ export default function Delegate() {
         <div className="thesis-head">
           <h1 className="display h1">Delegate your rent.</h1>
           <p className="lede">
-            One transaction lets the endowment collect the PUMP your $PENIS earns, and never more. Your $PENIS, your SOL
-            and the PUMP you hold when you join stay yours. Leave at any time. {DELEGATION_OPEN ? "" : DELEGATION_CLOSED_NOTE}
+            One transaction lets the endowment collect the PUMP your $PENIS earns, and never more. Every collection is
+            held for 24 hours, and you can take it back in that time. Your $PENIS, your SOL and the PUMP you hold when
+            you join stay yours. Leave at any time. {DELEGATION_OPEN ? "" : DELEGATION_CLOSED_NOTE}
           </p>
           <CommitmentBar />
         </div>
@@ -64,8 +65,18 @@ export default function Delegate() {
                 </span>
               </li>
               <li>
+                <strong>The collection switch</strong>
+                <span>
+                  A second small record that says collection is on for your wallet. Taking a collection back switches it
+                  off, and one click switches it on again.
+                </span>
+              </li>
+              <li>
                 <strong>A small deposit</strong>
-                <span>About 0.003 SOL to store your landlord record on-chain, returned when you leave.</span>
+                <span>
+                  About 0.005 SOL to store your records on-chain. The landlord record&rsquo;s share is returned when you
+                  leave.
+                </span>
               </li>
               <li>
                 <strong>During the test period</strong>

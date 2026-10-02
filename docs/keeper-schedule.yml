@@ -15,6 +15,8 @@ jobs:
     steps:
       - name: Buy
         run: curl -fsS -H "Authorization: Bearer ${{ secrets.CRON_SECRET }}" "${{ secrets.KEEPER_URL }}/api/keeper/buy" || true
+      - name: Post the reward total
+        run: curl -fsS -H "Authorization: Bearer ${{ secrets.CRON_SECRET }}" "${{ secrets.KEEPER_URL }}/api/keeper/post" || true
       - name: Count
         run: curl -fsS -H "Authorization: Bearer ${{ secrets.CRON_SECRET }}" "${{ secrets.KEEPER_URL }}/api/keeper/count" || true
       - name: Refresh

@@ -36,6 +36,9 @@ import {
   type Instance,
   type LandlordRecord,
 } from "@/lib/endowment";
+import { consentIx, settleIx } from "@/lib/holding/client";
+import type { Receipt } from "@/lib/holding/types";
+import { loadHolding, type Holding } from "@/lib/holding/wallet";
 import { flagshipInstance, formatTokens } from "@/lib/solana";
 import { DELEGATION_CLOSED_NOTE, DELEGATION_OPEN, links } from "@/lib/site";
 
@@ -65,6 +68,8 @@ type Status = {
   /** Delegated to this endowment, but for less than it needs (re-approve to fix). */
   delegationTooSmall: boolean;
   minStake: bigint;
+  /** This wallet's collection switch, and what is being held for it. */
+  holding: Holding;
   now: number;
 };
 
@@ -72,13 +77,14 @@ type Status = {
 async function loadStatus(inst: Instance, owner: Address): Promise<Status> {
   const dividendAccount = await ata(owner, inst.dividendMint, inst.dividendTokenProgram);
   const coinAccount = await ata(owner, inst.coinMint, inst.coinTokenProgram);
-  const [config, landlord, dividend, coin, mint, dividendMint] = await Promise.all([
+  const [config, landlord, dividend, coin, mint, dividendMint, holding] = await Promise.all([
     fetchDecoded(client.rpc, inst.config, decodeConfig),
     fetchDecoded(client.rpc, await landlordPda(inst.program, inst.config, owner), decodeLandlord),
     fetchMaybeToken(client.rpc, dividendAccount),
     fetchMaybeToken(client.rpc, coinAccount),
     fetchMaybeMint(client.rpc, inst.coinMint),
     fetchMaybeMint(client.rpc, inst.dividendMint),
+    loadHolding(client.rpc, inst, owner),
   ]);
   // Only ever offer opt-in to the real flagship (audit KW-09).
   if (!config || !isFlagshipConfig(config)) throw new Error("The endowment isn't live yet.");
@@ -102,13 +108,15 @@ async function loadStatus(inst: Instance, owner: Address): Promise<Status> {
     delegatedToEndowment: ours && delegatedAmount >= MIN_DELEGATION,
     delegationTooSmall: ours && delegatedAmount < MIN_DELEGATION,
     minStake,
+    holding,
     now: Math.floor(Date.now() / 1000),
   };
 }
 
 /** Why opting in isn't possible right now, in plain words; null if it is. */
 function blocker(s: Status): string | null {
-  if (s.config.retired) return "The endowment has closed to new landlords.";
+  if (s.config.retired || s.config.milestoneReached) return "The endowment has closed to new landlords.";
+  if (!s.holding.ready) return "Joining opens as soon as collection is switched on.";
   if (s.now < Number(s.config.pausedUntil)) {
     const until = new Date(Number(s.config.pausedUntil) * 1000).toLocaleString();
     return `Joining is paused until ${until}. You can still leave at any time.`;
@@ -129,9 +137,10 @@ function Connected({ inst }: { inst: Instance }) {
 
   const refresh = useCallback(async () => {
     if (!owner) return;
-    setLoadError(null);
     try {
-      setStatus(await loadStatus(inst, owner));
+      const loaded = await loadStatus(inst, owner);
+      setStatus(loaded);
+      setLoadError(null);
     } catch (e) {
       setLoadError(e instanceof Error && e.message.includes("live") ? e.message : "Couldn't read your wallet from the network. Try again in a moment.");
     }
@@ -179,6 +188,9 @@ function Connected({ inst }: { inst: Instance }) {
     } else {
       ixs.push(await registerLandlordIx(inst, signer, status.dividendAccount, status.coinAccount));
     }
+    // Joining and rejoining both leave collection switched off; this switches it on,
+    // with everything the account holds right now set aside as the landlord's.
+    ixs.push(await consentIx(inst, signer, "enable_collection"));
     const result = await client.sendTransaction(ixs, { abortSignal: signal });
     await refresh();
     return result.context.signature;
@@ -203,11 +215,24 @@ function Connected({ inst }: { inst: Instance }) {
     return result.context.signature;
   });
 
+  // Take one held collection back. The contract returns it to this wallet's own PUMP
+  // account and pauses collection for the wallet until it is switched back on.
+  const takeBack = useAction(async (signal: AbortSignal, receipt: Receipt) => {
+    const ix = await settleIx(inst, receipt, client.identity, false);
+    const result = await client.sendTransaction([ix], { abortSignal: signal });
+    await refresh();
+    return result.context.signature;
+  });
+
   if (!connected || !owner) return null;
-  const busy = optIn.isRunning || leave.isRunning;
-  const lastSignature = optIn.data ?? leave.data;
-  const error = optIn.error ?? leave.error;
-  const isIn = Boolean(status?.landlord && status.delegatedToEndowment);
+  const busy = optIn.isRunning || leave.isRunning || takeBack.isRunning;
+  const lastSignature = optIn.data ?? leave.data ?? takeBack.data;
+  const error = optIn.error ?? leave.error ?? takeBack.error;
+  const delegated = Boolean(status?.landlord && status.delegatedToEndowment);
+  const isIn = delegated && Boolean(status?.holding.consent?.enabled);
+  const receipts = status?.holding.receipts ?? [];
+  const held = receipts.reduce((sum, r) => sum + r.amount, BigInt(0));
+  const when = (t: bigint) => new Date(Number(t) * 1000).toLocaleString([], { dateStyle: "medium", timeStyle: "short" });
   const reason = status ? blocker(status) : null;
 
   let delegation = "Not delegated";
@@ -241,11 +266,58 @@ function Connected({ inst }: { inst: Instance }) {
         </div>
         {status?.landlord && (
           <div className="fact">
+            <dt>Collection</dt>
+            <dd>{isIn ? "On" : "Paused for this wallet"}</dd>
+          </div>
+        )}
+        {status?.landlord && (
+          <div className="fact">
             <dt>Contributed</dt>
             <dd>{formatTokens(status.landlord.totalContributed)} PUMP</dd>
           </div>
         )}
+        {receipts.length > 0 && (
+          <div className="fact">
+            <dt>Being held</dt>
+            <dd>{formatTokens(held)} PUMP</dd>
+          </div>
+        )}
       </dl>
+
+      {receipts.length > 0 && (
+        <>
+          <p className="muted small">
+            Each collection is held for 24 hours before the endowment uses it. Until then you can take it back with one
+            click; that also pauses collection for this wallet until you switch it back on.
+          </p>
+          <div className="table-scroll">
+            <table className="table">
+              <thead>
+                <tr>
+                  <th>Collected</th>
+                  <th className="num">PUMP</th>
+                  <th>Held until</th>
+                  <th />
+                </tr>
+              </thead>
+              <tbody>
+                {receipts.map((r) => (
+                  <tr key={r.nonce.toString()} className="current">
+                    <td>{when(r.collected_at)}</td>
+                    <td className="num">{formatTokens(r.amount)}</td>
+                    <td>{when(r.release_at)}</td>
+                    <td className="num">
+                      <button type="button" className="link-button" disabled={busy} onClick={() => takeBack.dispatch(r)}>
+                        {takeBack.isRunning ? "Confirm in your wallet…" : "Take it back"}
+                      </button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </>
+      )}
 
       {status && !isIn && (
         <p className="muted small">
@@ -266,7 +338,8 @@ function Connected({ inst }: { inst: Instance }) {
           <input type="checkbox" checked={agreed} onChange={(e) => setAgreed(e.target.checked)} disabled={busy} />
           <span>
             I understand: the $PENIS in this wallet is committed, and the endowment collects the PUMP it
-            earned, never more. The PUMP I hold today stays mine, and I can leave at any time.
+            earned, never more. Each collection is held for 24 hours, and I can take it back in that time. The PUMP I
+            hold today stays mine, and I can leave at any time.
           </span>
         </label>
       )}
@@ -279,7 +352,13 @@ function Connected({ inst }: { inst: Instance }) {
             disabled={busy || !status || Boolean(reason) || !agreed}
             onClick={() => optIn.dispatch()}
           >
-            {optIn.isRunning ? "Confirm in your wallet…" : status?.landlord ? "Rejoin" : "Delegate my PUMP rewards"}
+            {optIn.isRunning
+              ? "Confirm in your wallet…"
+              : delegated
+                ? "Switch collection back on"
+                : status?.landlord
+                  ? "Rejoin"
+                  : "Delegate my PUMP rewards"}
           </button>
         )}
         {isIn && (

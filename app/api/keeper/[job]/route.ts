@@ -1,5 +1,5 @@
 import { timingSafeEqual } from "node:crypto";
-import { countHealth, loadKeeper, runBuy, runCount, runPrune, runRefresh, runSweeps } from "@/lib/keeper";
+import { countHealth, loadKeeper, runBuy, runCount, runPrune, runRefresh, runRewardPost, runSweeps } from "@/lib/keeper";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 60;
@@ -21,6 +21,7 @@ async function run(job: string) {
     if (job === "count") return Response.json(await runCount(keeper));
     if (job === "refresh") return Response.json(await runRefresh(keeper));
     if (job === "prune") return Response.json(await runPrune(keeper));
+    if (job === "post") return Response.json(await runRewardPost(keeper));
     if (job === "health") return Response.json(await countHealth(keeper));
     return Response.json({ error: "unknown job" }, { status: 404 });
   } catch (err) {

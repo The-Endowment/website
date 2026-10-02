@@ -1,5 +1,7 @@
 import "server-only";
 import { HOLD_COLLECTION_RELEASED } from "./holding/release";
+import { postRewardTotalIx } from "./holding/client";
+import { parseRewardTotal, REWARD_POST_STALE_SECS, rewardPostDecision, rewardTotalUrl } from "./reward-total";
 import { createHmac, randomInt } from "node:crypto";
 import {
   appendTransactionMessageInstructions,
@@ -221,6 +223,48 @@ function sweepsOn(config: EndowmentConfig, now: number) {
 export async function runSweeps(k: Keeper) {
   void k;
   return { skipped: "Use the refundable collection worker; legacy balance sweeps are disabled" };
+}
+
+// ---- The daily reward post ----
+
+/**
+ * Posts stonk.fun's running total of PUMP paid to the coin's holders, once a
+ * day. The contract turns the increase into each landlord's allowance, the
+ * most a collection can take. Only the endowment's refresher can post, and the
+ * contract bounds what any post can credit (see rewards.rs), so the worst a
+ * wrong feed can do is limited there; here the feed is checked for the right
+ * coin and a sane amount, and a total that went down is never sent.
+ *
+ * Runs every day whether or not contributions are running: a post made while
+ * they aren't credits nothing and moves the starting point, so rewards paid
+ * meanwhile stay with landlords.
+ */
+export async function runRewardPost(k: Keeper) {
+  const config = await readConfig(k);
+  if (config.retired || config.milestoneReached) return { skipped: "contributions have ended" };
+  if (config.params.refresher !== k.signer.address) return { skipped: "this keeper is not the endowment's refresher" };
+  const state = {
+    allowanceMarginBps: config.params.allowanceMarginBps,
+    lastRewardTotal: config.lastRewardTotal,
+    lastRewardPostAt: config.lastRewardPostAt,
+  };
+  const idle = rewardPostDecision(state, config.lastRewardTotal, nowSecs());
+  if (!idle.post) return { skipped: idle.skipped };
+
+  const response = await fetch(rewardTotalUrl(k.inst.coinMint), { cache: "no-store", signal: AbortSignal.timeout(15_000) });
+  if (!response.ok) throw new Error(`Reward feed returned HTTP ${response.status}`);
+  const total = parseRewardTotal(await response.json(), k.inst.coinMint, k.inst.dividendMint);
+  const decision = rewardPostDecision(state, total, nowSecs());
+  if (!decision.post) {
+    return { skipped: decision.skipped, feedTotal: total.toString(), lastPosted: config.lastRewardTotal.toString() };
+  }
+  const signature = await send(k, [postRewardTotalIx(k.inst, k.signer, total)], 60_000);
+  return {
+    posted: total.toString(),
+    increase: (total - config.lastRewardTotal).toString(),
+    first: config.lastRewardPostAt === BigInt(0),
+    signature,
+  };
 }
 
 // ---- Buys (audit I-14, KW-11, R3-TW-02) ----
@@ -553,6 +597,11 @@ export async function countHealth(k: Keeper) {
   const countStale = (countAge !== null && countAge > 2 * COUNT_INTERVAL_SECS) || (openFor !== null && openFor > COUNT_TIMEOUT_SECS);
   // With landlords to attest, a refresher pass should land several times a day.
   const attestStale = refresherIsKeeper && config.landlordCount > 0 && (attestAge === null || attestAge > 12 * 60 * 60);
+  // With the allowance on, nothing can be collected unless the reward total is posted daily.
+  const postAge = age(config.lastRewardPostAt);
+  const rewardPostStale =
+    refresherIsKeeper && config.params.allowanceMarginBps > 0 && config.landlordCount > 0 &&
+    (postAge === null || postAge > REWARD_POST_STALE_SECS);
   return {
     round: Number(config.count.round),
     open: config.count.open,
@@ -565,9 +614,13 @@ export async function countHealth(k: Keeper) {
     attestAgeSecs: attestAge,
     sweepsOn: HOLD_COLLECTION_RELEASED && sweepsOn(config, now),
     collectionWorkerReleased: HOLD_COLLECTION_RELEASED,
+    allowanceOn: config.params.allowanceMarginBps > 0,
+    lastRewardPostAt: Number(config.lastRewardPostAt),
+    rewardPostAgeSecs: age(config.lastRewardPostAt),
+    rewardPostStale,
     lastSweepAt: Number(config.lastSweepAt),
     sweepAgeSecs: age(config.lastSweepAt),
-    stale: countStale || attestStale,
+    stale: countStale || attestStale || rewardPostStale,
     countStale,
     attestStale,
   };

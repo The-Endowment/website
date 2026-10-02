@@ -2,7 +2,7 @@
 
 The web keeper triggers buybacks, refresher passes and the daily commitment count. Refundable collections run in separate durable services; see [collection-worker.md](collection-worker.md). The legacy `/api/keeper/sweep` route now returns a skipped result. Its key pays network fees and receives the buyback tip. It is also the flagship's **refresher**: a landlord counts only after three of its refresh reads, at least 30 minutes apart, since its last count. That key can't move funds, but it is trusted: whoever holds it chooses when landlords are read, so a leaked key could be used to time reads and count one holding in several wallets, or to leave landlords out. Treat it as sensitive (see Key custody), and keep it running: if it stops, nobody counts (see Health).
 
-Routes: `/api/keeper/sweep`, `/api/keeper/buy`, `/api/keeper/count`, `/api/keeper/refresh`, `/api/keeper/prune`, `/api/keeper/health`. Code: `lib/keeper.ts`. Every job returns within about 50 seconds with whatever it managed, and resumes on its next call.
+Routes: `/api/keeper/sweep`, `/api/keeper/buy`, `/api/keeper/count`, `/api/keeper/refresh`, `/api/keeper/post`, `/api/keeper/prune`, `/api/keeper/health`. Code: `lib/keeper.ts`. Every job returns within about 50 seconds with whatever it managed, and resumes on its next call.
 
 ## Environment variables
 
@@ -34,6 +34,7 @@ Sub-daily Vercel Cron jobs need the Pro plan. Once the project is on Pro, add th
     { "path": "/api/keeper/buy", "schedule": "*/5 * * * *" },
     { "path": "/api/keeper/count", "schedule": "*/15 * * * *" },
     { "path": "/api/keeper/refresh", "schedule": "*/15 * * * *" },
+    { "path": "/api/keeper/post", "schedule": "7 * * * *" },
     { "path": "/api/keeper/prune", "schedule": "0 */6 * * *" }
   ]
 }
@@ -48,6 +49,16 @@ Vercel sends `Authorization: Bearer $CRON_SECRET` automatically.
 - **Sweep:** every 15 minutes, as a fallback to the webhook.
 
 Alternative without Vercel Pro: the GitHub Actions workflow in `docs/keeper-schedule.yml` does the same with `curl`. Copy it to `.github/workflows/` and add `KEEPER_URL` and `CRON_SECRET` as repository secrets. GitHub delays scheduled runs under load, so a paid scheduler is better for the refresh and count, and set `KEEPER_REFRESH_TICK_MINUTES` to the real cadence.
+
+## The daily reward post
+
+`/api/keeper/post` reads stonk.fun's public running total of PUMP paid to $PENIS holders and posts it on-chain with `post_reward_total`, signed as the refresher. The contract turns each day's increase into every landlord's allowance: the most a collection can take. Code: `runRewardPost` in `lib/keeper.ts`, with the checks in `lib/reward-total.ts`.
+
+- **Schedule it hourly.** The job posts once the last post is 23 hours old and otherwise answers `posted recently`, so an hourly schedule gives one post a day at a steady time and retries a failed one within the hour.
+- **It keeps posting while contributions are off.** A post made then credits nothing and moves the starting point, so rewards paid meanwhile stay with landlords.
+- **It never posts a total that went down.** It answers `the feed's total is below the last one posted` with both figures. Check the feed; if stonk.fun really reset its counter, post once by hand.
+- **Without it nothing is collected.** Unused allowance lasts about three days, and after a gap one post credits two days at most. `health` reports `rewardPostStale` when the last post is over 36 hours old.
+- The response gives `posted`, `increase` and the `signature`. The first post only sets the starting point.
 
 ## Dividend-drop webhook
 

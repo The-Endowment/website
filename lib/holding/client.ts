@@ -1,8 +1,11 @@
 import {
+  AccountRole,
+  address,
   getAddressEncoder,
   getProgramDerivedAddress,
   getU64Encoder,
   type Address,
+  type Instruction,
   type TransactionSigner,
 } from "@solana/kit";
 import {
@@ -17,6 +20,9 @@ import { ASSOCIATED_TOKEN_PROGRAM_ADDRESS } from "@solana-program/token-2022";
 import { instruction } from "./codec.ts";
 import type { Receipt } from "./types.ts";
 const text = (s: string) => new TextEncoder().encode(s);
+/** The SPL Memo program. Settlements pass it so the contract can attach a memo
+ * to a refund: a holder whose account requires memos can still be refunded. */
+export const MEMO_PROGRAM = address("MemoSq4gqABAXKb96qnH8TysNcWxMyWCqXgDLGmfcHr");
 export const holdPda = async (
   inst: Instance,
   kind: "policy" | "consent" | "receipt",
@@ -102,7 +108,7 @@ export async function settleIx(
   if (receipt.config !== inst.config)
     throw new Error("Receipt belongs to another endowment");
   const a = await common(inst, receipt.owner);
-  return instruction(
+  const ix = instruction(
     inst.program,
     release ? "release_collection" : "refund_collection",
     {
@@ -113,6 +119,19 @@ export async function settleIx(
       rent_recipient: receipt.payer,
       refund_account: a.dividend_account,
     },
+  );
+  return {
+    ...ix,
+    accounts: [...(ix.accounts ?? []), { address: MEMO_PROGRAM, role: AccountRole.READONLY }],
+  } satisfies Instruction;
+}
+/** The refresher posts the coin's cumulative reward total (see lib/reward-total.ts). */
+export function postRewardTotalIx(inst: Instance, refresher: TransactionSigner, total: bigint) {
+  return instruction(
+    inst.program,
+    "post_reward_total",
+    { refresher, config: inst.config, coin_mint: inst.coinMint },
+    { total },
   );
 }
 export async function reviewIx(

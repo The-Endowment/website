@@ -23,6 +23,7 @@ const names = new Set([
   "begin_count",
   "finish_count",
   "prune_landlord",
+  "post_reward_total",
 ]);
 const roots = [
   "Config",

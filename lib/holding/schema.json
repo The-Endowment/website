@@ -246,11 +246,15 @@
           "type": "i64"
         },
         {
+          "name": "reward_credit_ok",
+          "type": "bool"
+        },
+        {
           "name": "reserved",
           "type": {
             "array": [
               "u8",
-              12
+              11
             ]
           }
         }
@@ -938,6 +942,37 @@
         {
           "name": "reviewer",
           "type": "pubkey"
+        }
+      ]
+    },
+    "post_reward_total": {
+      "discriminator": [
+        117,
+        178,
+        240,
+        84,
+        72,
+        66,
+        62,
+        29
+      ],
+      "accounts": [
+        {
+          "name": "refresher",
+          "signer": true
+        },
+        {
+          "name": "config",
+          "writable": true
+        },
+        {
+          "name": "coin_mint"
+        }
+      ],
+      "args": [
+        {
+          "name": "total",
+          "type": "u64"
         }
       ]
     },

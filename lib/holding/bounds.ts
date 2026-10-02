@@ -10,8 +10,10 @@ const positive = (n: bigint) => n > 0n ? n : 0n;
 export function rewardAllowance(config: Config, landlord: Landlord, now: bigint) {
   const marks = config.reward_marks.filter(m => m.at !== 0n && m.at > now - 3n * DAY && m.at <= now);
   const floor = marks.reduce((n, m) => min(n, m.index), config.reward_index);
+  // Allowance accrues on the counted coin, less anything a later read found gone.
+  const earning = landlord.snapshot_valid ? min(landlord.counted_amount, landlord.snapshot) : 0n;
   const earned = (delta: bigint) => {
-    const product = landlord.counted_amount * positive(delta);
+    const product = earning * positive(delta);
     return product > U128_MAX ? U64_MAX : min(product / 1_000_000_000_000n, U64_MAX);
   };
   return min(min(landlord.allowance + earned(config.reward_index - landlord.index_at), U64_MAX),

@@ -25,6 +25,10 @@ const faqs = [
     a: "Yes. Commitment is per wallet: the $PENIS in the wallet you delegate counts, and its rewards go to the endowment. Keep the $PENIS you want to commit in one wallet and the rest in another.",
   },
   {
+    q: "Can I take a collection back?",
+    a: "Yes. Every collection is held for 24 hours before the endowment uses it, and until then you can take it back with one click on the Delegate page. A second, independent check reviews each collection before it is released.",
+  },
+  {
     q: "Can I leave?",
     a: "Yes, anytime. The Leave button revokes the delegation and removes your landlord record in one step, and revoking works from any Solana wallet without this site or anyone's permission.",
   },
@@ -131,6 +135,13 @@ export default function Endowment() {
               <span>
                 The contract never collects more than your $PENIS earned, and never touches the PUMP you
                 held when you joined.
+              </span>
+            </li>
+            <li>
+              <strong>Held for 24 hours</strong>
+              <span>
+                Every collection waits a day and is checked a second time before it is used. Until then you can take
+                it back.
               </span>
             </li>
             <li>

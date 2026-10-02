@@ -44,6 +44,7 @@ export type Config = {
   last_reward_post_at: bigint;
   reward_marks: RewardMark[];
   pause_started_at: bigint;
+  reward_credit_ok: boolean;
   reserved: number[];
 };
 
