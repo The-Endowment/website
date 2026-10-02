@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { EndowmentProgress } from "@/components/EndowmentProgress";
-import { DelegateButton, DelegationNote } from "@/components/DelegateButton";
+import { DonationButton } from "@/components/DonationButton";
 import { links } from "@/lib/site";
 
 export const metadata: Metadata = {
@@ -12,6 +12,7 @@ export const metadata: Metadata = {
 
 const faqs = [
   { q: "What am I contributing?", a: "The proposed pledge contributes 100% of eligible PUMP rewards from the $PENIS in your participating wallet. Your $PENIS stays in your wallet. Cleared rewards are contributions, not loans and not a claim on the endowment." },
+  { q: "Can I donate $PENIS instead of pledging rewards?", a: "A one-time donation is a planned second way to contribute. It permanently transfers the donated PENIS into the endowment, without ongoing collection permission. Only the amount received after transfer fees counts toward 200 million. Direct donations do not have the pending PUMP reclaim window. The donation flow is not open yet." },
   { q: "Can someone pledge using just my wallet address?", a: "No. Joining requires authorization signed by your wallet. A public address alone does not authorize collection. Pledging is currently closed while the contract and participation flow are finalized." },
   { q: "Does a daily allowance prove which PUMP is a reward?", a: "No. PUMP tokens are interchangeable. A balance or daily allowance alone cannot distinguish rewards from purchases. The collection work under review combines payout evidence, wallet history, contract limits and a refundable holding period. This reduces risk but does not guarantee error-free classification." },
   { q: "Can I leave or get a contribution back?", a: "The proposed flow allows you to stop future collections and reclaim your own pending contributions before they are released. Taking a pending contribution back also switches off collection for your wallet until you enable it again. Once a contribution is cleared and released for spending, that reclaim path ends. The final signing screen must explain these separate actions before pledging opens." },
@@ -24,12 +25,11 @@ export default function Endowment() {
   return (
     <div className="wrap">
       <section className="thesis-head">
-        <p className="eyebrow">The $PENIS endowment · In development</p>
-        <h1 className="display h1">A well-endowed <em>future.</em></h1>
+        <p className="eyebrow">The $PENIS endowment</p>
+        <h1 className="display h1">Built by holders.<br /><em>For the long term.</em></h1>
         <p className="lede">Holders building a lasting reserve of $PENIS, together.
           The goal is 200 million coins. The path starts with voluntary contributions and rules people can inspect.</p>
-        <div className="actions"><DelegateButton label="Pledge your rewards" primary /><Link href="#how" className="button">Explore the design</Link></div>
-        <DelegationNote />
+        <div className="actions"><Link href="#endowment" className="button">See ways to contribute</Link></div>
       </section>
       <EndowmentProgress detailPage />
       <section className="row" id="how">
@@ -42,6 +42,21 @@ export default function Endowment() {
             <li><h3>Release and build</h3><p>Only cleared amounts become spendable for buybacks and liquidity. Unresolved amounts become refund-only when their review window expires.</p></li>
           </ol>
           <p className="note">This describes the collection design under review, not an invitation to grant wallet permissions today.</p>
+        </div>
+      </section>
+      <section className="row" id="donate">
+        <h2 className="row-label">Direct donations</h2>
+        <div className="row-body">
+          <h3 className="statement">A one-time gift. A lasting contribution.</h3>
+          <p>We’re planning a second way to help build the endowment: donate $PENIS directly.
+            You choose an amount for a single transfer, with no ongoing collection permission.</p>
+          <ul className="plain-list">
+            <li><strong>Permanent contribution</strong><span>The donated coins leave your wallet and become part of the endowment. They cannot be reclaimed through the pending PUMP refund process.</span></li>
+            <li><strong>Counted after fees</strong><span>Only $PENIS actually received in the vault after transfer fees advances the 200M goal. A direct donation does not enroll your wallet in reward pledging.</span></li>
+            <li><strong>Review before signing</strong><span>The donation flow will show the amount sent, expected amount received, fees and verified destination before you authorize a transfer.</span></li>
+          </ul>
+          <p className="note">Direct donations are not open yet. The vault and donation flow need to be verified before we publish a destination or enable transfers.</p>
+          <div className="actions"><DonationButton /><Link href="#how" className="button">Compare with pledging rewards</Link></div>
         </div>
       </section>
       <section className="row" id="safeguards">

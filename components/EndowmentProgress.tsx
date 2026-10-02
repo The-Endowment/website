@@ -2,12 +2,13 @@
 
 import Link from "next/link";
 import { useEffect, useState } from "react";
-import { DelegateButton, DelegationNote } from "./DelegateButton";
+import { DelegateButton } from "./DelegateButton";
+import { DonationButton } from "./DonationButton";
 import { COUNT_INTERVAL, goalPercent, percent, progressState, wholeTokens, type Progress } from "@/lib/progress";
 
 const states = {
   loading: ["Checking progress", "Reading the latest public snapshot."],
-  unconfigured: ["Not open yet", "The endowment is in development. Live totals appear after the deployment is verified."],
+  unconfigured: ["In development", "Participation and live totals will open here after the launch is verified."],
   unavailable: ["Data unavailable", "We couldn’t verify a recent snapshot. Totals are hidden until the data is available again."],
   uncounted: ["Awaiting first count", "Pledged balances appear after the first completed on-chain count."],
   raising: ["Building commitment", "Collection awaits the 30% activation threshold and the contract’s other safety checks."],
@@ -64,10 +65,10 @@ export function EndowmentProgress({ detailPage = false }: { detailPage?: boolean
   return (
     <section className="endowment-progress" id="endowment" aria-labelledby="endowment-heading">
       <div className="progress-heading">
-        <div><p className="eyebrow">Built by holders</p><h2 id="endowment-heading">A well-endowed future.</h2></div>
+        <div><p className="eyebrow">Built by holders</p><h2 id="endowment-heading">Help grow the $PENIS Endowment.</h2></div>
         <span className="status-pill" role="status">{states[state][0]}</span>
       </div>
-      <p className="progress-intro">A community-funded endowment with one goal: hold 200 million $PENIS for the long term.</p>
+      <p className="progress-intro">Together, we’re building a reserve of 200 million $PENIS for the long term.</p>
       <div className="progress-grid">
         <article className={`progress-metric ${emphasis === "vault" ? "metric-focus" : ""}`}>
           <div className="metric-heading"><h3>$PENIS in the endowment</h3><span>Goal · 200M</span></div>
@@ -90,9 +91,14 @@ export function EndowmentProgress({ detailPage = false }: { detailPage?: boolean
         <div className="progress-status"><p>{states[state][1]}</p>
           {snapshot && <p className="small muted">Vault snapshot: <Stamp unix={snapshot.observedAt} /> · <a href={`https://solscan.io/account/${snapshot.config}`}>Contract records ↗</a></p>}
         </div>
-        <div className="actions"><DelegateButton label="Pledge your rewards" primary /><Link href={detailPage ? "#how" : "/endowment"} className="button">How it works ↗</Link></div>
+        <div className="contribution-actions">
+          <div className="actions"><DelegateButton label="Pledge rewards" primary /><DonationButton /></div>
+          <div className="contribution-links">
+            <Link href={detailPage ? "#how" : "/endowment#how"}>How pledging works ↗</Link>
+            <Link href={detailPage ? "#donate" : "/endowment#donate"}>About direct donations ↗</Link>
+          </div>
+        </div>
       </div>
-      <DelegationNote />
     </section>
   );
 }

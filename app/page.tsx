@@ -30,7 +30,7 @@ export default async function Home() {
             Hold your $PENIS.<br /><em>Earn $PUMP.</em>
           </h1>
           <p className="lede">
-            Launched on stonk.fun. Funded by transaction fees. $PUMP rewards paid straight to holders&rsquo; wallets.
+            A meme coin launched on stonk.fun. A 3% fee on buys, sells and transfers funds $PUMP rewards for holders.
           </p>
           <div className="actions">
             <a href={links.stonkfun} className="button button-primary">
@@ -75,11 +75,11 @@ export default async function Home() {
             Reaching 200 million coins would put a fifth of the original billion-coin supply in the endowment.</p>
           <ol className="steps">
             <li><h3>Hold</h3><p>Hold $PENIS and receive eligible PUMP rewards in your wallet.</p></li>
-            <li><h3>Choose to contribute</h3><p>Once participation opens, review the terms and choose whether to pledge your rewards.</p></li>
+            <li><h3>Choose to contribute</h3><p>Once participation opens, pledge eligible rewards or make a one-time $PENIS donation.</p></li>
             <li><h3>Build together</h3><p>Cleared contributions fund the endowment. Reward collection ends when the vault reaches 200M $PENIS.</p></li>
           </ol>
-          <p className="note">Pledged rewards are contributions, not loans. Your $PENIS stays yours.
-            Eligibility and the collection safeguards will be shown before you sign.</p>
+          <p className="note">With a reward pledge, your $PENIS stays in your wallet. A direct $PENIS donation permanently transfers those coins to the endowment.
+            Both are voluntary contributions, not loans.</p>
           <div className="actions"><Link href="/endowment" className="button">Explore the design ↗</Link><Link href="/security" className="button">Review &amp; transparency ↗</Link></div>
         </div>
       </section>
