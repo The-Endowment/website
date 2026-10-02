@@ -17,10 +17,10 @@ export const metadata: Metadata = {
   alternates: { canonical: "/" },
   title: { default: "$PENIS: the coin that pays you to hold", template: "%s · $PENIS" },
   description:
-    "Hold your PENIS. Earn PUMP. Discover the coin, its holder rewards, and the community’s goal of a 200 million $PENIS endowment.",
+    "Hold your $PENIS. Earn $PUMP. Launched on stonk.fun, with holder rewards and a community goal of a 200 million $PENIS endowment.",
   openGraph: {
     title: "$PENIS: the coin that pays you to hold",
-    description: "Hold your PENIS. Earn PUMP. Explore the coin and the community-funded endowment.",
+    description: "Hold your $PENIS. Earn $PUMP. Explore the coin on stonk.fun and the community-funded endowment.",
     type: "website",
   },
   twitter: { card: "summary", title: "$PENIS: the coin that pays you to hold" },

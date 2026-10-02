@@ -25,12 +25,12 @@ export default async function Home() {
     <div className="wrap">
       <section className="hero coin-hero">
         <div className="hero-copy">
-          <p className="eyebrow">$PENIS · Solana · PUMP rewards</p>
+          <p className="eyebrow">$PENIS · stonk.fun · $PUMP rewards</p>
           <h1 className="display h1">
-            Hold your PENIS.<br /><em>Earn PUMP.</em>
+            Hold your $PENIS.<br /><em>Earn $PUMP.</em>
           </h1>
           <p className="lede">
-            A Solana meme coin that pays holders PUMP rewards, funded by transaction fees.
+            Launched on stonk.fun. Funded by transaction fees. $PUMP rewards paid straight to holders&rsquo; wallets.
           </p>
           <div className="actions">
             <a href={links.stonkfun} className="button button-primary">
