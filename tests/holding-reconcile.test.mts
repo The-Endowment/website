@@ -38,6 +38,7 @@ function snapshot(now = 86500): HoldSnapshot {
     consentId: "2",
     now,
     goalReached: false,
+    landlord: {},
     consent: { enabled: true, epoch: 2n },
     config: { retired: false, milestone_reached: false, paused_until: 0n, pause_started_at: 0n },
   } as HoldSnapshot;
@@ -194,6 +195,28 @@ test("hold, expiry, revocation, goal, pause and missing evidence fail closed", (
     settlementPlan(receipt, s, { ...decision, amount: "41" }),
   );
 });
+test("missing landlord refunds immediately; temporary inactivity alone does not", () => {
+  const decision = {
+    amount: "40", evidenceHash: "1".repeat(64), sweepSignature: "tx", collectedAt: "100",
+  };
+  for (const now of [86499, 86500]) {
+    const s = snapshot(now);
+    s.landlord = null;
+    s.active = false;
+    assert.equal(settlementPlan(receipt, s, decision), "refund");
+    s.config.pause_started_at = 80000n;
+    s.config.paused_until = 90000n;
+    assert.equal(settlementPlan(receipt, s, decision), "refund");
+  }
+  const paused = snapshot();
+  paused.active = false;
+  paused.config.pause_started_at = 80000n;
+  paused.config.paused_until = 90000n;
+  assert.equal(settlementPlan(receipt, paused, decision), "wait");
+  paused.config.paused_until = 0n;
+  assert.equal(settlementPlan(receipt, paused, decision), "clear");
+});
+
 test("day boundaries discard uncollected eligibility but retain decisions for already held funds", async () => {
   const j = journal();
   (j.state as ReviewedLedger).reviews = {

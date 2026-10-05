@@ -8,7 +8,7 @@ Routes: `/api/keeper/sweep`, `/api/keeper/buy`, `/api/keeper/count`, `/api/keepe
 
 | Variable | Purpose |
 |---|---|
-| `NEXT_PUBLIC_DELEGATION_OPEN` | `true` opens delegation on the site. Unset, every Delegate button is grayed out with "Delegation opens as soon as the contract goes live." Keep it unset during the founders test. |
+| `NEXT_PUBLIC_DELEGATION_OPEN` | `true` permits new pledges and re-enrollment. Unset, those actions are blocked; existing holders can still connect, stop collection, revoke approval and reclaim pending contributions for the configured instance. Keep it unset until the rollout is reviewed. |
 | `NEXT_PUBLIC_ENDOWMENT_PROGRAM_ID` | The program ID. Must be in `KNOWN_PROGRAM_IDS` in `lib/endowment.ts`, or the site refuses it. |
 | `NEXT_PUBLIC_ENDOWMENT_CREATOR` | The wallet that created the $PENIS endowment. Must equal `PROGRAM_FLAGSHIP_CREATOR` in `lib/endowment.ts`, which mirrors `FLAGSHIP_CREATOR` in the program; the site refuses any other value. |
 | `NEXT_PUBLIC_SOLANA_RPC_URL` | RPC for the browser and the public routes (`/api/ledger`, `/api/endowments`). Use a separate key from the keeper's. |
@@ -43,10 +43,10 @@ Sub-daily Vercel Cron jobs need the Pro plan. Once the project is on Pro, add th
 Vercel sends `Authorization: Bearer $CRON_SECRET` automatically.
 
 - **Buy:** every 5 minutes. Once the contract's minimum interval has passed and the vault holds the minimum buy, it simulates the buyback. If the contract would refuse (most often because the spot price is outside the endowment's price band around the TWAP), nothing is sent and the response logs the reason with the spot price, the TWAP and their deviation in basis points, so refusals can be reviewed later. Otherwise it sends the buy with `min_out` set to the simulated fill less 1%, on top of the contract's own TWAP floor. Frequent attempts matter: the price often sits outside the band for an hour or so, and a daily attempt would miss most windows.
-- **Count:** attempted every 15 minutes. Once 24 hours have passed since the last round began, it runs a refresher pass (the contract only lets a round begin after one), begins a round, then counts. While a round is open, each call first re-reads the landlords it still expects that are short of their three reads (30 minutes after their last read), then sends every count batch (eight landlords each, shuffled) before confirming any, retries failed batches one landlord at a time, and finishes once all are counted or the four-hour timeout has passed. The contract leaves a landlord still short of reads pending rather than counting it as zero, so a round started early by someone else simply takes a little longer. It doesn't prune first: a landlord that no longer qualifies simply counts zero.
-- **Refresh:** called every 15 minutes, but proceeds only on a secret-seeded random draw, about `KEEPER_REFRESHES_PER_DAY` times a day. Each pass reads every landlord in a fresh random order, in batches of eight, every batch sent before any is confirmed so they land within a slot or two of each other, and retries failed batches one landlord at a time. To count one holding in two wallets, someone would have to move it between the two wallets' batches in each of three independently shuffled passes.
+- **Count:** attempted every 15 minutes. Once 24 hours have passed since the last round began, it runs a refresher pass (the contract only lets a round begin after one), begins a round, then counts. While a round is open, each call first re-reads the landlords it still expects that are short of their three reads (30 minutes after their last read), then sends every count batch (six landlords each, shuffled) before confirming any, retries failed batches one landlord at a time, and finishes once all are counted or the four-hour timeout has passed. The contract leaves a landlord still short of reads pending rather than counting it as zero, so a round started early by someone else simply takes a little longer. It doesn't prune first: a landlord that no longer qualifies simply counts zero.
+- **Refresh:** called every 15 minutes, but proceeds only on a secret-seeded random draw, about `KEEPER_REFRESHES_PER_DAY` times a day. Each pass reads every landlord in a fresh random order, in batches of six, every batch sent before any is confirmed so they land within a slot or two of each other, and retries failed batches one landlord at a time. To count one holding in two wallets, someone would have to move it between the two wallets' batches in each of three independently shuffled passes.
 - **Prune:** every 6 hours. Reads landlords in parallel and removes those that revoked or fell below the minimum stake.
-- **Sweep:** every 15 minutes, as a fallback to the webhook.
+- **Collection:** use the separate durable collector/reviewer services; the old sweep route does not collect.
 
 Alternative without Vercel Pro: the GitHub Actions workflow in `docs/keeper-schedule.yml` does the same with `curl`. Copy it to `.github/workflows/` and add `KEEPER_URL` and `CRON_SECRET` as repository secrets. GitHub delays scheduled runs under load, so a paid scheduler is better for the refresh and count, and set `KEEPER_REFRESH_TICK_MINUTES` to the real cadence.
 
@@ -66,7 +66,7 @@ Do not point a webhook at `/api/keeper/sweep`; it no longer collects funds. A di
 
 ## Count cost
 
-There is no limit on landlords. Each count or refresh batch reads eight landlords (three accounts each) and fits a normal transaction, so no lookup table is needed. A count of N landlords takes about N/8 transactions, sent ten at a time.
+There is no limit on landlords. Each count or refresh batch reads six landlords (four accounts each, including consent) and fits a normal transaction, so no lookup table is needed. A count of N landlords takes about ceil(N/6) transactions, sent ten at a time.
 
 ## Runbook
 
@@ -89,4 +89,4 @@ The keeper key signs every keeper transaction and is the flagship's refresher, s
   2. The admin proposes the new key as `refresher` (72-hour timelock). Meanwhile the old key keeps running.
   3. When the change matures, apply it, replace `KEEPER_SECRET_KEY` in Vercel (Production, Sensitive) and redeploy.
   4. Move any remaining SOL and PUMP tips out of the old wallet.
-  - **If the old key may be compromised,** don't wait for the timelock: sign `resign_refresher` with it right away. Nobody counts until the new refresher is applied, and sweeps switch off three days after the last count, which is the safe direction. After the admin role is renounced, resigning is the only change the refresher key can make, so a leaked key can always be shut off by the team, and never replaced by anyone.
+  - **If the old key may be compromised,** don't wait for the timelock: sign `resign_refresher` with it right away. Nobody counts until the new refresher is applied, and the contract switches collection off immediately when the refresher resigns. After the admin role is renounced, resigning is the only change the refresher key can make, so a leaked key can always be shut off by the team, and never replaced by anyone.

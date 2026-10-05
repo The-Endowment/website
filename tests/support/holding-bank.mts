@@ -29,7 +29,7 @@ export async function holdingBank() {
     consent = read<Consent>("CollectionConsent", a.consent), landlord = read<Landlord>("Landlord", a.landlord);
   const receiptKey = await holdPda(inst, "receipt", owner, 0n);
   const receipt = read<Receipt>("PendingCollection", receiptKey);
-  let now = 1800000000, slot = 10, balance = 20n;
+  let now = 1800000000, slot = 10, balance = 20n, landlordPresent = true;
   const transactions: ParsedTransaction[] = [], wires: string[] = [], feed = new Map<string, Distribution>();
   const source: SourcePolicy = { mint: inst.dividendMint, rewardMint: inst.coinMint,
     tokenProgram: inst.dividendTokenProgram, authority: fixture.collector, source: fixture.pool };
@@ -42,7 +42,9 @@ export async function holdingBank() {
   policy.pending = 0n;
   const sync = () => {
     write("Config", inst.config, config); write("CollectionPolicy", a.policy, policy);
-    write("CollectionConsent", a.consent, consent); write("Landlord", a.landlord, landlord);
+    write("CollectionConsent", a.consent, consent);
+    if (landlordPresent) write("Landlord", a.landlord, landlord);
+    else delete records[a.landlord];
     token(a.dividend_account, balance); token(a.pending_vault, policy.pending);
     const clock = Buffer.alloc(40); clock.writeBigInt64LE(BigInt(now), 32);
     records.SysvarC1ock11111111111111111111111111111111 = {
@@ -96,6 +98,7 @@ export async function holdingBank() {
   sync();
   return { inst, owner, a, config, landlord, policy, consent, receipt, receiptKey, source, feed, rpc, wires, move,
     removePool: () => { delete records[config.pool]; },
+    removeLandlord: () => { landlordPresent = false; sync(); },
     time: () => now, advance: (seconds: number) => { now += seconds; slot++; sync(); },
     receipts: () => [{ address: receiptKey as Address, receipt }],
   };

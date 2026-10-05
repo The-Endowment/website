@@ -131,6 +131,9 @@ export function settlementPlan(
 ): "wait" | "refund" | "clear" {
   const now = BigInt(snapshot.now);
   if (
+    // Pruning can remove enrollment without disabling the separate consent.
+    // The contract makes that receipt refund-only, even during a hold or pause.
+    !snapshot.landlord ||
     !snapshot.consent?.enabled ||
     snapshot.consent.epoch !== receipt.consent_epoch ||
     snapshot.config.retired ||
