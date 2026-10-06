@@ -93,3 +93,42 @@ test("missing payout evidence refunds after the hold, even when the pool is unav
     assert.equal(bank.wires.length, 0);
   } finally { await rm(directory, { recursive: true }); }
 });
+
+for (const scenario of ["before hold", "after hold", "during pause", "deregistered"] as const) {
+  test(`pruned landlord refunds a positively reviewed contribution: ${scenario}`, async (t) => {
+    const bank = await holdingBank(), directory = await mkdtemp(join(tmpdir(), "hold-pruned-"));
+    t.mock.method(Date, "now", () => bank.time() * 1000);
+    const options: WorkerOptions = { rpc: bank.rpc, rpcUrl: "http://127.0.0.1", inst: bank.inst,
+      directory, submit: false, role: "reviewer", source: bank.source, feed: bank.feed };
+    const tick = () => walletTick(options, bank.owner, bank.receipts());
+    const assertPositiveReview = () => withJournal(join(directory, "wallets"), bank.a.dividend_account, async j => {
+      assert.equal((j.state as ReviewedLedger).reviews![bank.receiptKey].amount, "40");
+    });
+    try {
+      await walletTick(options, bank.owner, []);
+      bank.move("reward", 40n); bank.move("sweep", 40n);
+      const first = await tick();
+      assert.equal("outcomes" in first && first.outcomes[0].action, "wait");
+      await assertPositiveReview();
+      if (scenario === "after hold" || scenario === "during pause") bank.advance(86400);
+      if (scenario === "during pause") {
+        bank.config.pause_started_at = BigInt(bank.time());
+        bank.config.paused_until = BigInt(bank.time() + 86400);
+      }
+      // A registered holder continues to wait during the hold or a pause;
+      // an elapsed hold with valid evidence can otherwise be cleared.
+      const registered = await tick();
+      assert.equal("outcomes" in registered && registered.outcomes[0].action,
+        scenario === "after hold" ? "clear" : "wait");
+      bank.removeLandlord();
+      if (scenario === "deregistered") bank.consent.enabled = false;
+      const pruned = await tick();
+      assert.equal("outcomes" in pruned && pruned.outcomes[0].action, "refund");
+      assert.equal(bank.consent.enabled, scenario !== "deregistered");
+      // The positive decision survived the reset; lack of enrollment itself
+      // must override it, instead of waiting for evidence/consent to disappear.
+      await assertPositiveReview();
+      assert.equal(bank.wires.length, 0);
+    } finally { await rm(directory, { recursive: true }); }
+  });
+}

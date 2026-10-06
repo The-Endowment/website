@@ -1,6 +1,6 @@
 "use client";
 
-import { isSome, type Address, type Instruction } from "@solana/kit";
+import { type Address, type Instruction, type TransactionSigner } from "@solana/kit";
 import {
   useConnect,
   useConnectedWallet,
@@ -10,35 +10,25 @@ import {
 } from "@solana/kit-plugin-wallet/react";
 import { useAction } from "@solana/react";
 import {
-  fetchMaybeMint,
-  fetchMaybeToken,
   getApproveCheckedInstruction,
   getCreateAssociatedTokenIdempotentInstruction,
-  getRevokeInstruction,
   TOKEN_2022_PROGRAM_ADDRESS,
 } from "@solana-program/token-2022";
-import { useCallback, useEffect, useState } from "react";
+import { useEffect, useState } from "react";
 import { client } from "@/components/WalletClient";
 import {
-  ata,
   authorityPda,
   bpsToPercent,
-  decodeConfig,
-  decodeLandlord,
   deregisterLandlordIx,
-  fetchDecoded,
-  isFlagshipConfig,
-  landlordPda,
-  MIN_DELEGATION,
   registerLandlordIx,
   resyncBaselineIx,
-  type EndowmentConfig,
   type Instance,
-  type LandlordRecord,
 } from "@/lib/endowment";
 import { consentIx, settleIx } from "@/lib/holding/client";
 import type { Receipt } from "@/lib/holding/types";
 import { loadHolding, type Holding } from "@/lib/holding/wallet";
+import { HeldCollections } from "@/components/HeldCollections";
+import { loadDelegationStatus, revokeEndowmentApprovalIx, type DelegationStatus } from "@/lib/holding/delegation";
 import { flagshipInstance, formatTokens } from "@/lib/solana";
 import { DELEGATION_CLOSED_NOTE, DELEGATION_OPEN, links } from "@/lib/site";
 
@@ -46,77 +36,18 @@ import { DELEGATION_CLOSED_NOTE, DELEGATION_OPEN, links } from "@/lib/site";
  * The delegation is unlimited on purpose. The program counts a landlord, and
  * lets them register, only while at least half of u64::MAX is still approved
  * (`MIN_DELEGATION`), so a bounded approval would silently stop counting once
- * rewards used it up. What limits the endowment is the program, not the amount:
- * it can only move PUMP above the landlord's baseline, into its own vault.
+ * rewards used it up. Collection is constrained by the contract's baseline,
+ * allowance and receipt rules, with funds entering refundable holding first.
+ * Payout origin is checked off-chain; the approval itself proves no provenance.
  * We use ApproveChecked so the wallet shows the token and decimals being approved.
  */
 const UNLIMITED = BigInt("18446744073709551615");
 
-type Status = {
-  inst: Instance;
-  config: EndowmentConfig;
-  landlord: LandlordRecord | null;
-  dividendAccount: Address;
-  coinAccount: Address;
-  dividendBalance: bigint;
-  coinBalance: bigint;
-  coinSupply: bigint;
-  dividendDecimals: number;
-  delegate: Address | null;
-  /** Delegated to this endowment, in full (the program needs at least MIN_DELEGATION). */
-  delegatedToEndowment: boolean;
-  /** Delegated to this endowment, but for less than it needs (re-approve to fix). */
-  delegationTooSmall: boolean;
-  minStake: bigint;
-  /** This wallet's collection switch, and what is being held for it. */
-  holding: Holding;
-  now: number;
-};
-
-
-async function loadStatus(inst: Instance, owner: Address): Promise<Status> {
-  const dividendAccount = await ata(owner, inst.dividendMint, inst.dividendTokenProgram);
-  const coinAccount = await ata(owner, inst.coinMint, inst.coinTokenProgram);
-  const [config, landlord, dividend, coin, mint, dividendMint, holding] = await Promise.all([
-    fetchDecoded(client.rpc, inst.config, decodeConfig),
-    fetchDecoded(client.rpc, await landlordPda(inst.program, inst.config, owner), decodeLandlord),
-    fetchMaybeToken(client.rpc, dividendAccount),
-    fetchMaybeToken(client.rpc, coinAccount),
-    fetchMaybeMint(client.rpc, inst.coinMint),
-    fetchMaybeMint(client.rpc, inst.dividendMint),
-    loadHolding(client.rpc, inst, owner),
-  ]);
-  // Only ever offer opt-in to the real flagship (audit KW-09).
-  if (!config || !isFlagshipConfig(config)) throw new Error("The endowment isn't live yet.");
-  const authority = await authorityPda(inst.program, inst.config);
-  const delegate = dividend.exists && isSome(dividend.data.delegate) ? dividend.data.delegate.value : null;
-  const delegatedAmount = dividend.exists ? dividend.data.delegatedAmount : BigInt(0);
-  const ours = delegate === authority;
-  const coinSupply = mint.exists ? mint.data.supply : BigInt(0);
-  const minStake = (coinSupply * BigInt(config.params.minStakeBps) + BigInt(9_999)) / BigInt(10_000);
-  return {
-    inst,
-    config,
-    landlord,
-    dividendAccount,
-    coinAccount,
-    dividendBalance: dividend.exists ? dividend.data.amount : BigInt(0),
-    coinBalance: coin.exists ? coin.data.amount : BigInt(0),
-    coinSupply,
-    dividendDecimals: dividendMint.exists ? dividendMint.data.decimals : 6,
-    delegate,
-    delegatedToEndowment: ours && delegatedAmount >= MIN_DELEGATION,
-    delegationTooSmall: ours && delegatedAmount < MIN_DELEGATION,
-    minStake,
-    holding,
-    now: Math.floor(Date.now() / 1000),
-  };
-}
-
 /** Why opting in isn't possible right now, in plain words; null if it is. */
-function blocker(s: Status): string | null {
+function blocker(s: DelegationStatus, holding: Holding | null): string | null {
+  if (!DELEGATION_OPEN) return "New pledges and re-enrollment are currently closed. You can still leave or reclaim pending contributions.";
   if (s.config.retired || s.config.milestoneReached) return "The endowment has closed to new landlords.";
-  if (!s.holding.ready) return "Joining opens as soon as collection is switched on.";
+  if (!holding?.ready) return "Joining opens as soon as collection is switched on.";
   if (s.now < Number(s.config.pausedUntil)) {
     const until = new Date(Number(s.config.pausedUntil) * 1000).toLocaleString();
     return `Joining is paused until ${until}. You can still leave at any time.`;
@@ -127,32 +58,59 @@ function blocker(s: Status): string | null {
   return null;
 }
 
-function Connected({ inst }: { inst: Instance }) {
-  const connected = useConnectedWallet(client);
+function Connected({ inst, owner }: { inst: Instance; owner: Address }) {
   const { dispatch: disconnect } = useDisconnect(client);
-  const [status, setStatus] = useState<Status | null>(null);
+  const [status, setStatus] = useState<DelegationStatus | null>(null);
+  const [holding, setHolding] = useState<Holding | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
+  const [holdingError, setHoldingError] = useState<string | null>(null);
   const [agreed, setAgreed] = useState(false);
-  const owner = connected?.account.address as Address | undefined;
-
-  const refresh = useCallback(async () => {
-    if (!owner) return;
-    try {
-      const loaded = await loadStatus(inst, owner);
-      setStatus(loaded);
-      setLoadError(null);
-    } catch (e) {
-      setLoadError(e instanceof Error && e.message.includes("live") ? e.message : "Couldn't read your wallet from the network. Try again in a moment.");
-    }
-  }, [inst, owner]);
-
+  const [reload, setReload] = useState(0);
+  const [lastSignature, setLastSignature] = useState<string | null>(null);
+  const [actionError, setActionError] = useState<string | null>(null);
+  const refresh = () => {
+    setStatus(null); setHolding(null); setLoadError(null); setHoldingError(null);
+    setReload(n => n + 1);
+  };
   useEffect(() => {
-    refresh();
-  }, [refresh]);
+    let current = true;
+    // Receipt recovery must not depend on balances, mint reads, or enrollment.
+    loadDelegationStatus(client.rpc, inst, owner).then(value => {
+      if (current) setStatus(value);
+    }).catch(() => {
+      if (current) setLoadError("Couldn't load the balance dashboard. Recovery controls below are still available.");
+    });
+    loadHolding(client.rpc, inst, owner).then(value => {
+      if (current) setHolding(value);
+    }).catch(() => {
+      if (current) setHoldingError("Couldn't load held contributions. This does not mean there are none.");
+    });
+    return () => { current = false; };
+  }, [inst, owner, reload]);
 
-  const optIn = useAction(async (signal: AbortSignal) => {
-    if (!status) throw new Error("No status");
-    const signer = client.identity;
+  const perform = async (signal: AbortSignal, build: (signer: TransactionSigner) => Promise<Instruction[]>) => {
+    setActionError(null); setLastSignature(null);
+    let submitted = false;
+    try {
+      const signer = client.identity;
+      if (signer.address !== owner) throw new Error("Your connected wallet changed. Reconnect and try again.");
+      const instructions = await build(signer);
+      if (client.identity.address !== owner) throw new Error("Your connected wallet changed. Reconnect and try again.");
+      submitted = true;
+      const result = await client.sendTransaction(instructions, { abortSignal: signal });
+      setLastSignature(result.context.signature);
+      setAgreed(false);
+      refresh();
+      return result.context.signature;
+    } catch (e) {
+      setActionError(submitted ? "Couldn't confirm the action. Check your wallet activity and refresh before retrying."
+        : e instanceof Error ? e.message : "Couldn't prepare the action. Please try again.");
+      throw e;
+    }
+  };
+
+  const optIn = useAction((signal: AbortSignal) => perform(signal, async signer => {
+    if (!status || !holding || !agreed || blocker(status, holding)) throw new Error("Joining is unavailable. Refresh and review the pledge before signing.");
     const authority = await authorityPda(inst.program, inst.config);
     const ixs: Instruction[] = [
       getCreateAssociatedTokenIdempotentInstruction({
@@ -191,49 +149,32 @@ function Connected({ inst }: { inst: Instance }) {
     // Joining and rejoining both leave collection switched off; this switches it on,
     // with everything the account holds right now set aside as the landlord's.
     ixs.push(await consentIx(inst, signer, "enable_collection"));
-    const result = await client.sendTransaction(ixs, { abortSignal: signal });
-    await refresh();
-    return result.context.signature;
-  });
+    return ixs;
+  }));
 
-  const leave = useAction(async (signal: AbortSignal) => {
-    if (!status) throw new Error("No status");
-    const signer = client.identity;
+  const leave = useAction((signal: AbortSignal) => perform(signal, async signer => {
+    if (!status) throw new Error("Use the independent recovery controls below while the dashboard is unavailable.");
     const ixs: Instruction[] = [];
-    // Only this endowment's delegation: another app's or endowment's is left alone (audit KW-10).
+    // Recheck the approval instead of relying on the dashboard's older read.
     if (status.delegatedToEndowment || status.delegationTooSmall) {
-      ixs.push(
-        getRevokeInstruction(
-          { source: status.dividendAccount, owner: signer },
-          { programAddress: inst.dividendTokenProgram as typeof TOKEN_2022_PROGRAM_ADDRESS },
-        ),
-      );
+      ixs.push(await revokeEndowmentApprovalIx(client.rpc, inst, signer));
     }
     if (status.landlord) ixs.push(await deregisterLandlordIx(inst, signer));
-    const result = await client.sendTransaction(ixs, { abortSignal: signal });
-    await refresh();
-    return result.context.signature;
-  });
+    if (!ixs.length) throw new Error("No enrollment or approval to remove. Refresh your wallet.");
+    return ixs;
+  }));
 
-  // Take one held collection back. The contract returns it to this wallet's own PUMP
-  // account and pauses collection for the wallet until it is switched back on.
-  const takeBack = useAction(async (signal: AbortSignal, receipt: Receipt) => {
-    const ix = await settleIx(inst, receipt, client.identity, false);
-    const result = await client.sendTransaction([ix], { abortSignal: signal });
-    await refresh();
-    return result.context.signature;
-  });
-
-  if (!connected || !owner) return null;
-  const busy = optIn.isRunning || leave.isRunning || takeBack.isRunning;
-  const lastSignature = optIn.data ?? leave.data ?? takeBack.data;
-  const error = optIn.error ?? leave.error ?? takeBack.error;
+  const takeBack = useAction((signal: AbortSignal, receipt: Receipt) => perform(signal, async signer => {
+    if (receipt.owner !== owner) throw new Error("This contribution belongs to another wallet.");
+    return [await settleIx(inst, receipt, signer, false)];
+  }));
+  // These actions do not depend on a successful dashboard or receipt query.
+  const stop = useAction((signal: AbortSignal) => perform(signal, async signer => [await consentIx(inst, signer, "disable_collection")]));
+  const revoke = useAction((signal: AbortSignal) => perform(signal, async signer => [await revokeEndowmentApprovalIx(client.rpc, inst, signer)]));
+  const busy = optIn.isRunning || leave.isRunning || takeBack.isRunning || stop.isRunning || revoke.isRunning;
   const delegated = Boolean(status?.landlord && status.delegatedToEndowment);
-  const isIn = delegated && Boolean(status?.holding.consent?.enabled);
-  const receipts = status?.holding.receipts ?? [];
-  const held = receipts.reduce((sum, r) => sum + r.amount, BigInt(0));
-  const when = (t: bigint) => new Date(Number(t) * 1000).toLocaleString([], { dateStyle: "medium", timeStyle: "short" });
-  const reason = status ? blocker(status) : null;
+  const isIn = delegated && Boolean(holding?.consent?.enabled);
+  const reason = status ? blocker(status, holding) : null;
 
   let delegation = "Not delegated";
   if (status?.delegatedToEndowment) delegation = "Delegated to the endowment";
@@ -267,7 +208,7 @@ function Connected({ inst }: { inst: Instance }) {
         {status?.landlord && (
           <div className="fact">
             <dt>Collection</dt>
-            <dd>{isIn ? "On" : "Paused for this wallet"}</dd>
+            <dd>{holding ? isIn ? "On" : "Paused for this wallet" : "Not verified"}</dd>
           </div>
         )}
         {status?.landlord && (
@@ -276,54 +217,15 @@ function Connected({ inst }: { inst: Instance }) {
             <dd>{formatTokens(status.landlord.totalContributed)} PUMP</dd>
           </div>
         )}
-        {receipts.length > 0 && (
-          <div className="fact">
-            <dt>Being held</dt>
-            <dd>{formatTokens(held)} PUMP</dd>
-          </div>
-        )}
       </dl>
 
-      {receipts.length > 0 && (
-        <>
-          <p className="muted small">
-            Each collection is held for 24 hours before the endowment uses it. Until then you can take it back with one
-            click; that also pauses collection for this wallet until you switch it back on.
-          </p>
-          <div className="table-scroll">
-            <table className="table">
-              <thead>
-                <tr>
-                  <th>Collected</th>
-                  <th className="num">PUMP</th>
-                  <th>Held until</th>
-                  <th />
-                </tr>
-              </thead>
-              <tbody>
-                {receipts.map((r) => (
-                  <tr key={r.nonce.toString()} className="current">
-                    <td>{when(r.collected_at)}</td>
-                    <td className="num">{formatTokens(r.amount)}</td>
-                    <td>{when(r.release_at)}</td>
-                    <td className="num">
-                      <button type="button" className="link-button" disabled={busy} onClick={() => takeBack.dispatch(r)}>
-                        {takeBack.isRunning ? "Confirm in your wallet…" : "Take it back"}
-                      </button>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        </>
-      )}
+      <HeldCollections holding={holding} error={holdingError} busy={busy} onRetry={refresh} onReclaim={r => takeBack.dispatch(r)} />
 
       {status && !isIn && (
         <p className="muted small">
-          The $PENIS in the wallet you delegate counts toward the 30%, and the endowment collects the PUMP it earns: at
-          most what your $PENIS earned, never the PUMP the wallet holds today. Want to commit part of your
-          holdings? Keep the rest in another wallet.
+          You pledge 100% of eligible PUMP rewards from this wallet&rsquo;s $PENIS. Existing PUMP, purchases and other
+          coins&rsquo; rewards are excluded by the verifier. Mistakes are possible; review and refunds provide recovery
+          before spending. Want to pledge part of your holdings? Keep the rest in another wallet.
         </p>
       )}
       {status && status.delegate && !status.delegatedToEndowment && !status.delegationTooSmall && (
@@ -337,9 +239,10 @@ function Connected({ inst }: { inst: Instance }) {
         <label className="consent">
           <input type="checkbox" checked={agreed} onChange={(e) => setAgreed(e.target.checked)} disabled={busy} />
           <span>
-            I understand: the $PENIS in this wallet is committed, and the endowment collects the PUMP it
-            earned, never more. Each collection is held for 24 hours, and I can take it back in that time. The PUMP I
-            hold today stays mine, and I can leave at any time.
+            I approve unlimited PUMP access for this contract and pledge eligible $PENIS rewards. Collection relies on
+            off-chain verification, which can make mistakes. Funds are held for at least 24 hours; I can reclaim them
+            until release. Reviewers can return incorrect collections. An upgrade authority, if retained, can change
+            these protections. I can stop collection and revoke approval.
           </span>
         </label>
       )}
@@ -373,8 +276,22 @@ function Connected({ inst }: { inst: Instance }) {
         )}
       </div>
 
-      {loadError && <p className="muted small">{loadError}</p>}
-      {error != null && <p className="muted small">The transaction didn&rsquo;t go through. Nothing changed.</p>}
+      <details open={Boolean(loadError) || !DELEGATION_OPEN}>
+        <summary>Independent recovery controls</summary>
+        <p className="muted small">
+          Stop collection turns off your pledge and makes pending contributions refundable.
+          Revoke approval stops new transfers from your wallet; it does not return funds already held.
+          Both work without the balance dashboard. Revoking checks your PUMP account for this endowment&rsquo;s approval first.
+        </p>
+        <div className="actions">
+          <button type="button" className="button" disabled={busy} onClick={() => stop.dispatch()}>Stop collection</button>
+          <button type="button" className="button" disabled={busy} onClick={() => revoke.dispatch()}>Revoke PUMP approval</button>
+        </div>
+        <p className="muted small">You can also revoke this approval in your wallet&rsquo;s token approval settings.</p>
+      </details>
+      <button type="button" className="link-button" disabled={busy} onClick={refresh}>Refresh wallet</button>
+      {loadError && <p role="alert" className="muted small">{loadError}</p>}
+      {actionError && <p role="alert" className="muted small">{actionError}</p>}
       {lastSignature && (
         <p className="muted small">
           Done. <a href={`https://solscan.io/tx/${lastSignature}`}>View the transaction</a>
@@ -389,7 +306,7 @@ function Chooser({ inst }: { inst: Instance }) {
   const connected = useConnectedWallet(client);
   const { dispatch: connect, isRunning } = useConnect(client);
 
-  if (connected) return <Connected inst={inst} />;
+  if (connected) return <Connected key={`${inst.config}:${connected.account.address}`} inst={inst} owner={connected.account.address as Address} />;
   if (wallets.length === 0) {
     return (
       <div className="row-body">
@@ -399,7 +316,7 @@ function Chooser({ inst }: { inst: Instance }) {
   }
   return (
     <div className="row-body">
-      <p>Connect the wallet that holds your $PENIS.</p>
+      <p>Connect your wallet to manage a pledge or reclaim pending contributions.</p>
       <div className="actions">
         {wallets.map((wallet) => (
           <button key={wallet.name} type="button" className="button" disabled={isRunning} onClick={() => connect(wallet)}>
@@ -414,10 +331,12 @@ function Chooser({ inst }: { inst: Instance }) {
 export function DelegatePanel() {
   const [inst, setInst] = useState<Instance | null | undefined>(undefined);
   useEffect(() => {
-    flagshipInstance().then(setInst);
+    let current = true;
+    flagshipInstance().then(value => { if (current) setInst(value); }).catch(() => { if (current) setInst(null); });
+    return () => { current = false; };
   }, []);
 
-  if (!DELEGATION_OPEN || inst === null) {
+  if (inst === null) {
     return (
       <div className="row-body">
         <p>
@@ -427,8 +346,14 @@ export function DelegatePanel() {
     );
   }
   if (inst === undefined) return <div className="row-body muted">Loading…</div>;
+  return <ConfiguredDelegatePanel inst={inst} />;
+}
+
+/** The enrollment switch affects joining only; configured recovery stays usable. */
+export function ConfiguredDelegatePanel({ inst }: { inst: Instance }) {
   return (
     <WalletReadyGate client={client} fallback={<div className="row-body muted">Looking for wallets…</div>}>
+      {!DELEGATION_OPEN && <p className="muted small">New pledges and re-enrollment are closed. Existing holders can still stop collection, revoke approval and reclaim pending contributions.</p>}
       <Chooser inst={inst} />
     </WalletReadyGate>
   );

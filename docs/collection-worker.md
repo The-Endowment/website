@@ -1,6 +1,6 @@
 # Refundable collection worker (draft)
 
-This ports the worker parts of website PR #2 onto current `main`, against endowment PR #5 plus [PR #6](https://github.com/The-Endowment/endowment/pull/6). No homepage, page copy or wallet components are changed. The source tree deliberately leaves `HOLD_COLLECTION_RELEASED = false`; `--submit` is refused by the CLI. Placeholder flagship configuration is also refused. This is not a live deployment.
+The worker and wallet client target the merged endowment PR #5, including the corrections from [PR #6](https://github.com/The-Endowment/endowment/pull/6). The source tree deliberately leaves `HOLD_COLLECTION_RELEASED = false`; `--submit` is refused by the CLI. Placeholder flagship configuration is also refused. This is not a live deployment.
 
 ## Review map
 
@@ -27,7 +27,7 @@ A same-balance spend/rebuy can still happen between finalized observation and ex
 
 Each receipt has its own collection time, 24-hour minimum hold and 72-hour original refund deadline. A guardian pause beginning while it was live can extend the review deadline; a pause beginning at/after original expiry cannot reopen it. The worker uses the same rule as the corrected contract.
 
-Owner reclaim stops that consent. Reviewer, expiry and partial refunds leave enrollment unchanged and increase the on-chain baseline. The source-history classifier treats returned PUMP as an ordinary receipt, never a new payout. Old-registration refunds only reduce the current registration's contribution total when their durable nonce belongs to it. Collector or reviewer changes discard uncollected eligibility; reviewer replacement additionally drops prior reviewer decisions. Reviewer refunds do not require a readable Raydium pool.
+Owner reclaim stops that consent. Reviewer, expiry and partial refunds leave enrollment unchanged and increase the on-chain baseline. The source-history classifier treats returned PUMP as an ordinary receipt, never a new payout. Old-registration refunds only reduce the current registration's contribution total when their durable nonce belongs to it. Collector or reviewer changes discard uncollected eligibility; reviewer replacement additionally drops prior reviewer decisions. Reviewer refunds do not require a readable Raydium pool. A pruned/missing landlord record is immediately refund-only, even during the hold or a pause; a prior positive reviewer decision cannot override that rule.
 
 Daily/count/consent observation boundaries conservatively discard uncertain uncollected rewards. Already-established review decisions survive day/count changes under the same reviewer. Unknown receipts are refundable rather than automatically approved. No pending vault amount is spendable by buybacks until the contract releases it. Global `total_swept` is **net** of refunds; gross collected is `policy.pending + policy.released + policy.refunded`, which matters for monitoring.
 
@@ -65,12 +65,14 @@ HOLD_FIXTURE_PATH=/absolute/path/to/website/tests/fixtures/holding-chain.json ca
 
 Tests cover ABI bytes/privileges, packet size, history gaps, same-slot ambiguity, pending submission recovery, allowance expiration, pause deadlines and reviewer rotation. The workflow test uses real transaction signing, a local mock RPC, durable journals and Rust-generated account bytes. It simulates rewards, spending/rebuying, collection, partial clearance/refund and a later legitimate payout. Rust tests separately execute custody and settlement in LiteSVM. This is not a mainnet backtest or a funded end-to-end pilot.
 
-Full-repository `npm run lint` currently fails at the unchanged `components/DelegatePanel.tsx` effect on main. CI runs lint for this PR's worker/client scope, plus full type checking and build.
+The wallet reads all outstanding receipts with program/config/owner filters and validates their derived addresses, rather than assuming pending receipts occur among the newest nonces. Receipt loading is independent of the balance dashboard. A failed receipt read is displayed as an error, not zero held funds. As with the worker, these reads depend on a truthful RPC provider.
+
+`NEXT_PUBLIC_DELEGATION_OPEN` gates joining and re-enabling collection only. With a configured instance, existing holders retain recovery controls when enrollment is closed. Stop collection requires the owner signature and the consent record; independent approval revocation reads only the canonical PUMP account and refuses to touch a different app's approval. Reclaim remains available until release, even after 24 hours.
 
 ## Before opening contributions
 
 1. Integrate the contract fixes and regenerate/check this ABI. Account sizes and version numbers alone cannot distinguish an earlier build that used the same reserved bytes; verify the deployed program artifact. These changes do not migrate existing deployed accounts.
 2. Agree the PENIS-only attribution promise and source/feed trust with the project; source-wallet-only verification is not equivalent. Establish reward-total posting and audit its limits and units.
-3. Complete the consent/reclaim UI against this contract, with explicit enable/disable and independent holder recovery. The current main UI's registration alone leaves consent disabled. Keep delegation closed until this is complete. Earlier website PR #2 contains the prior UI prototype but is not a drop-in merge onto this ABI.
-4. Measure feed coverage, RPC cost, collection latency, storage growth and pending-receipt rent at the expected holder count; configure independent role custody, scheduling and alerts. Add the daily aggregate sanity check without treating it as wallet-level proof.
+3. Validate the consent/reclaim UI and independent recovery against the deployed contract. It now enables collection on joining and supports stopping, leaving, approval revocation and owner reclaim. Keep enrollment closed until the deployment/configuration and pilot are reviewed. Public consent must disclose unlimited PUMP approval, off-chain verification and retained upgrade authority; it must not promise that mistaken collections are impossible.
+4. Measure feed coverage, RPC cost, collection latency, storage growth and pending-receipt rent at the expected holder count; configure independent role custody, scheduling and alerts. Alert on confirmed excess collections, stalled refunds and reviewer outages; define how to stop further affected collection while preserving recovery. Distinguish errors from owner reclaims or conservative refunds caused by missing evidence. Add the daily aggregate sanity check without treating it as wallet-level proof.
 5. Run a small controlled pilot covering missed feed batches, outages, reclaim, refunds, pause/expiry, role rotation and buybacks. Then review the release gate/configuration. No key renunciation or immutable deployment is part of this PR.
