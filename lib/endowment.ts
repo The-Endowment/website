@@ -24,7 +24,7 @@ import { findAssociatedTokenPda, TOKEN_2022_PROGRAM_ADDRESS } from "@solana-prog
  * refuses any other value, even if an environment variable says otherwise.
  * Update this list only alongside a reviewed deploy.
  */
-export const KNOWN_PROGRAM_IDS = ["5VBiPX39xFTgwRaUbC3F3HCuVcM3VkTuYDkxwrhYby2u"] as const;
+export const KNOWN_PROGRAM_IDS = ["HhJJRPcwABobT6jCEusieGuZxv6XvSKKvU32XyXASVF6"] as const;
 
 function knownProgram(value: string | undefined): Address | null {
   if (!value) return null;
@@ -47,7 +47,7 @@ export const PENIS_MINT = address("JE3HT7SbCgXDQWV6xp3oiiAisDzq4HyZ8wyEVBDCs45Z"
  * until it is set, in both places, before deploy.
  */
 export const PROGRAM_FLAGSHIP_COIN_MINT = PENIS_MINT;
-export const PROGRAM_FLAGSHIP_CREATOR = address("11111111111111111111111111111111"); // SET BEFORE DEPLOY
+export const PROGRAM_FLAGSHIP_CREATOR = address("b5b42jEAoEj3WJnf2R29aPuKkkeUWmRLFsg1b8R3Fta");
 const PLACEHOLDER_CREATOR = "11111111111111111111111111111111";
 
 /**

@@ -6,7 +6,7 @@ if (!file)
     "Usage: node scripts/sync-holding-schema.mjs /path/to/target/idl/endowment.json [--check]",
   );
 const idl = JSON.parse(await readFile(file, "utf8"));
-if (idl.address !== "5VBiPX39xFTgwRaUbC3F3HCuVcM3VkTuYDkxwrhYby2u")
+if (idl.address !== "HhJJRPcwABobT6jCEusieGuZxv6XvSKKvU32XyXASVF6")
   throw new Error("Unexpected program");
 const names = new Set([
   "register_landlord",
