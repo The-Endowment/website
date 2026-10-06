@@ -29,11 +29,11 @@ const faqs = [
   },
   {
     q: "What is the endowment?",
-    a: "A contract that turns PUMP rewards into $PENIS and holds it forever. Holders pledge it the PUMP their $PENIS earns, while their $PENIS stays in their wallets. It buys $PENIS in small amounts and never sells. Its goal is 200 million $PENIS, a fifth of the supply.",
+    a: "A project to build a long-term reserve of 200 million $PENIS, a fifth of the supply. Holders can pledge eligible PUMP rewards while keeping their $PENIS. Reviewed contributions fund small purchases. The current contract has no principal withdrawal function; retained upgrade authority can change its rules. Participation is not open yet.",
   },
   {
     q: "Who is behind this site?",
-    a: "Holders. The site and the endowment are independent of the coin's creators, the code is open source, and every endowment action is posted to @PenisEndowment.",
+    a: "Holders. The site and the endowment are independent of the coin's creators. The code and on-chain transactions are public; @PenisEndowment shares project updates.",
   },
 ];
 
@@ -88,23 +88,24 @@ export default async function Home() {
       <section className="row" id="participate">
         <h2 className="row-label">The endowment</h2>
         <div className="row-body">
-          <h3 className="statement">The holder that can never pull out.</h3>
+          <h3 className="statement">Built to hold for the long term.</h3>
           <p>
-            The $PENIS Endowment turns PUMP rewards into $PENIS and holds it forever. Holders contribute in one of two
-            ways, and the contract has no way to sell.
+            The $PENIS Endowment uses reviewed PUMP contributions to build a long-term reserve. Participation is planned
+            through reward pledges and direct $PENIS donations. The current contract has no principal withdrawal function;
+            retained upgrade authority can change its rules.
           </p>
           <ol className="steps">
             <li>
               <h3>Pledge your rewards</h3>
-              <p>Your $PENIS stays in your wallet. The endowment collects the PUMP it earns, and never more.</p>
+              <p>Your $PENIS stays in your wallet. Pledge eligible PUMP rewards, with payout checks and a refundable hold before spending.</p>
             </li>
             <li>
               <h3>Or donate $PENIS</h3>
-              <p>Send $PENIS straight to the vault, once. It counts toward the goal the moment it lands.</p>
+              <p>A planned one-time gift to the vault. The net coins received count toward the goal. Donations are not open yet.</p>
             </li>
             <li>
               <h3>It compounds</h3>
-              <p>Every PUMP buys $PENIS in small amounts. At 200 million, the endowment has reached its goal.</p>
+              <p>Approved contributions fund small $PENIS purchases. Reward collection ends when the vault reaches 200 million coins.</p>
             </li>
           </ol>
           <div className="actions">

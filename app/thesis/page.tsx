@@ -68,9 +68,9 @@ export default function Thesis() {
           <h2 className="row-label">Why an endowment</h2>
           <div className="prose">
             <p>
-              The endowment turns the landlord&rsquo;s promise into code. It is a landlord that can never sell, funded
-              by landlords who choose to reinvest their rent. Its commitment isn&rsquo;t a matter of reputation.
-              It&rsquo;s built in.
+              The endowment puts long-term holding into code, funded by landlords who choose to reinvest their rent.
+              The current contract has no principal withdrawal function. Any retained upgrade authority can change
+              that code; its custody and any removal plan must be disclosed before participation opens.
             </p>
             <p className="muted small">
               Follow <a href={links.x}>@PenisEndowment</a> for launch news.

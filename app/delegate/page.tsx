@@ -16,7 +16,7 @@ export default function Delegate() {
         <div className="thesis-head">
           <h1 className="display h1">Delegate your rent.</h1>
           <p className="lede">
-            One signature pledges the PUMP your $PENIS earns, and never more. Your $PENIS stays in your wallet. Every
+            Pledge 100% of eligible PUMP rewards from your $PENIS. Your $PENIS stays in your wallet. Every
             collection is held for at least 24 hours, and you can take it back until it&rsquo;s released. Stop at any
             time. {DELEGATION_OPEN ? "" : DELEGATION_CLOSED_NOTE}
           </p>
@@ -36,15 +36,19 @@ export default function Delegate() {
           <h2 className="row-label">Your wallet is the commitment</h2>
           <div className="row-body">
             <p>
-              The $PENIS in the wallet you pledge counts toward the 30%, and the PUMP it earns goes to the endowment.
-              The contract caps every collection at what that $PENIS earned, and the collector checks each payout first,
-              so PUMP you held, bought or earned from other coins stays yours. Want to pledge part of your holdings? Keep
-              the rest in another wallet.
+              Eligible $PENIS in your pledged wallet counts toward the 30% participation threshold. The collector checks
+              PENIS payout records and wallet history to identify its PUMP rewards. Existing PUMP, purchases and rewards
+              from other coins are excluded from the pledge. Want to pledge part of your holdings? Keep the rest in another wallet.
             </p>
             <p>
-              Every collection then waits at least 24 hours. A second, independent reviewer checks it against the payout
-              records and returns anything that isn&rsquo;t a reward, and you can take it back yourself at any time until
-              it&rsquo;s released.
+              The contract limits collection using posted reward totals and counted holdings. That allowance limits the
+              amount; identifying eligible rewards also relies on off-chain data and services. Mistakes are possible:
+              spending rewards and buying PUMP just before collection can cause purchased PUMP to be collected temporarily.
+            </p>
+            <p>
+              Every collection waits at least 24 hours. A separate reviewer checks the payout records and wallet history
+              before approving release and can return incorrect amounts. You can take back any pending contribution
+              yourself until it is released, including after 24 hours.
             </p>
             <p className="muted small">
               We recommend a wallet that holds just the $PENIS you&rsquo;re committing, so your records stay simple.
@@ -59,22 +63,23 @@ export default function Delegate() {
               <li>
                 <strong>A delegation</strong>
                 <span>
-                  A standard token approval on your PUMP account only, shown in your wallet. The contract decides what it
-                  can collect: never more than your $PENIS earned. Your $PENIS and other tokens aren&rsquo;t included.
+                  An unlimited token approval on your PUMP account. The contract&rsquo;s rules restrict its use; the approval
+                  amount itself does not restrict transfers to dividends. Your $PENIS and other tokens are not approved.
                 </span>
               </li>
               <li>
                 <strong>A landlord record</strong>
                 <span>
-                  It notes the PUMP you hold when you join, which always stays yours, and tracks your contribution. If you
-                  leave and come back later, it resets to your balance at that moment.
+                  It records your PUMP balance when you join as a protected baseline and tracks contributions. Rejoining
+                  resets that baseline to the account&rsquo;s balance at that moment. Payout verification and review add further checks.
                 </span>
               </li>
               <li>
                 <strong>The collection switch</strong>
                 <span>
-                  Your signature turns collection on. Stopping collection, or taking back a collection, switches it off,
-                  and one more signature switches it back on.
+                  Your signature enables collection. Stopping collection or reclaiming a contribution from your current
+                  pledge disables it. Reclaiming an older pledge&rsquo;s contribution leaves a newer pledge unchanged.
+                  Re-enabling requires your signature and open enrollment.
                 </span>
               </li>
               <li>
@@ -85,10 +90,11 @@ export default function Delegate() {
                 </span>
               </li>
               <li>
-                <strong>During the test period</strong>
+                <strong>Who can change the rules</strong>
                 <span>
-                  The contract&rsquo;s upgrade key is held by the founders&rsquo; multisig until it is destroyed at the end
-                  of the public test period, and every upgrade is announced first. Leave at any time.
+                  A retained upgrade authority can change the contract, including collection and refund protections.
+                  The deployed program, authorities and operators must be disclosed before pledging opens. Key custody
+                  and any plan to remove authority still need agreement; removing the admin alone leaves other roles in place.
                 </span>
               </li>
             </ul>
@@ -112,15 +118,15 @@ export default function Delegate() {
               </li>
               <li>
                 <strong>The threshold</strong>
-                <span>Collection switches on at 30% of supply committed and pauses below 25%.</span>
+                <span>Participation activates at 30% of supply committed and pauses below 25%. Collection also requires consent and the other safety checks.</span>
               </li>
               <li>
                 <strong>Checked between counts</strong>
                 <span>
-                  Several times a day, at unannounced times, the endowment&rsquo;s refresher reads every landlord. A
+                  Several times a day, at unannounced times, the endowment&rsquo;s refresher reads landlords in batches. A
                   wallet counts after three of these checks since its last count, each finding it still delegated, and
-                  only for the lowest balance any of them saw, so $PENIS moved between wallets counts once. Every check is
-                  public on-chain.
+                  only for the lowest balance any of them saw. This reduces double counting when $PENIS moves between
+                  wallets, but depends on the refresher&rsquo;s timing. Every check is public on-chain.
                 </span>
               </li>
               <li>

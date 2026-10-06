@@ -17,10 +17,10 @@ export const metadata: Metadata = {
   alternates: { canonical: "/" },
   title: { default: "$PENIS: the coin that pays rent", template: "%s · $PENIS" },
   description:
-    "$PENIS pays its holders PUMP on every trade, and its holders are building an endowment that turns that rent into $PENIS held forever.",
+    "$PENIS pays holders PUMP rewards funded by transaction fees, and its holders are building a long-term $PENIS endowment.",
   openGraph: {
     title: "$PENIS: the coin that pays rent",
-    description: "$PENIS pays its holders PUMP on every trade. Its endowment turns that rent into $PENIS held forever.",
+    description: "$PENIS pays holders PUMP rewards funded by transaction fees. Its holders are building a long-term endowment.",
     type: "website",
   },
   twitter: { card: "summary", title: "$PENIS: the coin that pays rent" },
