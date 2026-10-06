@@ -17,7 +17,13 @@ export const metadata: Metadata = {
   alternates: { canonical: "/" },
   title: { default: "$PENIS: the coin that pays rent", template: "%s · $PENIS" },
   description:
-    "$PENIS pays its holders PUMP on every trade, and its largest holders are building an endowment that turns that rent into $PENIS held forever.",
+    "$PENIS pays its holders PUMP on every trade, and its holders are building an endowment that turns that rent into $PENIS held forever.",
+  openGraph: {
+    title: "$PENIS: the coin that pays rent",
+    description: "$PENIS pays its holders PUMP on every trade. Its endowment turns that rent into $PENIS held forever.",
+    type: "website",
+  },
+  twitter: { card: "summary", title: "$PENIS: the coin that pays rent" },
   // Pre-launch: keep it out of search until the landlords sign off.
   robots: { index: false, follow: false },
 };

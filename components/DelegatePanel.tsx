@@ -223,9 +223,9 @@ function Connected({ inst, owner }: { inst: Instance; owner: Address }) {
 
       {status && !isIn && (
         <p className="muted small">
-          You pledge 100% of eligible PUMP rewards from this wallet&rsquo;s $PENIS. Existing PUMP, purchases and other
-          coins&rsquo; rewards are excluded by the verifier. Mistakes are possible; review and refunds provide recovery
-          before spending. Want to pledge part of your holdings? Keep the rest in another wallet.
+          The $PENIS in this wallet counts toward the 30%, and the endowment collects the PUMP it earns: never more
+          than it earned, and never the PUMP the wallet holds today. Want to pledge part of your holdings? Keep the
+          rest in another wallet.
         </p>
       )}
       {status && status.delegate && !status.delegatedToEndowment && !status.delegationTooSmall && (
@@ -239,10 +239,9 @@ function Connected({ inst, owner }: { inst: Instance; owner: Address }) {
         <label className="consent">
           <input type="checkbox" checked={agreed} onChange={(e) => setAgreed(e.target.checked)} disabled={busy} />
           <span>
-            I approve unlimited PUMP access for this contract and pledge eligible $PENIS rewards. Collection relies on
-            off-chain verification, which can make mistakes. Funds are held for at least 24 hours; I can reclaim them
-            until release. Reviewers can return incorrect collections. An upgrade authority, if retained, can change
-            these protections. I can stop collection and revoke approval.
+            I understand: the $PENIS in this wallet is pledged, and the endowment collects the PUMP it earned, never
+            more. Each collection is held for at least 24 hours, and I can take it back until it&rsquo;s released. The
+            PUMP I hold today stays mine, and I can stop at any time.
           </span>
         </label>
       )}
@@ -279,9 +278,9 @@ function Connected({ inst, owner }: { inst: Instance; owner: Address }) {
       <details open={Boolean(loadError) || !DELEGATION_OPEN}>
         <summary>Independent recovery controls</summary>
         <p className="muted small">
-          Stop collection turns off your pledge and makes pending contributions refundable.
-          Revoke approval stops new transfers from your wallet; it does not return funds already held.
-          Both work without the balance dashboard. Revoking checks your PUMP account for this endowment&rsquo;s approval first.
+          Stop collection switches your pledge off, and anything being held can then be returned to you. Revoke
+          approval removes the endowment&rsquo;s access to your PUMP account. Both work even if the rest of this panel
+          can&rsquo;t load.
         </p>
         <div className="actions">
           <button type="button" className="button" disabled={busy} onClick={() => stop.dispatch()}>Stop collection</button>

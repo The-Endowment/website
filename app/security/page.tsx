@@ -27,7 +27,8 @@ export default function Security() {
           <p className="lede">
             The contract was put through an AI-assisted adversarial security review: three rounds, a final focused
             check, and a full launch rehearsal on a fork of mainnet. Every finding was resolved or is a documented
-            design choice.
+            design choice. The 24-hour hold added since then went through its own AI-assisted review in October 2026,
+            with every finding fixed before it was merged.
           </p>
           <div className="actions">
             <a href="/security-review.pdf" className="button button-primary" download>
