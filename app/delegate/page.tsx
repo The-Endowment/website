@@ -42,8 +42,9 @@ export default function Delegate() {
               the rest in another wallet.
             </p>
             <p>
-              Every collection then waits at least 24 hours. A second, independent reviewer checks it against the payout
-              records and returns anything that isn&rsquo;t a reward, and you can take it back yourself at any time until
+              Every collection then waits at least 24 hours while a second, independent reviewer checks it against the
+              payout records. If a collection ever includes PUMP that wasn&rsquo;t a reward (say you spent your rewards
+              and bought PUMP just before it), the reviewer returns it, and you can take it back yourself any time until
               it&rsquo;s released.
             </p>
             <p className="muted small">
@@ -59,8 +60,9 @@ export default function Delegate() {
               <li>
                 <strong>A delegation</strong>
                 <span>
-                  A standard token approval on your PUMP account only, shown in your wallet. The contract decides what it
-                  can collect: never more than your $PENIS earned. Your $PENIS and other tokens aren&rsquo;t included.
+                  An unlimited token approval on your PUMP account only, shown in your wallet. The contract decides what
+                  it can collect: never more than your $PENIS earned, and never the PUMP you held when you joined. Your
+                  $PENIS and other tokens aren&rsquo;t included.
                 </span>
               </li>
               <li>
@@ -87,8 +89,8 @@ export default function Delegate() {
               <li>
                 <strong>During the test period</strong>
                 <span>
-                  The contract&rsquo;s upgrade key is held by the founders&rsquo; multisig until it is destroyed at the end
-                  of the public test period, and every upgrade is announced first. Leave at any time.
+                  During the founders&rsquo; test the program can still be upgraded, and every upgrade is announced
+                  first. The plan is to then destroy the upgrade key. Leave at any time.
                 </span>
               </li>
             </ul>
@@ -112,15 +114,15 @@ export default function Delegate() {
               </li>
               <li>
                 <strong>The threshold</strong>
-                <span>Collection switches on at 30% of supply committed and pauses below 25%.</span>
+                <span>Collection switches on at 30% of supply committed and stays on unless it falls below 25%.</span>
               </li>
               <li>
                 <strong>Checked between counts</strong>
                 <span>
                   Several times a day, at unannounced times, the endowment&rsquo;s refresher reads every landlord. A
                   wallet counts after three of these checks since its last count, each finding it still delegated, and
-                  only for the lowest balance any of them saw, so $PENIS moved between wallets counts once. Every check is
-                  public on-chain.
+                  only for the lowest balance any of them saw, so $PENIS moved between wallets is very hard to count
+                  twice. Every check is public on-chain.
                 </span>
               </li>
               <li>

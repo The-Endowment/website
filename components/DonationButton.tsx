@@ -3,8 +3,8 @@
 export function DonationButton() {
   return (
     <button type="button" className="button" disabled
-      aria-label="Donate $PENIS (opens with the contract)"
-      title="Donations open with the contract.">
+      aria-label="Donate $PENIS (coming soon)"
+      title="Donations open after the contract is live.">
       Donate $PENIS
     </button>
   );

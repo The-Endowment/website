@@ -239,9 +239,10 @@ function Connected({ inst, owner }: { inst: Instance; owner: Address }) {
         <label className="consent">
           <input type="checkbox" checked={agreed} onChange={(e) => setAgreed(e.target.checked)} disabled={busy} />
           <span>
-            I understand: the $PENIS in this wallet is pledged, and the endowment collects the PUMP it earned, never
-            more. Each collection is held for at least 24 hours, and I can take it back until it&rsquo;s released. The
-            PUMP I hold today stays mine, and I can stop at any time.
+            I understand: this gives the endowment an unlimited approval on my PUMP account, and it collects the PUMP
+            my $PENIS earned, never more. Each collection is held for at least 24 hours, while a reviewer returns
+            anything that wasn&rsquo;t a reward and I can take it back myself. During the founders&rsquo; test the
+            program can still be upgraded. The PUMP I hold today stays mine, and I can stop at any time.
           </span>
         </label>
       )}
@@ -279,8 +280,8 @@ function Connected({ inst, owner }: { inst: Instance; owner: Address }) {
         <summary>Independent recovery controls</summary>
         <p className="muted small">
           Stop collection switches your pledge off, and anything being held can then be returned to you. Revoke
-          approval removes the endowment&rsquo;s access to your PUMP account. Both work even if the rest of this panel
-          can&rsquo;t load.
+          approval removes the endowment&rsquo;s access to your PUMP account; it doesn&rsquo;t touch what&rsquo;s already
+          held, which you take back separately. Both work even if the rest of this panel can&rsquo;t load.
         </p>
         <div className="actions">
           <button type="button" className="button" disabled={busy} onClick={() => stop.dispatch()}>Stop collection</button>

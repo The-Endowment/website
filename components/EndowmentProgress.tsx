@@ -8,15 +8,15 @@ import { COUNT_INTERVAL, goalPercent, percent, progressState, wholeTokens, type 
 
 const states = {
   loading: ["Checking progress", "Reading the latest totals from the chain."],
-  unconfigured: ["Opening soon", "Live totals appear here as soon as the contract goes live."],
-  unavailable: ["Totals refreshing", "The latest totals will appear here in a moment."],
-  uncounted: ["First count coming", "Pledged balances appear after the first daily count."],
-  raising: ["Building to 30%", "Collection switches on once pledged wallets hold 30% of all $PENIS."],
-  active: ["Collecting", "Pledged wallets hold over 30% of all $PENIS, so collection is on."],
-  stale: ["Next count due", "Collection resumes after the next daily count."],
-  paused: ["Paused", "Collection resumes when the pause lifts. Pledges shown are from the last count."],
-  retired: ["Closed to contributions", "The endowment’s vault and everything in it stay locked forever."],
-  complete: ["Goal reached", "200 million $PENIS, held forever. Collection has ended."],
+  unconfigured: ["Opening soon", "Live totals appear here once the endowment is live."],
+  unavailable: ["Totals unavailable", "Live totals show here again once they can be read from the chain."],
+  uncounted: ["First count pending", "Pledged balances appear after the first daily count."],
+  raising: ["Building to 30%", "Collection switches on when pledged wallets reach 30% of all $PENIS."],
+  active: ["Switched on", "Pledges reached 30%, so collection is switched on. It stays on unless pledges fall below 25%."],
+  stale: ["Count due", "Collection waits for the next daily count."],
+  paused: ["Paused", "Collection is paused for now. Pledges shown are from the last count."],
+  retired: ["Closed to pledges", "The endowment is no longer taking pledges. Its vault balance stays visible here."],
+  complete: ["Goal reached", "200 million $PENIS in the vault. Reward collection has ended."],
 } as const;
 
 function Stamp({ unix }: { unix: number }) {
@@ -68,7 +68,7 @@ export function EndowmentProgress({ detailPage = false }: { detailPage?: boolean
         <h2 id="endowment-heading">Help grow the $PENIS Endowment.</h2>
         <span className="progress-state" role="status">{states[state][0]}</span>
       </div>
-      <p className="progress-intro">Together, holders are building a reserve of 200 million $PENIS, held forever.</p>
+      <p className="progress-intro">Together, holders are building a reserve of 200 million $PENIS.</p>
       <div className="progress-grid">
         <article className={`progress-metric ${emphasis === "vault" ? "metric-focus" : ""}`}>
           <div className="metric-heading"><h3>$PENIS in the endowment</h3><span>Goal · 200M</span></div>
@@ -83,7 +83,7 @@ export function EndowmentProgress({ detailPage = false }: { detailPage?: boolean
           <p className="metric-value">{counted ? percent(snapshot.committedBps) : "—"}<span> / 30%</span></p>
           <Meter value={counted ? snapshot.committedBps / 100 : null} max={30} label="Pledged supply"
             text={counted ? `${percent(snapshot.committedBps)} of supply counted toward 30%` : ""} />
-          <p className="metric-note">Your $PENIS stays in your wallet. Collection starts at 30%, pauses below 25%, and resumes at 30%.</p>
+          <p className="metric-note">Your $PENIS stays in your wallet. Collection switches on at 30% and stays on unless pledges fall below 25%.</p>
           {counted ? <span className="source-link">{oldCount ? "Last count (over 24h old): " : "Counted: "}<Stamp unix={snapshot.lastCountAt} /></span> : <span className="source-link muted">Waiting for a verified participation count</span>}
         </article>
       </div>

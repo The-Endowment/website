@@ -29,11 +29,11 @@ const faqs = [
   },
   {
     q: "What is the endowment?",
-    a: "A contract that turns PUMP rewards into $PENIS and holds it forever. Holders pledge it the PUMP their $PENIS earns, while their $PENIS stays in their wallets. It buys $PENIS in small amounts and never sells. Its goal is 200 million $PENIS, a fifth of the supply.",
+    a: "A contract that turns PUMP rewards into $PENIS and holds it. Holders pledge it the PUMP their $PENIS earns, while their $PENIS stays in their wallets. It buys $PENIS in small amounts and has no function to sell. Its goal is 200 million $PENIS, a fifth of the supply.",
   },
   {
     q: "Who is behind this site?",
-    a: "Holders. The site and the endowment are independent of the coin's creators, the code is open source, and every endowment action is posted to @PenisEndowment.",
+    a: "Holders. The site and the endowment are independent of the coin's creators, the code is open source, and every endowment action is public on-chain. Follow @PenisEndowment for updates.",
   },
 ];
 
@@ -90,21 +90,21 @@ export default async function Home() {
         <div className="row-body">
           <h3 className="statement">The holder that can never pull out.</h3>
           <p>
-            The $PENIS Endowment turns PUMP rewards into $PENIS and holds it forever. Holders contribute in one of two
-            ways, and the contract has no way to sell.
+            The $PENIS Endowment turns PUMP rewards into $PENIS and holds it. Holders contribute in one of two ways,
+            and the contract has no function to sell.
           </p>
           <ol className="steps">
             <li>
               <h3>Pledge your rewards</h3>
-              <p>Your $PENIS stays in your wallet. The endowment collects the PUMP it earns, and never more.</p>
+              <p>Your $PENIS stays in your wallet. The endowment collects the PUMP it earns, and you can take any collection back during its 24-hour hold.</p>
             </li>
             <li>
               <h3>Or donate $PENIS</h3>
-              <p>Send $PENIS straight to the vault, once. It counts toward the goal the moment it lands.</p>
+              <p>Coming soon: send $PENIS straight to the vault, once. It counts toward the goal when it lands.</p>
             </li>
             <li>
               <h3>It compounds</h3>
-              <p>Every PUMP buys $PENIS in small amounts. At 200 million, the endowment has reached its goal.</p>
+              <p>Reviewed collections buy $PENIS in small amounts. At 200 million, the endowment has reached its goal.</p>
             </li>
           </ol>
           <div className="actions">

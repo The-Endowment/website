@@ -25,17 +25,17 @@ export default function Security() {
         <div className="thesis-head">
           <h1 className="display h1">Reviewed, then reviewed again.</h1>
           <p className="lede">
-            The contract was put through an AI-assisted adversarial security review: three rounds, a final focused
-            check, and a full launch rehearsal on a fork of mainnet. Every finding was resolved or is a documented
-            design choice. The 24-hour hold added since then went through its own AI-assisted review in October 2026,
-            with every finding fixed before it was merged.
+            The original contract was put through an AI-assisted adversarial security review: three rounds, a final
+            focused check, and a full launch rehearsal on a fork of mainnet. The 24-hour hold, reward cap and wallet
+            recovery added since then went through their own AI-assisted reviews in October 2026, with every finding
+            fixed before it was merged.
           </p>
           <div className="actions">
             <a href="/security-review.pdf" className="button button-primary" download>
-              Download the summary (PDF)
+              Original review (PDF)
             </a>
             <a href={commitUrl} className="button">
-              Reviewed code
+              Originally reviewed code
             </a>
           </div>
         </div>
@@ -83,6 +83,7 @@ export default function Security() {
         <section className="row">
           <h2 className="row-label">Results</h2>
           <div className="row-body">
+            <p>The original review, of commit {REVIEWED_COMMIT.slice(0, 7)}:</p>
             <div className="figures">
               <div className="figure">
                 <span className="figure-value">152</span>
@@ -111,13 +112,17 @@ export default function Security() {
                 ))}
               </tbody>
             </table>
+            <p>
+              The October reviews of the 24-hour hold, reward cap and wallet recovery found no way to take funds either.
+              Everything they did find was fixed before it was merged.
+            </p>
           </div>
         </section>
 
         <section className="row">
           <h2 className="row-label">Verified</h2>
           <div className="row-body">
-            <h3 className="statement">What the contract guarantees.</h3>
+            <h3 className="statement">What the current contract enforces.</h3>
             <ul className="plain-list">
               <li>
                 <strong>$PENIS never leaves</strong>
@@ -126,8 +131,16 @@ export default function Security() {
               <li>
                 <strong>Landlords keep what they hold</strong>
                 <span>
-                  The endowment can only take new PUMP above the balance a landlord held when joining, and nothing
-                  else in the wallet.
+                  The endowment can only take new PUMP above the balance a landlord held when joining, never more than
+                  its $PENIS earned, and nothing else in the wallet.
+                </span>
+              </li>
+              <li>
+                <strong>Held before it&rsquo;s used</strong>
+                <span>
+                  Every collection waits at least 24 hours in a separate account and needs a second reviewer&rsquo;s
+                  approval. Until it&rsquo;s released, it can only go to the vault or back to its landlord, who can take
+                  it back at any time.
                 </span>
               </li>
               <li>
@@ -136,23 +149,27 @@ export default function Security() {
               </li>
               <li>
                 <strong>Changes are slow and public</strong>
-                <span>Settings changes wait 72 hours and stay within hard limits written into the code.</span>
+                <span>
+                  Settings changes, including replacing the collection keys, wait 72 hours and stay within hard limits
+                  written into the code.
+                </span>
               </li>
               <li>
                 <strong>The pause is limited</strong>
                 <span>It lasts at most 7 days, can&rsquo;t be renewed back to back, and can&rsquo;t move funds.</span>
               </li>
               <li>
-                <strong>Safe tokens only</strong>
+                <strong>Token checks</strong>
                 <span>
-                  Endowments can only be created for coins nobody can mint more of, freeze, or take back from wallets.
+                  Collecting and buying stop on their own if either token&rsquo;s transfer hook or fees change, or an
+                  account is frozen.
                 </span>
               </li>
               <li>
                 <strong>Fair prices</strong>
                 <span>
                   Buys are priced against the pool&rsquo;s own recent average and sized to its depth, so a trade placed
-                  just before a buy can&rsquo;t push the price against the endowment.
+                  just before a buy can&rsquo;t push far against the endowment.
                 </span>
               </li>
             </ul>
@@ -164,10 +181,28 @@ export default function Security() {
           <div className="row-body">
             <ul className="plain-list">
               <li>
+                <strong>Spotting rewards</strong>
+                <span>
+                  PUMP from rewards and PUMP bought look the same on-chain, so the collector and reviewer check
+                  stonk.fun&rsquo;s payout records and each wallet&rsquo;s history. They use separate keys but share code
+                  and data sources. That is why the contract caps every collection at what the wallet&rsquo;s $PENIS
+                  earned, holds it for 24 hours, and lets the landlord take it back.
+                </span>
+              </li>
+              <li>
+                <strong>An unlimited approval</strong>
+                <span>
+                  Joining approves the endowment on your PUMP account for an unlimited amount, which keeps counting
+                  simple. What it can actually collect is set by the contract&rsquo;s cap and baseline, not by the
+                  approval. Your $PENIS and other tokens aren&rsquo;t included.
+                </span>
+              </li>
+              <li>
                 <strong>The refresher</strong>
                 <span>
-                  An automation key checks landlords before each daily count. It can&rsquo;t move funds, its role is
-                  shown publicly for every endowment, and it can resign at any time.
+                  An automation key checks landlords before each daily count and posts stonk.fun&rsquo;s reward total,
+                  which sets the cap. It can&rsquo;t move funds, the contract bounds what any post can credit, and it can
+                  resign at any time.
                 </span>
               </li>
               <li>
@@ -181,7 +216,8 @@ export default function Security() {
                 <strong>Outside token settings</strong>
                 <span>
                   PUMP and $PENIS each have a setting controlled by a third party. If either changes, the endowment
-                  pauses buying and sweeping on its own, and nothing is lost.
+                  pauses buying and collecting on its own. A PUMP transfer hook could also delay returning a held
+                  collection until it&rsquo;s switched off.
                 </span>
               </li>
             </ul>
@@ -196,9 +232,10 @@ export default function Security() {
               <a href={commitUrl}>
                 <span className="mono">{REVIEWED_COMMIT.slice(0, 7)}</span>
               </a>{" "}
-              of the <a href={links.github}>open-source contract</a>. The deployed program will be a verifiable build of
-              that code, so anyone can confirm what is running matches what was reviewed. Once the founders&rsquo; test is
-              complete, the upgrade key is destroyed and the code can never change.
+              of the <a href={links.github}>open-source contract</a>; the October reviews covered the changes since. The
+              deployed program will be a verifiable build of the code on GitHub, so anyone can confirm what is running.
+              During the founders&rsquo; test the program can still be upgraded, with every upgrade announced first. The
+              plan is to then destroy the upgrade key, so the code can&rsquo;t change.
             </p>
           </div>
         </section>

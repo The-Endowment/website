@@ -10,21 +10,21 @@ export const metadata: Metadata = {
   title: { absolute: "The $PENIS Endowment" },
   alternates: { canonical: "/endowment" },
   description:
-    "Permanent capital. Holders pledge their PUMP rewards or donate $PENIS, and the endowment holds $PENIS forever.",
+    "Permanent capital. Holders pledge their PUMP rewards, and the endowment turns them into $PENIS it holds.",
 };
 
 const faqs = [
   {
     q: "What does the endowment collect?",
-    a: "Only the PUMP your $PENIS earns. Each day the contract works out what every pledged wallet's $PENIS earned from stonk.fun's public reward total, and never collects more than that. The PUMP you held when you joined is never collected.",
+    a: "The PUMP your $PENIS earns. Each day the contract works out what every pledged wallet's $PENIS earned from stonk.fun's public reward total, and caps collection at that. The PUMP you held when you joined is never collected.",
   },
   {
     q: "What if I buy PUMP or hold other coins in the same wallet?",
-    a: "They stay yours. The contract caps every collection at what your $PENIS earned, and the collector checks each payout before it collects. Every collection is then held for 24 hours, while a second, independent reviewer checks it and returns anything that isn't a reward, and you can take it back yourself until it's released.",
+    a: "They stay yours. The collector checks each payout before it collects, and the contract caps every collection at what your $PENIS earned. If a collection ever does include PUMP you bought (say you spent your rewards and bought PUMP just before it), the reviewer returns it during the 24-hour hold, and you can take it back yourself until it's released.",
   },
   {
     q: "Can I donate $PENIS instead?",
-    a: "Yes. A donation sends $PENIS straight to the endowment's vault in one transfer, with no ongoing permission. It counts toward the 200 million goal as soon as it lands (after the coin's 3% transfer fee). Donations open with the contract.",
+    a: "Soon. A donation will send $PENIS straight to the endowment's vault in one transfer, with no ongoing permission. It counts toward the 200 million goal when it lands, after the coin's 3% transfer fee. Donations open after the contract is live.",
   },
   {
     q: "Can I commit only part of my $PENIS?",
@@ -36,7 +36,7 @@ const faqs = [
   },
   {
     q: "Can I take a collection back?",
-    a: "Yes. Every collection is held for at least 24 hours before the endowment uses it, and until it's released you can take it back with one click on the Delegate page. Taking one back also pauses collection for your wallet until you switch it back on.",
+    a: "Yes. Every collection is held for at least 24 hours before the endowment uses it, and until it's released you can take it back on the Delegate page. Taking one back also switches collection off for your wallet until you switch it back on.",
   },
   {
     q: "Can I leave?",
@@ -48,15 +48,15 @@ const faqs = [
   },
   {
     q: "Who runs it?",
-    a: "The contract. Automated keys count landlords, collect and review collections, and none of them can send funds anywhere but the vault or back to you. During a public test period the upgrade key is held by the founders' multisig, and every upgrade is announced first. After the test the key is destroyed, so no one can ever change the rules or move the endowment's $PENIS, including us.",
+    a: "The contract sets the rules. Automated keys do the daily work: one counts landlords and posts the reward total, one collects, and a separate one reviews each collection. None of them can send funds anywhere but the vault or back to you. During the founders' test the program can still be upgraded, and every upgrade is announced first. The plan is to destroy the upgrade key after the test, so the rules can't change.",
   },
   {
     q: "When does it open?",
-    a: "Collection switches on once pledged wallets hold 30% of all $PENIS, as measured by a daily on-chain count, and pauses below 25%. A wallet's $PENIS counts from its second count, once it has been held from one count to the next.",
+    a: "Pledging opens once the contract is deployed and checked, starting with a founders' test. Collection switches on when pledged wallets hold 30% of all $PENIS, as measured by a daily on-chain count, and stays on unless they fall below 25%. A wallet's $PENIS counts from its second count, once it has been held from one count to the next.",
   },
   {
     q: "Can I check the code?",
-    a: "Yes. The contract is open source on GitHub, and every rule on this page is enforced by it.",
+    a: "Yes. The contract is open source on GitHub and enforces the limits on this page. The collector and reviewer, which spot which PUMP is a reward, are open source too.",
   },
 ];
 
@@ -71,8 +71,8 @@ export default function Endowment() {
             <em>Firm</em> commitments.
           </h1>
           <p className="lede">
-            The $PENIS Endowment turns every PUMP it earns into more $PENIS, and holds it forever. It is the one holder
-            that can never pull out.
+            The $PENIS Endowment turns the PUMP it collects into more $PENIS, and holds it. It is built to be the one
+            holder that never pulls out.
           </p>
           <div className="actions">
             <DelegateButton label="Pledge your PUMP" primary />
@@ -93,20 +93,20 @@ export default function Endowment() {
           <h3 className="statement">Landlords pledge their rent. The endowment keeps the building.</h3>
           <p>
             Holders pledge the PUMP rewards their $PENIS earns, and keep their $PENIS. The endowment turns that income
-            into $PENIS it can never sell.
+            into $PENIS, and its contract has no function to sell it.
           </p>
           <ol className="steps">
             <li>
               <h3>Pledge</h3>
-              <p>One signature lets the endowment collect the PUMP your $PENIS earns, and nothing else.</p>
+              <p>One signature approves your PUMP account. The contract decides what it can collect: what your $PENIS earned.</p>
             </li>
             <li>
               <h3>Collect and hold</h3>
-              <p>It collects what your $PENIS earned, never more, and holds each collection for 24 hours. Until then it&rsquo;s yours to take back.</p>
+              <p>Each collection is held for at least 24 hours while a second reviewer checks it. Until it&rsquo;s released, it&rsquo;s yours to take back.</p>
             </li>
             <li>
               <h3>Compound</h3>
-              <p>Reviewed collections buy $PENIS in small amounts, and it stays in the vault forever.</p>
+              <p>Reviewed collections buy $PENIS in small amounts, and it stays in the vault.</p>
             </li>
           </ol>
         </div>
@@ -117,20 +117,21 @@ export default function Endowment() {
         <div className="row-body">
           <h3 className="statement">A one-time gift. A permanent holding.</h3>
           <p>
-            Rather pledge nothing ongoing? Donate $PENIS straight to the endowment&rsquo;s vault in a single transfer.
+            Rather pledge nothing ongoing? Soon you&rsquo;ll be able to donate $PENIS straight to the endowment&rsquo;s
+            vault in a single transfer.
           </p>
           <ul className="plain-list">
             <li>
               <strong>Straight to the vault</strong>
-              <span>Donated $PENIS goes into the endowment and stays there forever, like everything it buys.</span>
+              <span>Donated $PENIS goes into the endowment&rsquo;s vault, alongside everything it buys.</span>
             </li>
             <li>
-              <strong>Counts at once</strong>
-              <span>It counts toward the 200 million goal as soon as it lands, after the coin&rsquo;s 3% transfer fee.</span>
+              <strong>Counts when it lands</strong>
+              <span>It counts toward the 200 million goal when it arrives, after the coin&rsquo;s 3% transfer fee.</span>
             </li>
             <li>
               <strong>Clear before you sign</strong>
-              <span>The donation screen shows the amount you send, what arrives after the fee, and the vault&rsquo;s address.</span>
+              <span>The donation screen will show what you send, what arrives after the fee, and the vault&rsquo;s address.</span>
             </li>
           </ul>
           <div className="actions">
@@ -145,10 +146,10 @@ export default function Endowment() {
       <section className="row">
         <h2 className="row-label">How it spends</h2>
         <div className="row-body">
-          <h3 className="statement">Every PUMP buys $PENIS.</h3>
+          <h3 className="statement">Its PUMP buys $PENIS.</h3>
           <p>
             The endowment buys in small, spaced-out amounts with the PUMP it holds, each priced against the
-            pool&rsquo;s recent average. Nothing is sold, and nothing is spent on anything else.
+            pool&rsquo;s recent average, and pays a 0.25% tip to whoever runs the buy. Nothing is sold.
           </p>
         </div>
       </section>
@@ -159,25 +160,25 @@ export default function Endowment() {
           <h3 className="statement">Written into the contract, not promised in a thread.</h3>
           <ul className="plain-list">
             <li>
-              <strong>Only what your $PENIS earned</strong>
+              <strong>Capped at what your $PENIS earned</strong>
               <span>
-                The contract never collects more than your $PENIS earned, and never touches the PUMP you held when you
-                joined.
+                The contract never lets a collection exceed what your $PENIS earned, and never touches the PUMP you held
+                when you joined.
               </span>
             </li>
             <li>
               <strong>Held for 24 hours</strong>
               <span>
-                Every collection waits a day and is checked by a second, independent reviewer before it is used. Until
-                then you can take it back.
+                Every collection waits at least a day while a second, independent reviewer checks it against the
+                payout records and returns what it can&rsquo;t match. Until it&rsquo;s released, you can take it back.
               </span>
             </li>
             <li>
               <strong>Two places only</strong>
-              <span>A collection can only go to the endowment&rsquo;s vault or back to you. No key can send it anywhere else.</span>
+              <span>Held PUMP can only go to the endowment&rsquo;s vault or back to you.</span>
             </li>
             <li>
-              <strong>It never sells</strong>
+              <strong>No function to sell</strong>
               <span>The contract has no function that can sell or withdraw its $PENIS.</span>
             </li>
             <li>
@@ -186,24 +187,30 @@ export default function Endowment() {
             </li>
             <li>
               <strong>Rule changes are announced</strong>
-              <span>Any change to the limits, or retiring the endowment, waits 72 hours on-chain before it takes effect.</span>
+              <span>
+                Any change to the limits or the collection keys, or retiring the endowment, waits 72 hours on-chain
+                before it takes effect.
+              </span>
             </li>
             <li>
-              <strong>Locked forever</strong>
-              <span>After a public testing period, the upgrade key is destroyed. No one can change the rules.</span>
+              <strong>Upgrades are announced</strong>
+              <span>
+                During the founders&rsquo; test the program can still be upgraded, and every upgrade is announced first.
+                The plan is to then destroy the upgrade key, so the rules can&rsquo;t change.
+              </span>
             </li>
             <li>
               <strong>Everything is public</strong>
               <span>
-                The <a href={links.github}>source code</a> is open, and every collection and buy is posted to{" "}
-                <a href={links.x}>@PenisEndowment</a>.
+                The <a href={links.github}>source code</a> is open, and every collection and buy is on-chain. Follow{" "}
+                <a href={links.x}>@PenisEndowment</a> for updates.
               </span>
             </li>
             <li>
               <strong>Security reviewed</strong>
               <span>
-                Repeated rounds of AI-assisted adversarial review, the latest covering the 24-hour hold, and a live
-                launch rehearsal. <Link href="/security">See the review</Link>.
+                AI-assisted adversarial reviews: three rounds and a mainnet-fork rehearsal on the original contract, and
+                a further review of the 24-hour hold. <Link href="/security">See the reviews</Link>.
               </span>
             </li>
           </ul>
@@ -215,7 +222,7 @@ export default function Endowment() {
         <div className="row-body">
           <h3 className="statement">Opening soon.</h3>
           <p>
-            Pledging and donations open with the contract, starting with a public founders&rsquo; test. Follow{" "}
+            Pledging opens once the contract is deployed and checked, starting with a founders&rsquo; test. Follow{" "}
             <a href={links.x}>@PenisEndowment</a> for the announcement.
           </p>
         </div>
