@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { DelegateButton } from "./DelegateButton";
 import { COUNT_INTERVAL, goalPercent, percent, progressState, wholeTokens, type Progress } from "@/lib/progress";
+import { usdEstimate, type Values } from "@/lib/values";
 
 const states = {
   loading: ["Checking progress", "Reading the latest totals from the chain."],
@@ -39,6 +40,15 @@ function Meter({ value, max, label, text }: { value: number | null; max: number;
 export function EndowmentProgress() {
   const [data, setData] = useState<Progress | null>(null);
   const [now, setNow] = useState(0);
+  const [values, setValues] = useState<Values | null>(null);
+  useEffect(() => {
+    const controller = new AbortController();
+    fetch("/api/values", { signal: AbortSignal.any([controller.signal, AbortSignal.timeout(12_000)]) })
+      .then((response) => response.ok ? response.json() as Promise<Values> : null)
+      .then((result) => { if (result && !controller.signal.aborted) setValues(result); })
+      .catch(() => {});
+    return () => controller.abort();
+  }, []);
   useEffect(() => {
     const controller = new AbortController();
     async function refresh() {
@@ -73,6 +83,9 @@ export function EndowmentProgress() {
       </section>
     );
   }
+  const heldUsd = data?.kind === "ready" ? usdEstimate(data.held, values?.penisUsd ?? null) : null;
+  const collected = data?.kind === "ready" && data.collected !== "0" ? data.collected : null;
+  const collectedUsd = collected ? usdEstimate(collected, values?.pumpUsd ?? null) : null;
   const snapshot = data?.kind === "ready" && state !== "unavailable" ? data : null;
   const counted = snapshot && snapshot.lastCountAt > 0;
   const oldCount = counted && now - snapshot.lastCountAt > COUNT_INTERVAL;
@@ -87,6 +100,12 @@ export function EndowmentProgress() {
           <p className="metric-value">{snapshot ? wholeTokens(snapshot.held) : "—"}<span> / 200,000,000</span></p>
           <Meter value={snapshot ? goalPercent(snapshot.held) : null} max={100} label="Endowment goal"
             text={snapshot ? `${wholeTokens(snapshot.held)} PENIS held toward 200 million` : ""} />
+          {snapshot && heldUsd && <p className="metric-usd">≈ {heldUsd} at today&rsquo;s price</p>}
+          {snapshot && collected && (
+            <p className="metric-usd">
+              From {wholeTokens(collected)} PUMP pledged so far{collectedUsd ? ` (≈ ${collectedUsd})` : ""}
+            </p>
+          )}
           {snapshot
             ? <a className="source-link" href={`https://solscan.io/account/${snapshot.vault}`}>View the vault ↗</a>
             : <span className="source-link muted">No verified vault total</span>}

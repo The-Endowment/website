@@ -9,7 +9,7 @@ import { loadTsxModule } from "./support/tsx-render.mts";
 const now = 1_800_000_000;
 const snapshot: ProgressSnapshot = {
   kind: "ready", observedAt: now, slot: 1, config: "config", vault: "vault",
-  held: "50000000000000", committed: "280000000000000", committedBps: 2800,
+  held: "50000000000000", committed: "280000000000000", collected: "0", committedBps: 2800,
   lastCountAt: now, active: true, launchMode: "public", pausedUntil: 0, retired: false, milestoneReached: false,
 };
 

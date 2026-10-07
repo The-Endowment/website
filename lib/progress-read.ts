@@ -48,6 +48,7 @@ export async function readProgress(rpc: RpcCall, inst: Instance, creator: string
   return {
     kind: "ready", observedAt, slot: bank.context.slot, config: inst.config, vault,
     held: principal.amount.toString(), committed: config.last_committed.toString(),
+    collected: config.total_swept.toString(),
     committedBps: config.last_count_bps, lastCountAt, active: config.active,
     launchMode: founders ? "founders" : "public",
     pausedUntil: Number(config.paused_until), retired: config.retired,

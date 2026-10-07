@@ -4,6 +4,7 @@ import { EndowmentProgress } from "@/components/EndowmentProgress";
 import { DotLogo } from "@/components/Logo";
 import { links, PENIS_MINT } from "@/lib/site";
 import { loadHolderRewards } from "@/lib/stonk";
+import { readPrices, usdFromDollars } from "@/lib/values";
 
 // The holder-rewards figures come from stonk.fun's public API; refresh them at most every five minutes.
 export const revalidate = 300;
@@ -30,7 +31,8 @@ const faqs = [
 ];
 
 export default async function Home() {
-  const rewards = await loadHolderRewards();
+  const [rewards, prices] = await Promise.all([loadHolderRewards(), readPrices()]);
+  const rewardsUsd = rewards && prices.pumpUsd !== null ? usdFromDollars(rewards.distributed * prices.pumpUsd) : null;
   return (
     <div className="wrap">
       <section className="hero coin-hero">
@@ -54,7 +56,8 @@ export default async function Home() {
           </div>
           {rewards && (
             <p className="hero-stat">
-              <strong>{whole(rewards.distributed)} PUMP</strong> paid to {whole(rewards.holders)} holders so far.
+              <strong>{whole(rewards.distributed)} PUMP</strong>{rewardsUsd && ` (${rewardsUsd})`} paid to{" "}
+              {whole(rewards.holders)} holders so far.
             </p>
           )}
         </div>

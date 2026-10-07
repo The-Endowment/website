@@ -13,6 +13,8 @@ export type ProgressSnapshot = {
   /** Spendable PENIS in the principal vault, in base units. Excludes LP and pending PUMP. */
   held: string;
   committed: string;
+  /** PUMP collected from landlords, net of refunds (held and released), in base units. */
+  collected: string;
   committedBps: number;
   lastCountAt: number;
   active: boolean;
