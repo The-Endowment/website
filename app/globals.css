@@ -116,7 +116,9 @@ button.button-primary { background: var(--bone); }
 
 /* Report-style sections: a label column and a content column */
 .row { display: grid; grid-template-columns: 200px minmax(0, 1fr); gap: 48px; padding-top: clamp(64px, 7vw, 96px); padding-bottom: clamp(64px, 7vw, 96px); border-bottom: 1px solid var(--rule); }
-.row-label { margin: 0; padding-top: 14px; font-size: 15px; font-weight: 400; color: var(--stone); }
+/* Serif italic hung from a short gold rule, so the label belongs to its section. */
+.row-label { position: relative; margin: 6px 0 0; padding-top: 14px; font-family: var(--serif); font-style: italic; font-size: 26px; line-height: 1.15; font-weight: 400; color: var(--body); }
+.row-label::before { content: ""; position: absolute; top: 0; left: 0; width: 32px; height: 1px; background: var(--accent); }
 .row-body { display: flex; flex-direction: column; gap: 28px; max-width: 820px; }
 .row-body > p { color: var(--body); max-width: 38em; }
 
@@ -247,7 +249,7 @@ button.button-primary { background: var(--bone); }
   .hero { grid-template-columns: 1fr; gap: 40px; }
   .hero-art { order: -1; width: 180px; }
   .row { grid-template-columns: 1fr; gap: 16px; padding-top: 44px; padding-bottom: 44px; }
-  .row-label { padding-top: 0; }
+  .row-label { margin-top: 0; }
   .steps { grid-template-columns: 1fr; gap: 28px; }
   .figures { grid-template-columns: 1fr; }
 }
