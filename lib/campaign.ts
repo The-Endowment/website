@@ -13,6 +13,7 @@ import {
   REQUIRED_ATTESTATIONS,
 } from "@/lib/endowment";
 import { flagshipInstance, readRpc } from "@/lib/solana";
+import { collectionStatus } from "@/lib/collection-status";
 
 /** One landlord, as the campaign shows it. Amounts are base-unit strings (6 decimals). */
 export type CampaignLandlord = {
@@ -126,15 +127,16 @@ export async function loadCampaign(): Promise<Campaign> {
     contributed: record.totalContributed.toString(),
   }));
 
-  // Live once it has ever switched on: sweeps only run while active, and buys only spend swept PUMP.
-  const live =
-    config.active || config.totalSwept > BigInt(0) || config.totalCoinBought > BigInt(0);
+  // Live once anything has been collected or bought; `active` alone is true from the founders'
+  // test's creation and through a pause, so it isn't evidence of collection.
+  const on = collectionStatus(config, Math.floor(Date.now() / 1000)) === "on";
+  const live = on || config.totalSwept > BigInt(0) || config.totalCoinBought > BigInt(0);
   const { buys, lastDay } = live ? await recentBuys(rpc, inst.program, inst.config, config.pool) : { buys: [], lastDay: 0 };
 
   return {
     launched: true,
     stage: live ? "live" : "raising",
-    active: config.active,
+    active: on,
     activateBps: config.params.activateBps,
     deactivateBps: config.params.deactivateBps,
     committedBps: config.lastCountBps,

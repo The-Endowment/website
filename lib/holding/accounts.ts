@@ -1,6 +1,30 @@
 // Generated from the reviewed Anchor IDL; run scripts/sync-holding-schema.mjs.
 import type { Address } from "@solana/kit";
 
+export type CreateParams = {
+  admin: Address;
+  guardian: Address;
+  params: Params;
+  contribution_cap: bigint;
+};
+
+export type Params = {
+  max_buy_per_tx: bigint;
+  max_buy_per_day: bigint;
+  max_price_impact_bps: number;
+  max_twap_deviation_bps: number;
+  min_buy_amount: bigint;
+  min_buy_interval_secs: bigint;
+  tip_bps: number;
+  buy_bps: number;
+  activate_bps: number;
+  deactivate_bps: number;
+  min_stake_bps: number;
+  refresher: Address;
+  allowance_margin_bps: number;
+  max_rewards_per_day: bigint;
+};
+
 export type Config = {
   version: number;
   creator: Address;
@@ -46,23 +70,6 @@ export type Config = {
   pause_started_at: bigint;
   reward_credit_ok: boolean;
   reserved: number[];
-};
-
-export type Params = {
-  max_buy_per_tx: bigint;
-  max_buy_per_day: bigint;
-  max_price_impact_bps: number;
-  max_twap_deviation_bps: number;
-  min_buy_amount: bigint;
-  min_buy_interval_secs: bigint;
-  tip_bps: number;
-  buy_bps: number;
-  activate_bps: number;
-  deactivate_bps: number;
-  min_stake_bps: number;
-  refresher: Address;
-  allowance_margin_bps: number;
-  max_rewards_per_day: bigint;
 };
 
 export type PendingParams = {

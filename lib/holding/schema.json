@@ -53,6 +53,92 @@
     ]
   },
   "types": {
+    "CreateParams": {
+      "kind": "struct",
+      "fields": [
+        {
+          "name": "admin",
+          "type": "pubkey"
+        },
+        {
+          "name": "guardian",
+          "type": "pubkey"
+        },
+        {
+          "name": "params",
+          "type": {
+            "defined": {
+              "name": "Params"
+            }
+          }
+        },
+        {
+          "name": "contribution_cap",
+          "type": "u64"
+        }
+      ]
+    },
+    "Params": {
+      "kind": "struct",
+      "fields": [
+        {
+          "name": "max_buy_per_tx",
+          "type": "u64"
+        },
+        {
+          "name": "max_buy_per_day",
+          "type": "u64"
+        },
+        {
+          "name": "max_price_impact_bps",
+          "type": "u16"
+        },
+        {
+          "name": "max_twap_deviation_bps",
+          "type": "u16"
+        },
+        {
+          "name": "min_buy_amount",
+          "type": "u64"
+        },
+        {
+          "name": "min_buy_interval_secs",
+          "type": "i64"
+        },
+        {
+          "name": "tip_bps",
+          "type": "u16"
+        },
+        {
+          "name": "buy_bps",
+          "type": "u16"
+        },
+        {
+          "name": "activate_bps",
+          "type": "u16"
+        },
+        {
+          "name": "deactivate_bps",
+          "type": "u16"
+        },
+        {
+          "name": "min_stake_bps",
+          "type": "u16"
+        },
+        {
+          "name": "refresher",
+          "type": "pubkey"
+        },
+        {
+          "name": "allowance_margin_bps",
+          "type": "u16"
+        },
+        {
+          "name": "max_rewards_per_day",
+          "type": "u64"
+        }
+      ]
+    },
     "Config": {
       "kind": "struct",
       "fields": [
@@ -257,67 +343,6 @@
               11
             ]
           }
-        }
-      ]
-    },
-    "Params": {
-      "kind": "struct",
-      "fields": [
-        {
-          "name": "max_buy_per_tx",
-          "type": "u64"
-        },
-        {
-          "name": "max_buy_per_day",
-          "type": "u64"
-        },
-        {
-          "name": "max_price_impact_bps",
-          "type": "u16"
-        },
-        {
-          "name": "max_twap_deviation_bps",
-          "type": "u16"
-        },
-        {
-          "name": "min_buy_amount",
-          "type": "u64"
-        },
-        {
-          "name": "min_buy_interval_secs",
-          "type": "i64"
-        },
-        {
-          "name": "tip_bps",
-          "type": "u16"
-        },
-        {
-          "name": "buy_bps",
-          "type": "u16"
-        },
-        {
-          "name": "activate_bps",
-          "type": "u16"
-        },
-        {
-          "name": "deactivate_bps",
-          "type": "u16"
-        },
-        {
-          "name": "min_stake_bps",
-          "type": "u16"
-        },
-        {
-          "name": "refresher",
-          "type": "pubkey"
-        },
-        {
-          "name": "allowance_margin_bps",
-          "type": "u16"
-        },
-        {
-          "name": "max_rewards_per_day",
-          "type": "u64"
         }
       ]
     },
@@ -667,6 +692,52 @@
     }
   },
   "instructions": {
+    "accept_admin": {
+      "discriminator": [
+        112,
+        42,
+        45,
+        90,
+        116,
+        181,
+        13,
+        170
+      ],
+      "accounts": [
+        {
+          "name": "new_admin",
+          "signer": true
+        },
+        {
+          "name": "config",
+          "writable": true
+        }
+      ],
+      "args": []
+    },
+    "apply_params": {
+      "discriminator": [
+        188,
+        203,
+        86,
+        124,
+        178,
+        34,
+        133,
+        116
+      ],
+      "accounts": [
+        {
+          "name": "caller",
+          "signer": true
+        },
+        {
+          "name": "config",
+          "writable": true
+        }
+      ],
+      "args": []
+    },
     "begin_count": {
       "discriminator": [
         119,
@@ -780,6 +851,71 @@
         {
           "name": "min_out",
           "type": "u64"
+        }
+      ]
+    },
+    "create_endowment": {
+      "discriminator": [
+        209,
+        8,
+        20,
+        239,
+        248,
+        143,
+        66,
+        174
+      ],
+      "accounts": [
+        {
+          "name": "creator",
+          "writable": true,
+          "signer": true
+        },
+        {
+          "name": "config",
+          "writable": true
+        },
+        {
+          "name": "authority"
+        },
+        {
+          "name": "coin_mint"
+        },
+        {
+          "name": "dividend_mint"
+        },
+        {
+          "name": "dividend_vault",
+          "writable": true
+        },
+        {
+          "name": "coin_vault",
+          "writable": true
+        },
+        {
+          "name": "pool_state"
+        },
+        {
+          "name": "coin_token_program"
+        },
+        {
+          "name": "dividend_token_program"
+        },
+        {
+          "name": "associated_token_program"
+        },
+        {
+          "name": "system_program"
+        }
+      ],
+      "args": [
+        {
+          "name": "params",
+          "type": {
+            "defined": {
+              "name": "CreateParams"
+            }
+          }
         }
       ]
     },
@@ -973,6 +1109,66 @@
         {
           "name": "total",
           "type": "u64"
+        }
+      ]
+    },
+    "propose_admin": {
+      "discriminator": [
+        121,
+        214,
+        199,
+        212,
+        87,
+        39,
+        117,
+        234
+      ],
+      "accounts": [
+        {
+          "name": "admin",
+          "signer": true
+        },
+        {
+          "name": "config",
+          "writable": true
+        }
+      ],
+      "args": [
+        {
+          "name": "new_admin",
+          "type": "pubkey"
+        }
+      ]
+    },
+    "propose_params": {
+      "discriminator": [
+        94,
+        141,
+        220,
+        182,
+        171,
+        53,
+        52,
+        182
+      ],
+      "accounts": [
+        {
+          "name": "admin",
+          "signer": true
+        },
+        {
+          "name": "config",
+          "writable": true
+        }
+      ],
+      "args": [
+        {
+          "name": "params",
+          "type": {
+            "defined": {
+              "name": "Params"
+            }
+          }
         }
       ]
     },

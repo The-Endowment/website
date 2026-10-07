@@ -24,8 +24,15 @@ const names = new Set([
   "finish_count",
   "prune_landlord",
   "post_reward_total",
+  // Launch and administration (scripts/launch.mts).
+  "create_endowment",
+  "propose_params",
+  "apply_params",
+  "propose_admin",
+  "accept_admin",
 ]);
 const roots = [
+  "CreateParams",
   "Config",
   "Landlord",
   "CollectionPolicy",
