@@ -1,7 +1,6 @@
 import Link from "next/link";
-import { DelegateButton } from "@/components/DelegateButton";
 import { SolidLogo } from "@/components/Logo";
-import { links } from "@/lib/site";
+import { DELEGATION_OPEN, links } from "@/lib/site";
 
 export function SiteHeader() {
   return (
@@ -12,10 +11,13 @@ export function SiteHeader() {
           <span>$PENIS</span>
         </Link>
         <nav aria-label="Primary" className="nav">
-          <Link href="/#endowment" className="nav-endowment">Endowment</Link>
+          <Link href="/endowment" className="nav-endowment">Endowment</Link>
           <Link href="/thesis">Thesis</Link>
           <Link href="/#coin">The coin</Link>
-          <DelegateButton label="Pledge rewards" />
+          {/* Always reachable: a holder can take a held collection back here even while pledging is closed. */}
+          <Link href="/delegate" className={DELEGATION_OPEN ? "button" : undefined}>
+            {DELEGATION_OPEN ? "Pledge rewards" : "Your pledge"}
+          </Link>
         </nav>
       </div>
     </header>

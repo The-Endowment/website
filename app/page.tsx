@@ -13,27 +13,19 @@ const whole = (n: number) => Math.round(n).toLocaleString("en-US");
 const faqs = [
   {
     q: "What is $PENIS?",
-    a: "A meme coin on Solana, launched on stonk.fun. A 3% fee on every buy, sell and transfer is paid out to holders in PUMP. It is the oldest joke there is, with the best possible ticker.",
-  },
-  {
-    q: "What is PUMP?",
-    a: "The token of pump.fun. It's what $PENIS pays its holders, and what the endowment runs on.",
+    a: "A meme coin on Solana, launched on stonk.fun. It is the oldest joke there is, with the best possible ticker, and it pays its holders rent.",
   },
   {
     q: "How do I earn PUMP?",
-    a: "Hold $PENIS in your wallet. Payouts arrive automatically, with nothing to claim, and each holder's share follows how much $PENIS they hold.",
+    a: "Hold $PENIS. A 3% fee on every buy, sell and transfer is paid out to holders in PUMP, pump.fun's token, automatically and with nothing to claim. Each holder's share follows how much $PENIS they hold.",
   },
   {
     q: "Do I have to join the endowment?",
-    a: "No. Holding $PENIS is all it takes to earn PUMP. The endowment is an extra: holders who want to can pledge their PUMP rewards or donate $PENIS to it.",
-  },
-  {
-    q: "What is the endowment?",
-    a: "A contract that turns PUMP rewards into $PENIS and holds it. Holders pledge it the PUMP their $PENIS earns, while their $PENIS stays in their wallets. It buys $PENIS in small amounts and has no function to sell. Its goal is 200 million $PENIS, a fifth of the supply.",
+    a: "No. Holding $PENIS is all it takes to earn PUMP. The endowment is an extra for holders who want to pledge their rewards.",
   },
   {
     q: "Who is behind this site?",
-    a: "Holders. The site and the endowment are independent of the coin's creators, the code is open source, and every endowment action is public on-chain. Follow @PenisEndowment for updates.",
+    a: "Holders. The site and the endowment are independent of the coin's creators, the code is open source, and every endowment action is public on-chain.",
   },
 ];
 
@@ -49,93 +41,42 @@ export default async function Home() {
             <em>pays</em> rent.
           </h1>
           <p className="lede">
-            $PENIS is a meme coin on stonk.fun. A 3% fee on every buy, sell and transfer is paid to holders in PUMP. Its
-            holders are building an endowment to keep it well-endowed.
+            $PENIS is a meme coin on stonk.fun. A 3% fee on every trade is paid to holders in PUMP, and its holders are
+            building an endowment to keep it well-endowed.
           </p>
           <div className="actions">
             <a href={links.stonkfun} className="button button-primary">
               Get $PENIS
             </a>
-            <Link href="#endowment" className="button">
+            <Link href="/endowment" className="button">
               The endowment
             </Link>
           </div>
+          {rewards && (
+            <p className="hero-stat">
+              <strong>{whole(rewards.distributed)} PUMP</strong> paid to {whole(rewards.holders)} holders so far.
+            </p>
+          )}
         </div>
         <DotLogo className="hero-art" label="$PENIS, a temple drawn in dots" />
       </section>
 
       <EndowmentProgress />
 
-      {rewards && (
-        <section className="row">
-          <h2 className="row-label">Paid to holders</h2>
-          <div className="row-body">
-            <div className="figures">
-              <div className="figure">
-                <span className="figure-value">{whole(rewards.distributed)}</span>
-                <span className="figure-label">PUMP paid to $PENIS holders</span>
-              </div>
-              <div className="figure">
-                <span className="figure-value">{whole(rewards.holders)}</span>
-                <span className="figure-label">holders paid</span>
-              </div>
-            </div>
-            <p className="muted small">Live from <a href={links.stonkfun}>stonk.fun</a>&rsquo;s public reward totals.</p>
-          </div>
-        </section>
-      )}
-
-      <section className="row" id="participate">
+      <section className="row">
         <h2 className="row-label">The endowment</h2>
         <div className="row-body">
           <h3 className="statement">The holder that can never pull out.</h3>
           <p>
-            The $PENIS Endowment turns PUMP rewards into $PENIS and holds it. Holders contribute in one of two ways,
-            and the contract has no function to sell.
+            Holders pledge the PUMP their $PENIS earns, and the endowment turns it into $PENIS it holds, with no
+            function to sell. Your $PENIS stays in your wallet, and you can take any collection back during its 24-hour
+            hold.
           </p>
-          <ol className="steps">
-            <li>
-              <h3>Pledge your rewards</h3>
-              <p>Your $PENIS stays in your wallet. The endowment collects the PUMP it earns, and you can take any collection back during its 24-hour hold.</p>
-            </li>
-            <li>
-              <h3>Or donate $PENIS</h3>
-              <p>Coming soon: send $PENIS straight to the vault, once. It counts toward the goal when it lands.</p>
-            </li>
-            <li>
-              <h3>It compounds</h3>
-              <p>Reviewed collections buy $PENIS in small amounts. At 200 million, the endowment has reached its goal.</p>
-            </li>
-          </ol>
           <div className="actions">
             <Link href="/endowment" className="button">
               How the endowment works
             </Link>
-            <Link href="/security" className="button">
-              Security
-            </Link>
           </div>
-        </div>
-      </section>
-
-      <section id="rent" className="row">
-        <h2 className="row-label">How $PENIS pays</h2>
-        <div className="row-body">
-          <h3 className="statement">Every trade pays rent.</h3>
-          <ul className="plain-list">
-            <li>
-              <strong>A fee on every trade</strong>
-              <span>Each $PENIS buy, sell and transfer carries a 3% fee, and that fee goes to holders.</span>
-            </li>
-            <li>
-              <strong>Paid in PUMP</strong>
-              <span>stonk.fun pays it out in PUMP, straight to holders&rsquo; wallets, with nothing to claim.</span>
-            </li>
-            <li>
-              <strong>In proportion</strong>
-              <span>Each holder&rsquo;s share follows how much $PENIS they hold. More $PENIS, more rent.</span>
-            </li>
-          </ul>
         </div>
       </section>
 
@@ -164,8 +105,8 @@ export default async function Home() {
               <dd>About 1 billion. Minting and freezing are permanently disabled.</dd>
             </div>
             <div className="fact">
-              <dt>Rewards</dt>
-              <dd>A 3% fee on every transfer, paid to holders in PUMP</dd>
+              <dt>Rent</dt>
+              <dd>A 3% fee on every buy, sell and transfer, paid to holders in PUMP in proportion to their $PENIS</dd>
             </div>
             <div className="fact">
               <dt>Main market</dt>
@@ -182,7 +123,6 @@ export default async function Home() {
               Follow @PenisEndowment
             </a>
           </div>
-          <p className="muted small">Always check the mint address above before you buy.</p>
         </div>
       </section>
 
@@ -198,7 +138,7 @@ export default async function Home() {
             ))}
           </div>
           <p className="muted small">
-            Questions about delegating? See the <Link href="/endowment#questions">endowment&rsquo;s questions</Link>.
+            About pledging? See the <Link href="/endowment#questions">endowment&rsquo;s questions</Link>.
           </p>
         </div>
       </section>

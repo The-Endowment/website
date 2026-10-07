@@ -1,14 +1,12 @@
 "use client";
 
-import Link from "next/link";
 import { useEffect, useState } from "react";
 import { DelegateButton } from "./DelegateButton";
-import { DonationButton } from "./DonationButton";
 import { COUNT_INTERVAL, goalPercent, percent, progressState, wholeTokens, type Progress } from "@/lib/progress";
 
 const states = {
   loading: ["Checking progress", "Reading the latest totals from the chain."],
-  unconfigured: ["Opening soon", "Live totals appear here once the endowment is live."],
+  unconfigured: ["Opening soon", "Goal: 200 million $PENIS in the vault. Collection switches on when pledged wallets reach 30% of all $PENIS."],
   unavailable: ["Totals unavailable", "Live totals show here again once they can be read from the chain."],
   uncounted: ["First count pending", "Pledged balances appear after the first daily count."],
   raising: ["Building to 30%", "Collection switches on when pledged wallets reach 30% of all $PENIS."],
@@ -35,7 +33,9 @@ function Meter({ value, max, label, text }: { value: number | null; max: number;
   );
 }
 
-export function EndowmentProgress({ detailPage = false }: { detailPage?: boolean }) {
+/** The two live totals: $PENIS in the vault toward 200M, and supply pledged toward 30%. Before
+ * launch, one line with the goal; there is nothing to count yet. */
+export function EndowmentProgress() {
   const [data, setData] = useState<Progress | null>(null);
   const [now, setNow] = useState(0);
   useEffect(() => {
@@ -58,47 +58,47 @@ export function EndowmentProgress({ detailPage = false }: { detailPage?: boolean
     return () => { controller.abort(); clearInterval(poll); clearInterval(tick); };
   }, []);
   const state = progressState(data, now);
+  const heading = (
+    <div className="progress-heading">
+      <h2 id="endowment-heading">Help grow the $PENIS Endowment.</h2>
+      <span className="progress-state" role="status">{states[state][0]}</span>
+    </div>
+  );
+  if (state === "loading" || state === "unconfigured") {
+    return (
+      <section className="endowment-progress" id="endowment" aria-labelledby="endowment-heading">
+        {heading}
+        <p className="progress-intro">{states[state][1]}</p>
+      </section>
+    );
+  }
   const snapshot = data?.kind === "ready" && state !== "unavailable" ? data : null;
   const counted = snapshot && snapshot.lastCountAt > 0;
   const oldCount = counted && now - snapshot.lastCountAt > COUNT_INTERVAL;
   const emphasis = snapshot?.active || state === "complete" ? "vault" : "pledges";
   return (
     <section className="endowment-progress" id="endowment" aria-labelledby="endowment-heading">
-      <div className="progress-heading">
-        <h2 id="endowment-heading">Help grow the $PENIS Endowment.</h2>
-        <span className="progress-state" role="status">{states[state][0]}</span>
-      </div>
-      <p className="progress-intro">Together, holders are building a reserve of 200 million $PENIS.</p>
+      {heading}
+      <p className="progress-intro">{states[state][1]}</p>
       <div className="progress-grid">
         <article className={`progress-metric ${emphasis === "vault" ? "metric-focus" : ""}`}>
-          <div className="metric-heading"><h3>$PENIS in the endowment</h3><span>Goal · 200M</span></div>
+          <h3>$PENIS in the vault, bought or donated</h3>
           <p className="metric-value">{snapshot ? wholeTokens(snapshot.held) : "—"}<span> / 200,000,000</span></p>
           <Meter value={snapshot ? goalPercent(snapshot.held) : null} max={100} label="Endowment goal"
             text={snapshot ? `${wholeTokens(snapshot.held)} PENIS held toward 200 million` : ""} />
-          <p className="metric-note">The $PENIS in the endowment’s vault, bought or donated.</p>
-          {snapshot ? <a className="source-link" href={`https://solscan.io/account/${snapshot.vault}`}>View the vault ↗</a> : <span className="source-link muted">{state === "unconfigured" ? "Vault total available after launch" : "No verified vault total"}</span>}
+          {snapshot
+            ? <a className="source-link" href={`https://solscan.io/account/${snapshot.vault}`}>View the vault ↗</a>
+            : <span className="source-link muted">No verified vault total</span>}
         </article>
         <article className={`progress-metric ${emphasis === "pledges" ? "metric-focus" : ""}`}>
-          <div className="metric-heading"><h3>Supply pledging rewards</h3><span>Starts at 30%</span></div>
+          <h3>Supply pledged, toward 30%</h3>
           <p className="metric-value">{counted ? percent(snapshot.committedBps) : "—"}<span> / 30%</span></p>
           <Meter value={counted ? snapshot.committedBps / 100 : null} max={30} label="Pledged supply"
             text={counted ? `${percent(snapshot.committedBps)} of supply counted toward 30%` : ""} />
-          <p className="metric-note">Your $PENIS stays in your wallet. Collection switches on at 30% and stays on unless pledges fall below 25%.</p>
-          {counted ? <span className="source-link">{oldCount ? "Last count (over 24h old): " : "Counted: "}<Stamp unix={snapshot.lastCountAt} /></span> : <span className="source-link muted">Waiting for a verified participation count</span>}
+          {counted && <span className="source-link">{oldCount ? "Last count (over 24h old): " : "Counted "}<Stamp unix={snapshot.lastCountAt} /></span>}
         </article>
       </div>
-      <div className="progress-footer">
-        <div className="progress-status"><p>{states[state][1]}</p>
-          {snapshot && <p className="small muted">Vault snapshot: <Stamp unix={snapshot.observedAt} /> · <a href={`https://solscan.io/account/${snapshot.config}`}>Contract records ↗</a></p>}
-        </div>
-        <div className="contribution-actions">
-          <div className="actions"><DelegateButton label="Pledge rewards" primary /><DonationButton /></div>
-          <div className="contribution-links">
-            <Link href={detailPage ? "#how" : "/endowment#how"}>How pledging works ↗</Link>
-            <Link href={detailPage ? "#donate" : "/endowment#donate"}>About direct donations ↗</Link>
-          </div>
-        </div>
-      </div>
+      <div className="actions progress-actions"><DelegateButton label="Pledge rewards" primary /></div>
     </section>
   );
 }

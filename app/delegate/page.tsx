@@ -100,6 +100,13 @@ export default function Delegate() {
         <section id="counting" className="row">
           <h2 className="row-label">How counting works</h2>
           <div className="row-body">
+            <p>
+              Once a day the contract counts every landlord&rsquo;s $PENIS. Collection switches on at 30% of supply
+              committed and stays on unless it falls below 25%. Your $PENIS counts from your second count, and every
+              landlord&rsquo;s record is public on-chain.
+            </p>
+            <details className="count-details">
+              <summary>How the count resists gaming</summary>
             <ul className="plain-list">
               <li>
                 <strong>A daily count</strong>
@@ -130,6 +137,7 @@ export default function Delegate() {
                 <span>Every landlord&rsquo;s record is on-chain for anyone to check.</span>
               </li>
             </ul>
+            </details>
           </div>
         </section>
 
