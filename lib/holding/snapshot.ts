@@ -34,7 +34,7 @@ export async function holdSnapshot(
   inst: Instance,
   owner: Address,
   minSlot = 0,
-  requirePool = true,
+  role: "collector" | "reviewer" = "collector",
 ): Promise<HoldSnapshot> {
   const a = await common(inst, owner);
   const first = await rpc<{ value: Account | null }>("getAccountInfo", [
@@ -86,7 +86,7 @@ export async function holdSnapshot(
     ? decodeAccount<Landlord>("Landlord", accountBytes(l, inst.program))
     : null;
   if (
-    config.version !== 3 ||
+    config.version !== 4 ||
     config.pool !== initial.pool ||
     config.coin_mint !== inst.coinMint ||
     config.dividend_mint !== inst.dividendMint ||
@@ -186,22 +186,24 @@ export async function holdSnapshot(
     consent,
     landlord,
     // Refunds do not depend on a healthy trading pool.
-    pool: requirePool ? parsePool(accountBytes(pool, CPMM_PROGRAM)) : null,
+    pool: role === "collector" ? parsePool(accountBytes(pool, CPMM_PROGRAM)) : null,
     slot: bank.context.slot,
     now,
     active,
     reason: active
       ? "Active refundable consent"
       : "Inactive: discard collection eligibility",
-    // Count/epoch/pause changes and day boundaries discard uncertain carry-over.
+    // Collectors discard eligibility across pause/collector changes. Reviewers
+    // must still replay collections which landed just before an incident, so
+    // those two changes cannot hide their outstanding receipt evidence.
     binding: [
+      ...(role === "reviewer" ? ["reviewer-v1"] : []),
       inst.config,
       owner,
       consent?.epoch ?? 0n,
       config.last_count_at,
       config.refresher_epoch,
-      config.paused_until,
-      policy.collector,
+      ...(role === "collector" ? [config.paused_until, policy.collector] : []),
       policy.reviewer,
       Math.floor(now / 86400),
     ].join(":"),

@@ -37,10 +37,11 @@ function snapshot(now = 86500): HoldSnapshot {
     balance: "95",
     consentId: "2",
     now,
+    active: true,
     goalReached: false,
     landlord: {},
     consent: { enabled: true, epoch: 2n },
-    config: { retired: false, milestone_reached: false, paused_until: 0n, pause_started_at: 0n },
+    config: { version: 4, retired: false, milestone_reached: false, paused_until: 0n, pause_started_at: 0n },
   } as HoldSnapshot;
 }
 function journal(): Journal {

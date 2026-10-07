@@ -49,8 +49,7 @@ function blocker(s: DelegationStatus, holding: Holding | null): string | null {
   if (s.config.retired || s.config.milestoneReached) return "The endowment has closed to new landlords.";
   if (!holding?.ready) return "Joining opens as soon as collection is switched on.";
   if (s.now < Number(s.config.pausedUntil)) {
-    const until = new Date(Number(s.config.pausedUntil) * 1000).toLocaleString();
-    return `Joining is paused until ${until}. You can still leave at any time.`;
+    return "Joining is paused until an explicit restart. You can still leave or reclaim pending contributions.";
   }
   if (s.coinBalance < s.minStake) {
     return `Landlords hold at least ${formatTokens(s.minStake)} $PENIS (${bpsToPercent(s.config.params.minStakeBps)}% of supply). This wallet holds ${formatTokens(s.coinBalance)}.`;
@@ -207,8 +206,8 @@ function Connected({ inst, owner }: { inst: Instance; owner: Address }) {
         </div>
         {status?.landlord && (
           <div className="fact">
-            <dt>Collection</dt>
-            <dd>{holding ? isIn ? "On" : "Paused for this wallet" : "Not verified"}</dd>
+            <dt>Collection permission</dt>
+            <dd>{holding ? isIn ? "Enabled" : "Disabled for this wallet" : "Not verified"}</dd>
           </div>
         )}
         {status?.landlord && (
@@ -223,8 +222,8 @@ function Connected({ inst, owner }: { inst: Instance; owner: Address }) {
 
       {status && !isIn && (
         <p className="muted small">
-          The $PENIS in this wallet counts toward the 30%, and the endowment collects the PUMP it earns: never more
-          than it earned, and never the PUMP the wallet holds today. Want to pledge part of your holdings? Keep the
+          The $PENIS in this wallet counts toward the 30%. Collection uses a reward allowance and payout checks,
+          with your starting PUMP balance protected by the current contract. Want to pledge part of your holdings? Keep the
           rest in another wallet.
         </p>
       )}
@@ -239,10 +238,11 @@ function Connected({ inst, owner }: { inst: Instance; owner: Address }) {
         <label className="consent">
           <input type="checkbox" checked={agreed} onChange={(e) => setAgreed(e.target.checked)} disabled={busy} />
           <span>
-            I understand: this gives the endowment an unlimited approval on my PUMP account, and it collects the PUMP
-            my $PENIS earned, never more. Each collection is held for at least 24 hours, while a reviewer returns
-            anything that wasn&rsquo;t a reward and I can take it back myself. During the founders&rsquo; test the
-            program can still be upgraded. The PUMP I hold today stays mine, and I can stop at any time.
+            I authorize unlimited token approval on my PUMP account for collection of $PENIS rewards. The current
+            contract protects my starting balance and limits collection using posted reward totals. Payout checks
+            can make mistakes. Each collection waits at least 24 hours; I can reclaim it before release, after which
+            this contract cannot refund it. While upgrade authority exists, the code and these protections can
+            change. I can stop future collection at any time.
           </span>
         </label>
       )}

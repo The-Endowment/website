@@ -188,7 +188,7 @@ function camelFields(value: unknown): unknown {
 export function decodeConfig(bytes: Uint8Array): EndowmentConfig | null {
   try {
     const raw = decodeAccount<ConfigAccount>("Config", bytes);
-    if (raw.version !== 3) return null;
+    if (raw.version !== 4) return null;
     const config = camelFields(raw) as Camel<ConfigAccount>;
     return { ...config, holding: true, pendingParams: config.pending.params,
       pendingEffectiveAt: config.pending.effectiveAt, donationBps: 0, totalDonated: 0n };

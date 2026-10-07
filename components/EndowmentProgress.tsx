@@ -10,9 +10,10 @@ const states = {
   unavailable: ["Totals unavailable", "Live totals show here again once they can be read from the chain."],
   uncounted: ["First count pending", "Pledged balances appear after the first daily count."],
   raising: ["Building to 30%", "Collection switches on when pledged wallets reach 30% of all $PENIS."],
-  active: ["Switched on", "Pledges reached 30%, so collection is switched on. It stays on unless pledges fall below 25%."],
+  active: ["Participation active", "The 30% participation threshold was reached and stays active until pledges fall below 25%. Collection also requires its safety checks and operating services."],
+  founders: ["Founders test", "The participation threshold is disabled for testing. Public launch requires a fresh count reaching 30%."],
   stale: ["Count due", "Collection waits for the next daily count."],
-  paused: ["Paused", "Collection is paused for now. Pledges shown are from the last count."],
+  paused: ["Paused", "Collection waits for an explicit restart. Pending contributions remain reclaimable. Pledges shown are from the last count."],
   retired: ["Closed to pledges", "The endowment is no longer taking pledges. Its vault balance stays visible here."],
   complete: ["Goal reached", "200 million $PENIS in the vault. Reward collection has ended."],
 } as const;

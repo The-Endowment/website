@@ -14,7 +14,7 @@ export const metadata: Metadata = {
 const faqs = [
   {
     q: "What does the endowment collect?",
-    a: "The PUMP your $PENIS earns, capped each day at what it earned from stonk.fun's public reward total. The PUMP you held when you joined is never collected, and the collector checks each payout first. If a collection ever does include PUMP you bought (say you spent your rewards and bought PUMP just before it), the reviewer returns it during the 24-hour hold. To pledge only part of your $PENIS, keep the rest in another wallet.",
+    a: "Eligible PUMP rewards from $PENIS. The current contract protects your starting balance and limits collections using posted reward totals; the collector checks payout history first. A reviewer can return mistakes before release, and you can reclaim pending collections yourself. Checks can fail, and released contributions cannot be refunded by this contract. To pledge only part of your $PENIS, keep the rest in another wallet.",
   },
   {
     q: "Can I donate $PENIS instead?",
@@ -22,7 +22,7 @@ const faqs = [
   },
   {
     q: "Can I take a collection back?",
-    a: "Yes. Every collection is held for at least 24 hours, and until it's released you can take it back on the Delegate page. Taking one back also switches collection off for your wallet until you switch it back on.",
+    a: "Yes. Every collection is held for at least 24 hours, and until it's released you can take it back on the Delegate page. Reclaiming a receipt from your current pledge disables it; reclaiming an older pledge's receipt leaves a newer pledge unchanged.",
   },
   {
     q: "Can I leave?",
@@ -30,11 +30,11 @@ const faqs = [
   },
   {
     q: "Who runs it?",
-    a: "The contract sets the rules. Automated keys do the daily work: one counts landlords and posts the reward total, one collects, and a separate one reviews each collection. None can send funds anywhere but the vault or back to you. During the founders' test the program can still be upgraded, with every upgrade announced first; the plan is to then destroy the upgrade key.",
+    a: "Automated keys count landlords and post reward totals, collect contributions, and separately review them. The current contract restricts contribution destinations to the vault or the original holder. While upgrade authority exists, that code can change. Removing upgrade authority is a separate decision after testing and review; emergency controls and operator replacement remain separate powers.",
   },
   {
     q: "When does it open?",
-    a: "Pledging opens once the contract is deployed and checked, starting with a founders' test. Collection switches on when pledged wallets hold 30% of all $PENIS and stays on unless they fall below 25%. A wallet's $PENIS counts from its second daily count.",
+    a: "Pledging opens once the contract is deployed and checked, starting with an identified founders' test. Public participation activates at 30% and deactivates below 25%; collection also needs current counts, safety checks and operating services. A wallet's $PENIS counts from its second daily count.",
   },
 ];
 
@@ -88,17 +88,17 @@ export default function Endowment() {
       </section>
 
       <section id="safeguards" className="row">
-        <h2 className="row-label">Guarantees</h2>
+          <h2 className="row-label">Safeguards</h2>
         <div className="row-body">
-          <h3 className="statement">Written into the contract, not promised in a thread.</h3>
+          <h3 className="statement">Protections in the current contract.</h3>
           <ul className="plain-list">
             <li>
-              <strong>Capped at what you earned</strong>
-              <span>No collection can exceed what your $PENIS earned, or touch the PUMP you held when you joined.</span>
+              <strong>A mandatory reward allowance</strong>
+              <span>Collection is limited by posted reward totals and your protected starting balance. Payout checks separately identify eligible rewards.</span>
             </li>
             <li>
               <strong>Held for 24 hours</strong>
-              <span>A second reviewer checks every collection and returns what it can&rsquo;t match to a payout. Until it&rsquo;s released, you can take it back.</span>
+              <span>A separate reviewer checks collections before release. Until release, you can take yours back; afterward this contract cannot refund it.</span>
             </li>
             <li>
               <strong>No function to sell</strong>
@@ -111,8 +111,8 @@ export default function Endowment() {
             <li>
               <strong>Changes are announced</strong>
               <span>
-                Limit and key changes wait 72 hours on-chain. Upgrades during the founders&rsquo; test are announced first,
-                and the plan is to then destroy the upgrade key.
+                Parameter and collection-operator changes wait 72 hours. Program upgrades are a separate power and
+                need their own controls while that authority remains.
               </span>
             </li>
           </ul>

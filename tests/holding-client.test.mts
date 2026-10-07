@@ -69,7 +69,7 @@ test("holding client matches bytes and privileges produced by Rust/LiteSVM", asy
   assert.equal(receipt.release_at - receipt.collected_at, 86400n);
   assert.equal(receipt.refund_at - receipt.collected_at, 259200n);
   const config = decodeAccount<Config>("Config", bytes(inst.config));
-  assert.equal(config.version, 3);
+  assert.equal(config.version, 4);
 });
 
 test("owner and reviewer builders match the current IDL account order", async () => {

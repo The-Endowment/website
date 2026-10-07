@@ -5,7 +5,7 @@ import { classify } from "../reporter/classify.ts";
 import { runWallet } from "../reporter/engine.ts";
 import { withJournal } from "../reporter/journal.ts";
 import { history, latestCursor, type RpcCall } from "../reporter/rpc.ts";
-import type { Distribution, SourcePolicy } from "../reporter/types.ts";
+import type { Distribution, Observation, SourcePolicy } from "../reporter/types.ts";
 import { collectIx, reviewIx, settleIx } from "./client.ts";
 import { holdSnapshot, type HoldSnapshot } from "./snapshot.ts";
 import {
@@ -28,6 +28,12 @@ export type WorkerOptions = {
   feed: Map<string, Distribution>;
   source: SourcePolicy;
   role: "collector" | "reviewer";
+  beforeCollect?: (snapshot: HoldSnapshot) => Promise<void>;
+  observe?: (event:
+    | { kind: "snapshot"; snapshot: HoldSnapshot }
+    | { kind: "observations"; observations: Observation[] }
+    | { kind: "review"; receipt: string; collected: string; eligible: string }
+  ) => void;
 };
 export async function walletTick(
   o: WorkerOptions,
@@ -43,7 +49,11 @@ export async function walletTick(
     resolve(o.directory, "wallets"),
     source,
     async (journal) => {
-      const snapshot = (min: number) => holdSnapshot(o.rpc, o.inst, owner, min, o.role === "collector");
+      const snapshot = async (min: number) => {
+        const value = await holdSnapshot(o.rpc, o.inst, owner, min, o.role);
+        o.observe?.({ kind: "snapshot", snapshot: value });
+        return value;
+      };
       const batch = async (
         state: NonNullable<typeof journal.state>,
         s: HoldSnapshot,
@@ -68,6 +78,7 @@ export async function walletTick(
               }
             : result;
         });
+        o.observe?.({ kind: "observations", observations });
         return { ...h, observations };
       };
       if (o.role === "collector") {
@@ -81,6 +92,7 @@ export async function walletTick(
             prepare: async (s, amount, evidenceHash) => {
               if (s !== latest || !latest.consent || !latest.pool)
                 throw new Error("Signing snapshot changed");
+              await o.beforeCollect?.(latest);
               const signer = await keySigner(o.keyFile);
               if (signer.address !== latest.policy.collector)
                 throw new Error("Wrong collector key");
@@ -117,13 +129,16 @@ export async function walletTick(
                   { commitment: "finalized" },
                 ]),
               ),
-            publish: (wire) => publish(o.rpc, wire),
+            publish: async (wire) => {
+              if (o.beforeCollect) await o.beforeCollect(await snapshot(latest.slot));
+              return publish(o.rpc, wire);
+            },
           },
           o.submit,
         );
       }
       let s = await snapshot(journal.state?.slot ?? 0);
-      if (!journal.state || journal.state.binding !== s.binding || !s.active) {
+      if (!journal.state || journal.state.binding !== s.binding) {
         await resetReviewer(
           journal,
           s,
@@ -156,6 +171,10 @@ export async function walletTick(
         ];
         // A fresh finalized snapshot catches intervening revocation/goal/pause.
         s = await snapshot(s.slot);
+        if (decision) o.observe?.({
+          kind: "review", receipt: entry.address,
+          collected: entry.receipt.amount.toString(), eligible: decision.amount,
+        });
         const action = settlementPlan(entry.receipt, s, decision);
         if (action === "wait" || !o.submit) {
           outcomes.push({ receipt: entry.address, action });

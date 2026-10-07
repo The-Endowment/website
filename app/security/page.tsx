@@ -125,14 +125,14 @@ export default function Security() {
             <h3 className="statement">What the current contract enforces.</h3>
             <ul className="plain-list">
               <li>
-                <strong>$PENIS never leaves</strong>
-                <span>No function can move $PENIS out of the vault, or withdraw locked liquidity.</span>
+                <strong>No discretionary withdrawals</strong>
+                <span>The current program cannot pay treasury $PENIS or locked liquidity to an operator. It can use $PENIS for the configured permanent liquidity deposits after the goal.</span>
               </li>
               <li>
                 <strong>Landlords keep what they hold</strong>
                 <span>
-                  The endowment can only take new PUMP above the balance a landlord held when joining, never more than
-                  its $PENIS earned, and nothing else in the wallet.
+                  Collections cannot reduce PUMP below the recorded starting balance and are limited by an allowance
+                  calculated from posted reward totals. The approval covers only that PUMP account.
                 </span>
               </li>
               <li>
@@ -150,18 +150,18 @@ export default function Security() {
               <li>
                 <strong>Changes are slow and public</strong>
                 <span>
-                  Settings changes, including replacing the collection keys, wait 72 hours and stay within hard limits
+                  Parameter and collection-operator changes wait 72 hours and stay within hard limits
                   written into the code.
                 </span>
               </li>
               <li>
-                <strong>The pause is limited</strong>
-                <span>It lasts at most 7 days, can&rsquo;t be renewed back to back, and can&rsquo;t move funds.</span>
+                <strong>An incident stays stopped</strong>
+                <span>A guardian can pause collection, release and buybacks. Restart requires the admin; holder exits and refunds remain available. Receipt expiry is never extended by a pause.</span>
               </li>
               <li>
                 <strong>Token checks</strong>
                 <span>
-                  Collecting and buying stop on their own if either token&rsquo;s transfer hook or fees change, or an
+                  Collecting and buying stop on unsupported transfer hooks, fees above the allowed limits, or when an
                   account is frozen.
                 </span>
               </li>
@@ -185,8 +185,9 @@ export default function Security() {
                 <span>
                   PUMP from rewards and PUMP bought look the same on-chain, so the collector and reviewer check
                   stonk.fun&rsquo;s payout records and each wallet&rsquo;s history. They use separate keys but share code
-                  and data sources. That is why the contract caps every collection at what the wallet&rsquo;s $PENIS
-                  earned, holds it for 24 hours, and lets the landlord take it back.
+                  and data sources, so mistakes can affect both. The contract limits collection using trusted posted
+                  reward totals, holds it for at least 24 hours, and lets the landlord reclaim before release. These
+                  controls reduce risk; after release, this contract has no refund path for that contribution.
                 </span>
               </li>
               <li>
@@ -215,8 +216,8 @@ export default function Security() {
               <li>
                 <strong>Outside token settings</strong>
                 <span>
-                  PUMP and $PENIS each have a setting controlled by a third party. If either changes, the endowment
-                  pauses buying and collecting on its own. A PUMP transfer hook could also delay returning a held
+                  PUMP and $PENIS each have a setting controlled by a third party. Unsupported hooks or fees above the
+                  allowed limits stop buying and collecting. A PUMP transfer hook could also delay returning a held
                   collection until it&rsquo;s switched off.
                 </span>
               </li>
@@ -234,8 +235,10 @@ export default function Security() {
               </a>{" "}
               of the <a href={links.github}>open-source contract</a>; the October reviews covered the changes since. The
               deployed program will be a verifiable build of the code on GitHub, so anyone can confirm what is running.
-              During the founders&rsquo; test the program can still be upgraded, with every upgrade announced first. The
-              plan is to then destroy the upgrade key, so the code can&rsquo;t change.
+              While upgrade authority exists, it can change the code and its protections. Removing it is a separate
+              decision after testing and review. Admin authority is separate: production thresholds and the reward
+              allowance remain fixed, while bounded parameter changes, operator replacement and emergency restart
+              remain possible. Admin renunciation is unavailable while contribution collection is live.
             </p>
           </div>
         </section>

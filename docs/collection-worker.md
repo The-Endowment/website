@@ -9,10 +9,11 @@ The worker and wallet client target the merged endowment PR #5, including the co
 | `lib/reporter/classify.ts` | Verify finalized distributor transfers against PENIS-specific payout batches; distinguish purchases, spending and ambiguous history |
 | `lib/reporter/ledger.ts`, `engine.ts`, `rpc.ts` | Consume reward eligibility before other funds, check continuous history, recheck state before signing |
 | `lib/reporter/journal.ts` | Single-writer, fsynced hash-chain journal; exact signed bytes saved before submission |
-| `lib/holding/snapshot.ts`, `bounds.ts` | Read finalized accounts together, mirror the corrected 72-hour allowance and pause deadline, include roles in the observation boundary |
+| `lib/holding/snapshot.ts`, `bounds.ts` | Read finalized Config v4 accounts together, mirror the 72-hour allowance and fixed receipt expiry, include roles in the observation boundary |
 | `lib/holding/reconcile.ts` | Independent reviewer replay and per-receipt clearance; unknown evidence refunds |
 | `lib/holding/worker.ts`, `outbox.ts` | Collect, review, release/refund, and recover ambiguous submissions without fresh duplicate authorizations |
 | `lib/holding/schema.json`, `accounts.ts`, `codec.ts` | Checked-in ABI and types generated from the reviewed local Anchor IDL |
+| `lib/holding/operations*.ts` | Explicit launch mode, local persistent collector stop, per-pass health and optional redacted alerts |
 | `scripts/held-rewards.mts` | One pass over opted-in wallets and pending receipts, with separate collector/reviewer directories and keys |
 
 ## Attribution policy retained for review
@@ -21,11 +22,15 @@ Only a finalized PUMP transfer from the pinned source/authority, whose transacti
 
 The contract's 1.0× allowance adds a ceiling; it does not prove provenance. This worker refuses collection when the allowance is disabled or the daily reward bound is zero. It mirrors the corrected elapsed-time carry floor, including integer rounding and saturation. The refresher posts the reward total daily through the web keeper's `/api/keeper/post` job (see [keeper.md](keeper.md)).
 
+Allowance also requires the holder's current attestation epoch and current count. While a daily count is open, its counted holders and the immediately previous completed round remain eligible; after it finishes, an omitted holder has no allowance. Recounting cannot backfill the skipped interval. The client mirrors this check before proposing a collection.
+
 A same-balance spend/rebuy can still happen between finalized observation and execution. Each collection enters the contract's pending vault, and the reviewer independently replays history through the successful sweep before approving release. Both services depend on correct RPC and feed data and correct code; hashes are evidence commitments, not trustless payout proofs. The public feed is finite (requested limit 100), so an outage can miss batches. Missing records fail closed; there is no estimate-based backfill. Deploying two copies of this code does not eliminate shared code/provider failure.
 
 ## Refund and lifecycle behavior
 
-Each receipt has its own collection time, 24-hour minimum hold and 72-hour original refund deadline. A guardian pause beginning while it was live can extend the review deadline; a pause beginning at/after original expiry cannot reopen it. The worker uses the same rule as the corrected contract.
+Each receipt has its own collection time, 24-hour minimum hold and fixed 72-hour refund deadline. Config v4 pauses last until explicit admin restart, but never extend receipt expiry. After 72 hours, anyone can submit the refund, including during a pause; someone still has to submit and fund that transaction. Expired receipts never reopen. The client rejects Config v3 because its pause/refund semantics differ despite the same account layout.
+
+A completed, valid zero-approval review triggers a full refund immediately, including during the hold or a pause. Missing decisions wait while evidence can still be gathered, then refund conservatively; they never authorize release. Reviewer history processing continues during a pause and retains completed decisions, while dropping uncollected eligibility observed while inactive. Day/count/consent/refresher/reviewer changes remain conservative evidence boundaries. After release, there is no receipt-level treasury refund path.
 
 Owner reclaim stops that consent. Reviewer, expiry and partial refunds leave enrollment unchanged and increase the on-chain baseline. The source-history classifier treats returned PUMP as an ordinary receipt, never a new payout. Old-registration refunds only reduce the current registration's contribution total when their durable nonce belongs to it. Collector or reviewer changes discard uncollected eligibility; reviewer replacement additionally drops prior reviewer decisions. Reviewer refunds do not require a readable Raydium pool. A pruned/missing landlord record is immediately refund-only, even during the hold or a pause; a prior positive reviewer decision cannot override that rule.
 
@@ -40,9 +45,11 @@ npm run holding:once -- --role=collector
 npm run holding:once -- --role=reviewer
 ```
 
+Submission additionally requires an explicit collector `--mode=founders` with `HOLD_FOUNDERS_FILE`, or `--mode=public` with locked on-chain production thresholds. Reviewer recovery is never founders-filtered. `HOLD_STOP_FILE` is a persistent operator-cleared collector quarantine; `HOLD_ALERT_WEBHOOK` optionally delivers redacted operational alerts. See the [pilot runbook](launch-pilot-runbook.md) for exact behavior and remaining infrastructure.
+
 Environment: `SOLANA_RPC_URL`, `HOLD_DATA_DIR` (different persistent directory per role), and the reviewed `NEXT_PUBLIC_ENDOWMENT_PROGRAM_ID` / `NEXT_PUBLIC_ENDOWMENT_CREATOR`. `HOLD_KEYPAIR_FILE` is needed only for submission and must match that role's on-chain address. Do not put keys, journals or provider credentials in git. No secrets are needed for tests. The CLI fetches/archives the feed once per pass; each role keeps its own archive. It reads wallet histories sequentially and fetches pending receipts once per pass. It needs a persistent host, not a stateless web invocation.
 
-A stale lock, damaged journal, changed feed record or history gap stops or resets collection eligibility conservatively. Never remove a journal to retry a debit: first reconcile the exact persisted signature against finalized history and the receipt nonce. Unknown submissions remain outstanding through blockhash expiry. Preserve journals for audit and backups; archives currently grow without pruning. Monitor failures and age of pending receipts, role-change proposals, collection/reviewer progress, net/gross/refund totals, clock/history gaps and signing-key SOL. Automatic external alerts and a daily aggregate dashboard are not added here.
+A stale lock, damaged journal, changed feed record or history gap stops or resets collection eligibility conservatively. Never remove a journal to retry a debit: first reconcile the exact persisted signature against finalized history and the receipt nonce. Unknown submissions remain outstanding through blockhash expiry. Preserve journals for audit and backups; archives currently grow without pruning. Monitor failures and age of pending receipts, role-change proposals, collection/reviewer progress, net/gross/refund totals, clock/history gaps and signing-key SOL. Per-pass machine-readable health and an optional configured webhook are provided; see [launch-pilot-runbook.md](launch-pilot-runbook.md). A daily aggregate dashboard and external heartbeat monitor are not installed by this PR.
 
 The existing web keeper can continue counts, refreshes and buybacks; `/api/keeper/sweep` is disabled. Count/refresh batches now include consent accounts (six holders, 185k compute units). Do not run the old balance-sweep worker alongside this one.
 

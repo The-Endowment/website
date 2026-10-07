@@ -117,6 +117,9 @@ export async function reconcileHistory(
         }),
       };
   }
+  // Inactivity stops collecting, not recovery. Keep the completed receipt
+  // decisions above, but do not carry unused rewards across an incident.
+  if (!snapshot.active) finished.ledger.eligible = "0";
   await journal.save(
     { ...finished.ledger, reviews, reviewer: snapshot.policy.reviewer } as ReviewedLedger,
     "Independent wallet reconciliation",
@@ -141,14 +144,14 @@ export function settlementPlan(
     now >= refundDeadline(receipt, snapshot.config)
   )
     return "refund";
+  // A completed review which approves nothing is a rejection, not a missing
+  // review. Returning those funds never needs to wait for the release window
+  // or for an incident pause to end. Absence of a decision still waits below.
+  const hasEvidence = decision && /^[0-9a-f]{64}$/.test(decision.evidenceHash);
+  if (hasEvidence && raw(decision.amount) === 0n) return "refund";
   if (now < receipt.release_at || now < snapshot.config.paused_until)
     return "wait";
-  if (
-    !decision ||
-    !/^[0-9a-f]{64}$/.test(decision.evidenceHash) ||
-    raw(decision.amount) === 0n
-  )
-    return "refund";
+  if (!decision || !hasEvidence) return "refund";
   if (raw(decision.amount) > receipt.amount)
     throw new Error("Review exceeds contribution");
   if (

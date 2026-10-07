@@ -16,7 +16,7 @@ export default function Delegate() {
         <div className="thesis-head">
           <h1 className="display h1">Delegate your rent.</h1>
           <p className="lede">
-            One signature pledges the PUMP your $PENIS earns, and never more. Your $PENIS stays in your wallet. Every
+            Pledge the PUMP rewards your $PENIS earns. Your $PENIS stays in your wallet. Every
             collection is held for at least 24 hours, and you can take it back until it&rsquo;s released. Stop at any
             time. {DELEGATION_OPEN ? "" : DELEGATION_CLOSED_NOTE}
           </p>
@@ -37,15 +37,15 @@ export default function Delegate() {
           <div className="row-body">
             <p>
               The $PENIS in the wallet you pledge counts toward the 30%, and the PUMP it earns goes to the endowment.
-              The contract caps every collection at what that $PENIS earned, and the collector checks each payout first,
-              so PUMP you held, bought or earned from other coins stays yours. Want to pledge part of your holdings? Keep
+              The contract limits collections using posted reward totals, and the collector checks payout history to
+              exclude purchases and other coins&rsquo; rewards. Want to pledge part of your holdings? Keep
               the rest in another wallet.
             </p>
             <p>
               Every collection then waits at least 24 hours while a second, independent reviewer checks it against the
               payout records. If a collection ever includes PUMP that wasn&rsquo;t a reward (say you spent your rewards
-              and bought PUMP just before it), the reviewer returns it, and you can take it back yourself any time until
-              it&rsquo;s released.
+              and bought PUMP just before it), the reviewer can return it, and you can take it back yourself any time until
+              it&rsquo;s released. These checks can make mistakes; after release, the contract cannot refund that collection.
             </p>
             <p className="muted small">
               We recommend a wallet that holds just the $PENIS you&rsquo;re committing, so your records stay simple.
@@ -61,22 +61,23 @@ export default function Delegate() {
                 <strong>A delegation</strong>
                 <span>
                   An unlimited token approval on your PUMP account only, shown in your wallet. The contract decides what
-                  it can collect: never more than your $PENIS earned, and never the PUMP you held when you joined. Your
+                  it can collect using a reward allowance and your protected starting balance. Your
                   $PENIS and other tokens aren&rsquo;t included.
                 </span>
               </li>
               <li>
                 <strong>A landlord record</strong>
                 <span>
-                  It notes the PUMP you hold when you join, which always stays yours, and tracks your contribution. If you
+                  It records a protected baseline equal to your PUMP balance when you join and tracks your net contribution. If you
                   leave and come back later, it resets to your balance at that moment.
                 </span>
               </li>
               <li>
                 <strong>The collection switch</strong>
                 <span>
-                  Your signature turns collection on. Stopping collection, or taking back a collection, switches it off,
-                  and one more signature switches it back on.
+                  Your signature enables collection permission. Stopping collection or reclaiming a receipt from your
+                  current pledge disables it; reclaiming an older pledge&rsquo;s receipt does not disable a newer pledge.
+                  Re-enabling needs your signature and a new count.
                 </span>
               </li>
               <li>
@@ -89,8 +90,9 @@ export default function Delegate() {
               <li>
                 <strong>During the test period</strong>
                 <span>
-                  During the founders&rsquo; test the program can still be upgraded, and every upgrade is announced
-                  first. The plan is to then destroy the upgrade key. Leave at any time.
+                  While upgrade authority exists, the program and its protections can change. Removing that authority
+                  requires a separate decision after testing and review; operator replacement and emergency controls
+                  remain separate administrative powers. Leave at any time.
                 </span>
               </li>
             </ul>
@@ -101,8 +103,9 @@ export default function Delegate() {
           <h2 className="row-label">How counting works</h2>
           <div className="row-body">
             <p>
-              Once a day the contract counts every landlord&rsquo;s $PENIS. Collection switches on at 30% of supply
-              committed and stays on unless it falls below 25%. Your $PENIS counts from your second count, and every
+              Once a day the contract counts every landlord&rsquo;s $PENIS. Public participation activates at 30% of supply
+              committed and deactivates below 25%. Collection also requires current counts, safety checks and running
+              services. Your $PENIS counts from your second count, and every
               landlord&rsquo;s record is public on-chain.
             </p>
             <details className="count-details">
@@ -121,7 +124,7 @@ export default function Delegate() {
               </li>
               <li>
                 <strong>The threshold</strong>
-                <span>Collection switches on at 30% of supply committed and stays on unless it falls below 25%.</span>
+                <span>Public participation activates at 30% of supply committed and deactivates below 25%. A founders test uses a separate, visibly identified mode.</span>
               </li>
               <li>
                 <strong>Checked between counts</strong>

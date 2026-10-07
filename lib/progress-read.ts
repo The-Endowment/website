@@ -27,11 +27,12 @@ export async function readProgress(rpc: RpcCall, inst: Instance, creator: string
   }
   const [configAccount, vaultAccount, clockAccount] = bank.value;
   const config = decodeAccount<Config>("Config", bytes(configAccount, inst.program));
-  // This dashboard describes the flagship's fixed 200M / 30% / 25% design.
-  // A different deployment needs a reviewed copy change, not silently different promises.
-  if (config.version !== 3 || config.creator !== creator || config.coin_mint !== inst.coinMint ||
+  const founders = config.params.activate_bps === 0 && config.params.deactivate_bps === 0 && config.reserved[0] === 0;
+  const publicLaunch = config.params.activate_bps === 3000 && config.params.deactivate_bps === 2500 && config.reserved[0] === 1;
+  // A founders test is visibly different from the public 30% / 25% rules.
+  if (config.version !== 4 || config.creator !== creator || config.coin_mint !== inst.coinMint ||
       config.dividend_mint !== inst.dividendMint || config.contribution_cap !== ENDOWMENT_GOAL ||
-      config.params.activate_bps !== 3000 || config.params.deactivate_bps !== 2500) {
+      (!founders && !publicLaunch)) {
     throw new Error("Unexpected flagship configuration");
   }
   const principal = getTokenDecoder().decode(bytes(vaultAccount, inst.coinTokenProgram));
@@ -48,6 +49,7 @@ export async function readProgress(rpc: RpcCall, inst: Instance, creator: string
     kind: "ready", observedAt, slot: bank.context.slot, config: inst.config, vault,
     held: principal.amount.toString(), committed: config.last_committed.toString(),
     committedBps: config.last_count_bps, lastCountAt, active: config.active,
+    launchMode: founders ? "founders" : "public",
     pausedUntil: Number(config.paused_until), retired: config.retired,
     milestoneReached: config.milestone_reached,
   };
