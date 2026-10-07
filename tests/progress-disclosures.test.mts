@@ -10,7 +10,7 @@ const now = 1_800_000_000;
 const snapshot: ProgressSnapshot = {
   kind: "ready", observedAt: now, slot: 1, config: "config", vault: "vault",
   held: "50000000000000", committed: "280000000000000", committedBps: 2800,
-  lastCountAt: now, active: true, pausedUntil: 0, retired: false, milestoneReached: false,
+  lastCountAt: now, active: true, launchMode: "public", pausedUntil: 0, retired: false, milestoneReached: false,
 };
 
 function render(data: Progress | null) {
@@ -33,13 +33,24 @@ const status = (html: string) => html.match(/role="status">([^<]*)<\/span>/)?.[1
 test("at 28% the counter shows on or building, and never claims pledges are over 30%", () => {
   const active = render(snapshot);
   const inactive = render({ ...snapshot, active: false });
-  assert.equal(status(active), "Switched on");
+  assert.equal(status(active), "Participation active");
   assert.equal(status(inactive), "Building to 30%");
   for (const html of [active, inactive]) {
     assert.match(html, /aria-label="Pledged supply"[^>]*aria-valuenow="28"/);
     assert.doesNotMatch(html, /over 30%|>Collecting</);
   }
-  assert.match(active, /stays on unless pledges fall below 25%/);
+  assert.match(active, /stays active until pledges fall below 25%/);
+  assert.match(active, /requires its safety checks and operating services/);
+});
+
+test("founders mode and indefinite incident stops do not promise production collection", () => {
+  const pilot = render({ ...snapshot, launchMode: "founders" });
+  assert.equal(status(pilot), "Founders test");
+  assert.match(pilot, /fresh count reaching 30%/);
+  const stopped = render({ ...snapshot, pausedUntil: Number((1n << 63n) - 1n) });
+  assert.equal(status(stopped), "Paused");
+  assert.match(stopped, /explicit restart/);
+  assert.doesNotMatch(stopped, /Invalid Date|Switched on/);
 });
 
 test("missing or expired snapshots hide totals instead of showing zero or promising a refresh", () => {

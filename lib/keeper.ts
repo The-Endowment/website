@@ -216,7 +216,8 @@ function shuffled<T>(items: T[]): T[] {
 
 /** Sweeps run while active and a count finished recently (`Config::sweeps_on`). */
 function sweepsOn(config: EndowmentConfig, now: number) {
-  return config.active && (config.params.activateBps === 0 || now - Number(config.lastCountAt) <= ACTIVE_MAX_AGE_SECS);
+  return !config.retired && !config.milestoneReached && BigInt(now) >= config.pausedUntil &&
+    config.active && (config.params.activateBps === 0 || now - Number(config.lastCountAt) <= ACTIVE_MAX_AGE_SECS);
 }
 
 /** Collections require the separate, stateful collector/reviewer services. */
@@ -592,7 +593,9 @@ export async function countHealth(k: Keeper) {
   const age = (t: bigint) => (t > BigInt(0) ? now - Number(t) : null);
   const countAge = age(config.lastCountAt);
   const attestAge = age(config.lastAttestedAt);
-  const openFor = config.count.open ? now - Math.max(Number(config.count.startedAt), Number(config.pausedUntil)) : null;
+  const paused = BigInt(now) < config.pausedUntil;
+  const openFor = config.count.open && !paused
+    ? Math.max(0, now - Math.max(Number(config.count.startedAt), Number(config.pausedUntil))) : null;
   const refresherIsKeeper = config.params.refresher === k.signer.address;
   const countStale = (countAge !== null && countAge > 2 * COUNT_INTERVAL_SECS) || (openFor !== null && openFor > COUNT_TIMEOUT_SECS);
   // With landlords to attest, a refresher pass should land several times a day.
@@ -614,6 +617,7 @@ export async function countHealth(k: Keeper) {
     attestAgeSecs: attestAge,
     sweepsOn: HOLD_COLLECTION_RELEASED && sweepsOn(config, now),
     collectionWorkerReleased: HOLD_COLLECTION_RELEASED,
+    paused,
     allowanceOn: config.params.allowanceMarginBps > 0,
     lastRewardPostAt: Number(config.lastRewardPostAt),
     rewardPostAgeSecs: age(config.lastRewardPostAt),

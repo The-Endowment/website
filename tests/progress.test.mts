@@ -11,6 +11,7 @@ async function scenario() {
   b.config.contribution_cap = ENDOWMENT_GOAL;
   b.config.params.activate_bps = 3000;
   b.config.params.deactivate_bps = 2500;
+  b.config.reserved[0] = 1;
   b.config.last_count_bps = 2800;
   b.config.last_committed = 280_000_000_000_000n;
   // These deliberately exceed the target: none is the principal vault balance.
@@ -100,4 +101,20 @@ test("zero is distinct from missing data and balances above the goal stay accura
   assert.equal(goalPercent("0"), 0);
   assert.equal(goalPercent((ENDOWMENT_GOAL + 1n).toString()), 100);
   assert.equal(wholeTokens("250000001999999"), "250,000,001");
+});
+
+test("founders mode is explicit and never masquerades as public participation", async () => {
+  const { b, read } = await scenario();
+  b.config.params.activate_bps = 0;
+  b.config.params.deactivate_bps = 0;
+  b.config.reserved[0] = 0;
+  const data = await read();
+  assert.equal(data.launchMode, "founders");
+  assert.equal(progressState(data, b.time()), "founders");
+  assert.equal(progressState({ ...data, pausedUntil: Number((1n << 63n) - 1n) }, b.time()), "paused");
+  b.config.reserved[0] = 1;
+  await assert.rejects(read, /configuration/);
+  b.config.reserved[0] = 0;
+  b.config.version = 3;
+  await assert.rejects(read, /configuration/);
 });

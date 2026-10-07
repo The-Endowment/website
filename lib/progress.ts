@@ -16,6 +16,7 @@ export type ProgressSnapshot = {
   committedBps: number;
   lastCountAt: number;
   active: boolean;
+  launchMode: "founders" | "public";
   pausedUntil: number;
   retired: boolean;
   milestoneReached: boolean;
@@ -29,6 +30,7 @@ export function progressState(data: Progress | null, now: number) {
   if (data.milestoneReached || BigInt(data.held) >= ENDOWMENT_GOAL) return "complete";
   if (data.retired) return "retired";
   if (data.pausedUntil > now) return "paused";
+  if (data.launchMode === "founders") return "founders";
   if (!data.lastCountAt) return "uncounted";
   if (now - data.lastCountAt > COUNT_MAX_AGE) return "stale";
   return data.active ? "active" : "raising";

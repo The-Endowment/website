@@ -6,8 +6,17 @@ const U128_MAX = (1n << 128n) - 1n;
 const min = (a: bigint, b: bigint) => a < b ? a : b;
 const positive = (n: bigint) => n > 0n ? n : 0n;
 
+/** Match Config::allowance_count_is_current across an open daily count. */
+export function allowanceCountIsCurrent(config: Config, landlord: Landlord) {
+  if (landlord.attestation_epoch !== config.refresher_epoch || landlord.counted_round === 0n) return false;
+  if (config.count.open && landlord.counted_round === config.count.round) return true;
+  const completedRound = positive(config.count.round - (config.count.open ? 1n : 0n));
+  return config.last_count_at !== 0n && landlord.counted_round === completedRound;
+}
+
 /** Match Config::carry_floor and Landlord::settle, including Rust saturation. */
 export function rewardAllowance(config: Config, landlord: Landlord, now: bigint) {
+  if (!allowanceCountIsCurrent(config, landlord)) return 0n;
   const marks = config.reward_marks.filter(m => m.at !== 0n && m.at > now - 3n * DAY && m.at <= now);
   const floor = marks.reduce((n, m) => min(n, m.index), config.reward_index);
   // Allowance accrues on the counted coin, less anything a later read found gone.
@@ -20,10 +29,8 @@ export function rewardAllowance(config: Config, landlord: Landlord, now: bigint)
     earned(config.reward_index - floor));
 }
 
-/** A pause may extend a live receipt, but cannot reopen an expired one. */
+/** Config v4 never extends expiry: even an indefinite stop leaves refunds live. */
 export function refundDeadline(receipt: Receipt, config: Config) {
-  const start = config.pause_started_at, end = config.paused_until;
-  return start >= receipt.collected_at && start < receipt.refund_at && end > receipt.collected_at
-    ? (receipt.refund_at > end + 2n * DAY ? receipt.refund_at : end + 2n * DAY)
-    : receipt.refund_at;
+  if (config.version !== 4) throw new Error("Refund timing requires Config v4");
+  return receipt.refund_at;
 }

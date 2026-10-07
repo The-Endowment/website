@@ -78,7 +78,7 @@ test("collector → held receipt → independent partial review → refund prote
   }
 });
 
-test("missing payout evidence refunds after the hold, even when the pool is unavailable", async (t) => {
+test("a completed review without payout evidence refunds immediately, even when the pool is unavailable", async (t) => {
   const bank = await holdingBank(), directory = await mkdtemp(join(tmpdir(), "hold-missing-evidence-"));
   t.mock.method(Date, "now", () => bank.time() * 1000);
   const options: WorkerOptions = { rpc: bank.rpc, rpcUrl: "http://127.0.0.1", inst: bank.inst,
@@ -86,7 +86,8 @@ test("missing payout evidence refunds after the hold, even when the pool is unav
   try {
     await walletTick(options, bank.owner, []);
     bank.move("reward", 40n); bank.move("sweep", 40n);
-    await walletTick(options, bank.owner, bank.receipts());
+    const rejected = await walletTick(options, bank.owner, bank.receipts());
+    assert.equal("outcomes" in rejected && rejected.outcomes[0].action, "refund");
     bank.advance(86400); bank.removePool();
     const result = await walletTick(options, bank.owner, bank.receipts());
     assert.equal("outcomes" in result && result.outcomes[0].action, "refund");

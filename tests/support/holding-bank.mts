@@ -37,7 +37,9 @@ export async function holdingBank() {
     milestone_reached: false, last_count_at: BigInt(now), reward_index: 1_000_000_000_000n,
     reward_marks: [{ at: BigInt(now), index: 0n }, { at: 0n, index: 0n }, { at: 0n, index: 0n }] });
   Object.assign(config.params, { allowance_margin_bps: 10000, max_rewards_per_day: 1_000_000n });
+  Object.assign(config.count, { round: 1n, open: false });
   Object.assign(landlord, { baseline: 20n, index_at: 0n, allowance: 0n, counted_amount: 100n, snapshot: 100n, snapshot_valid: true, first_collection_nonce: 0n });
+  Object.assign(landlord, { counted_round: 1n, attestation_epoch: config.refresher_epoch });
   Object.assign(consent, { enabled: true, next_nonce: 0n, started_at: BigInt(now) });
   policy.pending = 0n;
   const sync = () => {
