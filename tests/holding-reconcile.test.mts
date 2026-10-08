@@ -213,8 +213,11 @@ test("missing landlord refunds immediately; temporary inactivity alone does not"
   paused.active = false;
   paused.config.pause_started_at = 80000n;
   paused.config.paused_until = 90000n;
-  assert.equal(settlementPlan(receipt, paused, decision), "wait");
+  assert.equal(settlementPlan(receipt, paused, decision), "refund");
   paused.config.paused_until = 0n;
+  assert.equal(settlementPlan(receipt, paused, decision), "refund");
+  // Inactivity without an incident (e.g. stale counts) does not invalidate held funds.
+  paused.config.pause_started_at = 0n;
   assert.equal(settlementPlan(receipt, paused, decision), "clear");
 });
 

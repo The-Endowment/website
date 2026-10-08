@@ -1,15 +1,16 @@
-// Launch steps for the $PENIS endowment. Every command simulates by default and
-// sends only with --send. Admin steps either sign with a local key
-// (--admin-key, for a fork rehearsal) or print the instruction for the Squads
-// admin to propose (--admin <vault address>), since the admin is a multisig.
+// Launch steps for the $PENIS endowment. Local signers simulate, and send only
+// with --send. --admin <vault> only prepares instructions for Squads: it neither
+// simulates nor sends. --admin-key requires --rehearsal and a local fork URL.
 //
 //   node scripts/launch.mts addresses
+//   node scripts/launch.mts status
 //   node scripts/launch.mts create  --params launch/params.json --creator-key <file> [--send]
 //   node scripts/launch.mts init-collection --collector <addr> --reviewer <addr> (--admin-key <file> | --admin <vault>) [--send]
 //   node scripts/launch.mts propose-params  --params launch/public.json (--admin-key <file> | --admin <vault>) [--send]
-//   node scripts/launch.mts apply-params    --payer-key <file> [--send]
+//   node scripts/launch.mts apply-params    --admin <vault>
+//   node scripts/launch.mts apply-params    --payer-key <file> [--send] # after the additional 24h grace period
 //
-// Environment: SOLANA_RPC_URL (a paid endpoint for mainnet; a local fork URL for rehearsals).
+// Environment: SOLANA_RPC_URL (a suitable mainnet endpoint, or a local fork URL).
 import { readFile } from "node:fs/promises";
 import {
   address,
@@ -42,10 +43,10 @@ import {
   type Instance,
 } from "../lib/endowment.ts";
 import { holdPda } from "../lib/holding/client.ts";
-import { instruction, schema } from "../lib/holding/codec.ts";
-import type { CreateParams, Params } from "../lib/holding/accounts.ts";
+import { decodeAccount, instruction, schema } from "../lib/holding/codec.ts";
+import type { CollectionPolicy, Config, CreateParams, Params } from "../lib/holding/accounts.ts";
 import { keySigner } from "../lib/holding/sign.ts";
-import { checkLaunchParams, parseParams } from "../lib/launch-params.ts";
+import { checkLaunchParams, checkLaunchRoles, checkRehearsal, explicitRole, parseParams } from "../lib/launch-params.ts";
 
 const PROGRAM = address(schema.address);
 const POOL = address("AXTq4JHNYHSnooqjoDmtL9WW5eEgnkkMSWq76Kznidnz");
@@ -58,8 +59,10 @@ const flag = (name: string) => {
   return i > 0 ? args[i + 1] : undefined;
 };
 const send = args.includes("--send");
+const rehearsal = args.includes("--rehearsal");
 const rpcUrl = process.env.SOLANA_RPC_URL;
 if (!rpcUrl && command !== "addresses") throw new Error("Set SOLANA_RPC_URL");
+checkRehearsal(rehearsal, rpcUrl);
 
 async function instance(): Promise<Instance> {
   return {
@@ -75,9 +78,39 @@ async function instance(): Promise<Instance> {
 /** A local key signs; a vault address gets a placeholder signer and the instruction is printed for Squads. */
 async function adminSigner(): Promise<{ signer: TransactionSigner; local: boolean }> {
   const key = flag("admin-key"), vault = flag("admin");
-  if (key && !vault) return { signer: await keySigner(key), local: true };
-  if (vault && !key) return { signer: createNoopSigner(address(vault)), local: false };
+  if (key && !vault) {
+    if (!rehearsal) throw new Error("--admin-key requires --rehearsal; production admin steps use --admin <Squads vault>");
+    return { signer: await keySigner(key), local: true };
+  }
+  if (vault && !key) {
+    if (send) throw new Error("--admin prepares instructions only; execute through Squads, without --send");
+    return { signer: createNoopSigner(explicitRole(vault, "admin")), local: false };
+  }
   throw new Error("Pass exactly one of --admin-key <file> or --admin <vault address>");
+}
+
+async function readAccount<T>(name: string, account: Address): Promise<T | null> {
+  const { value } = await createSolanaRpc(rpcUrl!).getAccountInfo(account, {
+    encoding: "base64", commitment: "confirmed",
+  }).send();
+  if (!value) return null;
+  if (value.owner !== PROGRAM) throw new Error(`${name} has the wrong program owner`);
+  return decodeAccount<T>(name, Buffer.from(value.data[0], "base64"));
+}
+
+async function launchConfig(inst: Instance, admin?: Address) {
+  const config = await readAccount<Config>("Config", inst.config);
+  if (!config || config.version !== 4) throw new Error("No supported endowment config; create and verify it first");
+  if (admin && admin !== config.admin) throw new Error("The supplied admin does not match the on-chain admin vault");
+  return config;
+}
+
+async function checkConfiguredRoles(inst: Instance, config: Config, refresher = config.params.refresher) {
+  const policy = await readAccount<CollectionPolicy>("CollectionPolicy", await holdPda(inst, "policy"));
+  checkLaunchRoles({ admin: config.admin, guardian: config.guardian, refresher,
+    ...(policy ? { collector: policy.collector, reviewer: policy.reviewer } : {}),
+  }, PROGRAM_FLAGSHIP_CREATOR, rehearsal);
+  return policy;
 }
 
 const json = (value: unknown) =>
@@ -94,6 +127,7 @@ async function printForSquads(vault: Address, ixs: Instruction[]) {
     (m) => appendTransactionMessageInstructions(ixs, m),
   );
   const compiled = compileTransaction(message);
+  console.log("Prepared only: not simulated, submitted, or approved. Review and simulate through Squads before execution.");
   console.log("Instructions for the Squads vault to execute:");
   console.log(json(ixs.map((ix) => ({
     programId: ix.programAddress,
@@ -102,7 +136,7 @@ async function printForSquads(vault: Address, ixs: Instruction[]) {
   }))));
   console.log("\nBase58 transaction message (import into the Squads transaction builder):");
   console.log(getBase58Decoder().decode(compiled.messageBytes));
-  console.log("\nThe vault pays rent for any new accounts, so fund it first. Nothing was sent.");
+  console.log("\nThe vault pays rent for any new accounts. Rebuild the message if its blockhash expires. Nothing was sent.");
 }
 
 /** Simulate, and with --send submit and confirm. */
@@ -151,18 +185,31 @@ if (command === "addresses") {
     dividendVault: await ata(authority, PUMP_MINT), coinVault: await ata(authority, PENIS_MINT),
     collectionPolicy: policy, pendingVault: await ata(policy, PUMP_MINT), pool: POOL,
   }));
+} else if (command === "status") {
+  const config = await launchConfig(inst);
+  const policy = await readAccount<CollectionPolicy>("CollectionPolicy", await holdPda(inst, "policy"));
+  console.log(json({ config: inst.config, version: config.version,
+    admin: config.admin, guardian: config.guardian, refresher: config.params.refresher,
+    collector: policy?.collector ?? null, reviewer: policy?.reviewer ?? null,
+    publicLocked: config.reserved[0] !== 0, active: config.active,
+    pausedUntil: config.paused_until, retired: config.retired,
+    lastCountAt: config.last_count_at, lastCountBps: config.last_count_bps,
+    rewardIndex: config.reward_index, rewardCreditOk: config.reward_credit_ok,
+    pendingEffectiveAt: config.pending.effective_at,
+    pendingParams: config.pending.effective_at !== 0n ? config.pending.params : null, params: config.params,
+  }));
+  console.log("Read-only snapshot; verify Squads membership, thresholds, config authority and upgrade authority separately.");
 } else if (command === "create") {
   const creator = await keySigner(flag("creator-key"));
   if (creator.address !== PROGRAM_FLAGSHIP_CREATOR) throw new Error(`The creator key must be ${PROGRAM_FLAGSHIP_CREATOR}`);
   const file = JSON.parse(await readFile(flag("params") ?? "", "utf8"));
   const params = parseParams(file.params ?? file);
   const create: CreateParams = {
-    admin: address(file.admin), guardian: address(file.guardian), params, contribution_cap: GOAL,
+    admin: explicitRole(file.admin, "admin"), guardian: explicitRole(file.guardian, "guardian"), params, contribution_cap: GOAL,
   };
   checkLaunchParams(params, { creating: true });
-  if (create.admin === PROGRAM_FLAGSHIP_CREATOR || create.guardian === PROGRAM_FLAGSHIP_CREATOR) {
-    console.log("Warning: admin or guardian is the creator key itself, not a multisig. Fine for a rehearsal only.");
-  }
+  checkLaunchRoles({ admin: create.admin, guardian: create.guardian, refresher: params.refresher },
+    PROGRAM_FLAGSHIP_CREATOR, rehearsal);
   const authority = await authorityPda(PROGRAM, inst.config);
   console.log(json({ config: inst.config, ...create }));
   await run(creator, [instruction(PROGRAM, "create_endowment", {
@@ -173,9 +220,11 @@ if (command === "addresses") {
     associated_token_program: ASSOCIATED_TOKEN_PROGRAM_ADDRESS, system_program: SYSTEM_PROGRAM,
   }, { params: create })]);
 } else if (command === "init-collection") {
-  const collector = address(flag("collector") ?? ""), reviewer = address(flag("reviewer") ?? "");
-  if (collector === reviewer) throw new Error("The collector and reviewer must be different keys");
+  const collector = explicitRole(flag("collector"), "collector"), reviewer = explicitRole(flag("reviewer"), "reviewer");
   const { signer: admin, local } = await adminSigner();
+  const config = await launchConfig(inst, admin.address);
+  checkLaunchRoles({ admin: config.admin, guardian: config.guardian, refresher: config.params.refresher,
+    collector, reviewer }, PROGRAM_FLAGSHIP_CREATOR, rehearsal);
   const policy = await holdPda(inst, "policy");
   const ix = instruction(PROGRAM, "initialize_collection", {
     admin, config: inst.config, policy, dividend_mint: PUMP_MINT, pending_vault: await ata(policy, PUMP_MINT),
@@ -191,14 +240,27 @@ if (command === "addresses") {
     console.log("This proposal moves to public mode. Once applied it is irreversible: 30%/25% for good.");
   }
   const { signer: admin, local } = await adminSigner();
+  const config = await launchConfig(inst, admin.address);
+  await checkConfiguredRoles(inst, config, params.refresher);
   const ix = instruction(PROGRAM, "propose_params", { admin, config: inst.config }, { params });
   if (local) await run(admin, [ix]);
   else await printForSquads(admin.address, [ix]);
 } else if (command === "apply-params") {
-  // Anyone may apply after the grace period; before it, only the admin.
-  const caller = await keySigner(flag("payer-key"));
-  await run(caller, [instruction(PROGRAM, "apply_params", { caller, config: inst.config })]);
+  // The Squads admin may apply at 72h. Other callers must wait another 24h.
+  if (flag("payer-key") && (flag("admin") || flag("admin-key"))) {
+    throw new Error("Use either --payer-key or an admin option, not both");
+  }
+  const { signer: caller, local } = flag("payer-key")
+    ? { signer: await keySigner(flag("payer-key")), local: true }
+    : await adminSigner();
+  const config = await launchConfig(inst, flag("payer-key") ? undefined : caller.address);
+  if (config.pending.effective_at === 0n) throw new Error("No pending parameter proposal");
+  checkLaunchParams(config.pending.params, { creating: false });
+  await checkConfiguredRoles(inst, config, config.pending.params.refresher);
+  const ix = instruction(PROGRAM, "apply_params", { caller, config: inst.config });
+  if (local) await run(caller, [ix]);
+  else await printForSquads(caller.address, [ix]);
 } else {
-  console.log("Commands: addresses | create | init-collection | propose-params | apply-params (see the top of this file)");
+  console.log("Commands: addresses | status | create | init-collection | propose-params | apply-params (see the top of this file)");
   process.exit(1);
 }

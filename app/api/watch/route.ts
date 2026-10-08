@@ -20,15 +20,15 @@ export async function GET(request: Request) {
   if (!authorized(new URL(request.url).searchParams.get("key"))) {
     return Response.json({ error: "unauthorized" }, { status: 401 });
   }
-  const inst = await flagshipInstance();
-  if (!inst) return Response.json({ ok: true, skipped: "not launched" });
   const now = Math.floor(Date.now() / 1000);
   try {
+    const inst = await flagshipInstance();
+    if (!inst) return Response.json({ ok: false, issues: [{ code: "not_configured" }] }, { status: 503 });
     const rpc = jsonRpc(process.env.SOLANA_RPC_URL ?? RPC_URL);
     const issues = assessWatch(await readWatch(rpc, inst, now));
     return Response.json({ ok: issues.length === 0, checkedAt: now, issues }, { status: issues.length ? 503 : 200 });
-  } catch (err) {
-    const message = err instanceof Error ? err.message : String(err);
-    return Response.json({ ok: false, checkedAt: now, issues: [{ code: "read_failed", message }] }, { status: 503 });
+  } catch {
+    // RPC exceptions may contain provider credentials. Return only the issue code.
+    return Response.json({ ok: false, checkedAt: now, issues: [{ code: "read_failed" }] }, { status: 503 });
   }
 }

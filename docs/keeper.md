@@ -1,8 +1,8 @@
 # Keeper runbook
 
-The web keeper triggers buybacks, refresher passes and the daily commitment count. Refundable collections run in separate durable services; see [collection-worker.md](collection-worker.md). The legacy `/api/keeper/sweep` route now returns a skipped result. Its key pays network fees and receives the buyback tip. It is also the flagship's **refresher**: a landlord counts only after three of its refresh reads, at least 30 minutes apart, since its last count. That key can't move funds, but it is trusted: whoever holds it chooses when landlords are read, so a leaked key could be used to time reads and count one holding in several wallets, or to leave landlords out. Treat it as sensitive (see Key custody), and keep it running: if it stops, nobody counts (see Health).
+The web keeper now runs **permissionless buybacks and pruning only**. Roy's separate refresher service runs attestations, counts and reward-total posts; see [refresher.md](refresher.md). Collector and reviewer remain separate durable services; see [collection-worker.md](collection-worker.md). The website must never hold the reviewer or refresher key. Its fee-paying keeper key receives the existing buyback tip and is refused if it matches the configured refresher.
 
-Routes: `/api/keeper/sweep`, `/api/keeper/buy`, `/api/keeper/count`, `/api/keeper/refresh`, `/api/keeper/post`, `/api/keeper/prune`, `/api/keeper/health`. Code: `lib/keeper.ts`. Every job returns within about 50 seconds with whatever it managed, and resumes on its next call.
+Routes: `/api/keeper/buy`, `/api/keeper/prune`, `/api/keeper/health`. `/api/keeper/count`, `/refresh` and `/post` return HTTP 410 so obsolete schedules fail visibly instead of silently losing attestations. The legacy `/sweep` route still does not collect. Code: `lib/keeper.ts` (server-only loading) and `lib/keeper-runtime.ts` (shared job logic).
 
 ## Environment variables
 
@@ -13,13 +13,10 @@ Routes: `/api/keeper/sweep`, `/api/keeper/buy`, `/api/keeper/count`, `/api/keepe
 | `NEXT_PUBLIC_ENDOWMENT_CREATOR` | The wallet that created the $PENIS endowment. Must equal `PROGRAM_FLAGSHIP_CREATOR` in `lib/endowment.ts`, which mirrors `FLAGSHIP_CREATOR` in the program; the site refuses any other value. |
 | `NEXT_PUBLIC_SOLANA_RPC_URL` | RPC for the browser and the public routes (`/api/ledger`, `/api/endowments`). Use a separate key from the keeper's. |
 | `SOLANA_RPC_URL` | RPC for the keeper only (a paid provider such as Helius). Never used by public routes. |
-| `KEEPER_SECRET_KEY` | The keeper wallet's 64-byte secret key, as a JSON array (`solana-keygen` format). **Production-only and marked Sensitive in Vercel.** Fund the wallet with about 1 SOL. |
+| `KEEPER_SECRET_KEY` | The keeper wallet's 64-byte secret key, as a JSON array (`solana-keygen` format). **Production-only and marked Sensitive in Vercel.** Agree a small fee reserve and replenish it based on measured usage. |
 | `CRON_SECRET` | Bearer token for scheduled GET calls. |
 | `WEBHOOK_SECRET` | A different bearer token, for the dividend-drop webhook's POST calls. It can only trigger sweeps. |
-| `KEEPER_JITTER_SECRET` | Optional. Seeds the random refresh draws (defaults to a hash input derived from the keeper key). |
 | `KEEPER_PRIORITY_MICROLAMPORTS` | Optional. Priority fee per compute unit (default 5000). |
-| `KEEPER_REFRESHES_PER_DAY` | Optional. About how many refresh passes run per day, at random times (default 8; a landlord needs three spaced passes between counts). |
-| `KEEPER_REFRESH_TICK_MINUTES` | Optional. How often the refresh route is called by the scheduler (default 15). |
 
 Set secrets with `vercel env add <NAME> production --sensitive`.
 
@@ -32,9 +29,6 @@ Sub-daily Vercel Cron jobs need the Pro plan. Once the project is on Pro, add th
   "framework": "nextjs",
   "crons": [
     { "path": "/api/keeper/buy", "schedule": "*/5 * * * *" },
-    { "path": "/api/keeper/count", "schedule": "*/15 * * * *" },
-    { "path": "/api/keeper/refresh", "schedule": "*/15 * * * *" },
-    { "path": "/api/keeper/post", "schedule": "7 * * * *" },
     { "path": "/api/keeper/prune", "schedule": "0 */6 * * *" }
   ]
 }
@@ -43,22 +37,14 @@ Sub-daily Vercel Cron jobs need the Pro plan. Once the project is on Pro, add th
 Vercel sends `Authorization: Bearer $CRON_SECRET` automatically.
 
 - **Buy:** every 5 minutes. Once the contract's minimum interval has passed and the vault holds the minimum buy, it simulates the buyback. If the contract would refuse (most often because the spot price is outside the endowment's price band around the TWAP), nothing is sent and the response logs the reason with the spot price, the TWAP and their deviation in basis points, so refusals can be reviewed later. Otherwise it sends the buy with `min_out` set to the simulated fill less 1%, on top of the contract's own TWAP floor. Frequent attempts matter: the price often sits outside the band for an hour or so, and a daily attempt would miss most windows.
-- **Count:** attempted every 15 minutes. Once 24 hours have passed since the last round began, it runs a refresher pass (the contract only lets a round begin after one), begins a round, then counts. While a round is open, each call first re-reads the landlords it still expects that are short of their three reads (30 minutes after their last read), then sends every count batch (six landlords each, shuffled) before confirming any, retries failed batches one landlord at a time, and finishes once all are counted or the four-hour timeout has passed. The contract leaves a landlord still short of reads pending rather than counting it as zero, so a round started early by someone else simply takes a little longer. It doesn't prune first: a landlord that no longer qualifies simply counts zero.
-- **Refresh:** called every 15 minutes, but proceeds only on a secret-seeded random draw, about `KEEPER_REFRESHES_PER_DAY` times a day. Each pass reads every landlord in a fresh random order, in batches of six, every batch sent before any is confirmed so they land within a slot or two of each other, and retries failed batches one landlord at a time. To count one holding in two wallets, someone would have to move it between the two wallets' batches in each of three independently shuffled passes.
 - **Prune:** every 6 hours. Reads landlords in parallel and removes those that revoked or fell below the minimum stake.
 - **Collection:** use the separate durable collector/reviewer services; the old sweep route does not collect.
 
-Alternative without Vercel Pro: the GitHub Actions workflow in `docs/keeper-schedule.yml` does the same with `curl`. Copy it to `.github/workflows/` and add `KEEPER_URL` and `CRON_SECRET` as repository secrets. GitHub delays scheduled runs under load, so a paid scheduler is better for the refresh and count, and set `KEEPER_REFRESH_TICK_MINUTES` to the real cadence.
+Alternative without Vercel Pro: the GitHub Actions workflow in `docs/keeper-schedule.yml` does the same with `curl`. Copy it to `.github/workflows/` and add `KEEPER_URL` and `CRON_SECRET` as repository secrets. This schedules only the web keeper. The independent refresher uses its own supervisor/timer; it is not triggered through GitHub or the website.
 
-## The daily reward post
+## Counts and daily reward posts
 
-`/api/keeper/post` reads stonk.fun's public running total of PUMP paid to $PENIS holders and posts it on-chain with `post_reward_total`, signed as the refresher. The contract turns each day's increase into every landlord's allowance: the most a collection can take. Code: `runRewardPost` in `lib/keeper.ts`, with the checks in `lib/reward-total.ts`.
-
-- **Schedule it hourly.** The job posts once the last post is 23 hours old and otherwise answers `posted recently`, so an hourly schedule gives one post a day at a steady time and retries a failed one within the hour.
-- **It keeps posting while contributions are off.** A post made then credits nothing and moves the starting point, so rewards paid meanwhile stay with landlords.
-- **It never posts a total that went down.** It answers `the feed's total is below the last one posted` with both figures. Check the feed; if stonk.fun really reset its counter, post once by hand.
-- **Without it nothing is collected.** Unused allowance lasts about three days, and after a gap one post credits two days at most. `health` reports `rewardPostStale` when the last post is over 36 hours old.
-- The response gives `posted`, `increase` and the `signature`. The first post only sets the starting point.
+These run on Roy's independently controlled host, with a dedicated refresher key. Follow [refresher.md](refresher.md) for setup, cadence, checks and monitoring. The shared implementations and on-chain limits are unchanged apart from requiring a fresh completed count in founders mode too. Do not keep old website count/refresh/post schedules enabled after this migration.
 
 ## Dividend-drop webhook
 
@@ -71,23 +57,20 @@ There is no limit on landlords. Each count or refresh batch reads six landlords 
 ## Runbook
 
 - **Buys refused on price:** the buy response shows `skipped` (for example `PriceAboveTwap`, `PriceBelowTwap`, `FloorAboveQuote` or `TwapUnavailable`) and `price` (spot, TWAP, deviation and the band). Occasional refusals are expected on a volatile pool. If they last most of the day, consider proposing a wider `max_twap_deviation_bps` (bounded at 10%, timelocked 72 hours).
-- **Health:** `GET /api/keeper/health` reports the round, the last count, the last refresher pass (`attestAgeSecs`), whether collection is released in this build, whether sweeps are on and the last sweep. `stale: true` if the last count is over 48 hours old, a round has been open past its timeout, or (with landlords) no refresher pass has landed in 12 hours. Point an uptime monitor at it: without refresher passes nobody counts, and sweeps switch off three days after the last count.
-- **Independent watch:** `GET /api/watch?key=<WATCH_SECRET>` needs no signing key, so it keeps working when the keeper, collector or reviewer is down. It answers 200 when nothing needs attention and 503 with `issues` otherwise: `paused`; `receipt_overdue` (a collection held 30 hours, where the collector stops itself); `receipt_stuck` (72 hours: refunds aren't being submitted); `reward_post_stale` (36 hours) and `count_stale` (48 hours), both only while landlords are enrolled; `low_fee_balance` (collector, reviewer or refresher under 0.05 SOL); and `read_failed` when the chain can't be read. Set `WATCH_SECRET` (Production, Sensitive) and `SOLANA_RPC_URL` (listing pending collections needs `getProgramAccounts`, which public RPC nodes often refuse). Point an external uptime monitor at it every few minutes, alerting both founders on any non-200. Each collection worker's own `health.json` heartbeat needs a separate check-in monitor: this watch sees the chain, not whether a process is alive.
+- **Health:** `GET /api/keeper/health` reports the round, the last count, the last refresher pass (`attestAgeSecs`), whether collection is released in this build, whether sweeps are on and the last sweep. `stale: true` if the last count is over 48 hours old, a round has been open past its timeout, or (with landlords) no refresher pass has landed in 12 hours. This diagnostic endpoint returns JSON; a basic HTTP-status monitor alone is not enough. Use `/api/watch` for chain-health HTTP alerts and separate external completed-pass checks for all three workers. Without refresher passes nobody counts; sweeps switch off three days after the last completed count in every mode.
+- **Independent watch:** `GET /api/watch?key=<WATCH_SECRET>` needs no signing key, so it keeps working when the keeper, collector or reviewer is down. It answers 200 when nothing needs attention and 503 with `issues` otherwise: `paused`; `receipt_overdue` (a collection held 30 hours, where the collector stops itself); `receipt_stuck` (72 hours: refunds aren't being submitted); `reward_post_stale` (36 hours) and `count_stale` (48 hours), both only while landlords are enrolled; `low_fee_balance` (collector, reviewer or refresher under 0.05 SOL); and `read_failed` when the chain can't be read. Missing launch configuration returns 503 `not_configured`; raw provider errors are not exposed. Set `WATCH_SECRET` (Production, Sensitive) and `SOLANA_RPC_URL` (listing pending collections needs `getProgramAccounts`, which public RPC nodes often refuse). Point an external uptime monitor at it every few minutes, alerting both founders on any non-200. Each collection worker's own `health.json` heartbeat needs a separate check-in monitor: this watch sees the chain, not whether a process is alive.
 - **A count was run by someone else:** nothing to do. Counting is permissionless; the job continues any open round and otherwise reports "counted recently".
 - **A landlord failed to count:** the response lists it with the error. The round still finishes after its timeout, without that landlord.
 - **A sweep failed:** the response lists failing landlords with the error. Common causes: the landlord revoked, or the endowment is paused or not yet active. Other landlords are unaffected.
 - **Buys skipped:** "below the minimum buy" or "not yet" are normal. Errors about fees, pool state or price mean the contract refused to trade in unsafe conditions. Check the pool and the mints' fee settings.
 - **Keeper low on SOL:** top up the keeper wallet. Tips accrue as PUMP in its PUMP account and can be swapped to SOL as needed.
 
-## Key custody
+## Key custody and rotation
 
-The keeper key signs every keeper transaction and is the flagship's refresher, so it is the one key whose misuse could change what the count finds (it can never move funds).
+Use **2-of-2 Roy/Brett approval for admin and upgrades**, plus a separate **1-of-2 guardian** that either can use to pause. Both approvals are required for restart. Verify actual Squads vault addresses, membership, thresholds, and the absence of an independent configuration authority that could bypass the quorum. These scripts do not create or verify the multisigs for you.
 
-- **Founders' test (now):** the key lives only in `KEEPER_SECRET_KEY`, set as a **Production-only, Sensitive** environment variable in Vercel (`vercel env add KEEPER_SECRET_KEY production --sensitive`). It isn't available to preview or development deployments, and Sensitive values can't be read back from the dashboard or the CLI. Only the founders have access to the Vercel project. Keep the wallet's SOL balance small (about 1 SOL) and sweep accumulated tips out regularly.
-- **Separate key for the refresher, later:** the refresher is a parameter, so it can be moved to its own key (for example a dedicated wallet run from a separate, locked-down scheduler) through the 72-hour timelock, leaving the Vercel key only for fee-paying cranks.
-- **Rotation plan.** Rotate on any suspicion of exposure, when anyone with project access leaves, and otherwise every 90 days during the test:
-  1. Generate a new keypair offline and fund it with a little SOL.
-  2. The admin proposes the new key as `refresher` (72-hour timelock). Meanwhile the old key keeps running.
-  3. When the change matures, apply it, replace `KEEPER_SECRET_KEY` in Vercel (Production, Sensitive) and redeploy.
-  4. Move any remaining SOL and PUMP tips out of the old wallet.
-  - **If the old key may be compromised,** don't wait for the timelock: sign `resign_refresher` with it right away. Nobody counts until the new refresher is applied, and the contract switches collection off immediately when the refresher resigns. After the admin role is renounced, resigning is the only change the refresher key can make, so a leaked key can always be shut off by the team, and never replaced by anyone.
+Brett controls collector hosting and its key; Roy controls reviewer and refresher hosting with separate keys. The Vercel keeper is a fourth, unprivileged fee payer. Do not upload Roy's keys to Brett's server or a jointly administered website project. Admin signer backups are separate from always-on operational keys.
+
+For refresher rotation, pause on suspected exposure; propose the replacement through admin, wait the timelock, apply, verify roles, and replace Roy's refresher key file. Expect fresh attestations/counts before collection resumes. Follow the same custody review for collector/reviewer rotation. No funds or signing keys are configured by this source change.
+
+The buyback tip is PUMP paid to a successful buyback caller, not a general treasury expense withdrawal or a guaranteed offset to bills. Budget hosting and all signer fees explicitly. Account rent for pending contributions is temporary working capital until settlement, separate from transaction fees.

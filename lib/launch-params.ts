@@ -3,11 +3,46 @@
  * own validation rules (`Params::validate` in state.rs), so a bad file fails
  * here rather than in a signed transaction.
  */
-import { address } from "@solana/kit";
+import { address, type Address } from "@solana/kit";
 import type { Params } from "./holding/accounts.ts";
 
 const U64 = ["max_buy_per_tx", "max_buy_per_day", "min_buy_amount", "min_buy_interval_secs", "max_rewards_per_day"] as const;
 const SMALL = ["max_price_impact_bps", "max_twap_deviation_bps", "tip_bps", "buy_bps", "activate_bps", "deactivate_bps", "min_stake_bps", "allowance_margin_bps"] as const;
+const DEFAULT_ADDRESS = "11111111111111111111111111111111";
+
+/** Never permit the contract's default-address-to-creator fallback at launch. */
+export function explicitRole(value: unknown, role: string): Address {
+  if (typeof value !== "string" || value === DEFAULT_ADDRESS) {
+    throw new Error(`Set the ${role} address explicitly; the default/system address is not allowed`);
+  }
+  return address(value);
+}
+
+/** Address separation is necessary, but does not prove multisig membership or custody. */
+export function checkLaunchRoles(
+  roles: { admin: Address; guardian: Address; refresher: Address; collector?: Address; reviewer?: Address },
+  creator: Address,
+  rehearsal = false,
+) {
+  const seen = new Map<Address, string>();
+  for (const [role, value] of Object.entries(roles)) {
+    if (value === undefined) continue;
+    const key = explicitRole(value, role);
+    if (!rehearsal && key === creator) throw new Error(`${role} must not use the creator key`);
+    const duplicate = seen.get(key);
+    if (duplicate) throw new Error(`${role} and ${duplicate} must use different addresses`);
+    seen.set(key, role);
+  }
+}
+
+/** Local-key admin signing is for an explicitly selected local rehearsal only. */
+export function checkRehearsal(rehearsal: boolean, rpcUrl?: string) {
+  if (!rehearsal) return;
+  const host = new URL(rpcUrl ?? "").hostname;
+  if (!["localhost", "127.0.0.1", "[::1]"].includes(host)) {
+    throw new Error("--rehearsal requires a local fork RPC URL");
+  }
+}
 
 /** u64 fields as decimal strings (base units), small fields as numbers, refresher as an address. */
 export function parseParams(raw: Record<string, unknown>): Params {
@@ -16,14 +51,14 @@ export function parseParams(raw: Record<string, unknown>): Params {
     const v = raw[k];
     if (typeof v !== "string" || !/^(0|[1-9][0-9]{0,19})$/.test(v)) throw new Error(`${k} must be a decimal string of base units`);
     out[k] = BigInt(v);
+    if ((out[k] as bigint) > 18_446_744_073_709_551_615n) throw new Error(`${k} exceeds u64`);
   }
   for (const k of SMALL) {
     const v = raw[k];
     if (typeof v !== "number" || !Number.isInteger(v) || v < 0 || v > 65_535) throw new Error(`${k} must be a whole number`);
     out[k] = v;
   }
-  if (typeof raw.refresher !== "string") throw new Error("refresher must be an address");
-  out.refresher = address(raw.refresher);
+  out.refresher = explicitRole(raw.refresher, "refresher");
   const unknown = Object.keys(raw).filter((k) => !(k in out));
   if (unknown.length) throw new Error(`Unknown fields: ${unknown.join(", ")}`);
   return out as Params;
@@ -50,5 +85,5 @@ export function checkLaunchParams(p: Params, { creating }: { creating: boolean }
   if (p.tip_bps > 50) throw new Error("tip_bps must be at most 50");
   if (p.min_stake_bps > 500) throw new Error("min_stake_bps must be at most 500");
   if (p.buy_bps !== 10_000) throw new Error("buy_bps must be 10000: v1 spends everything on buys");
-  if (p.refresher === "11111111111111111111111111111111") throw new Error("Set the refresher address explicitly");
+  explicitRole(p.refresher, "refresher");
 }

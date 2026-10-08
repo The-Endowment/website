@@ -4,7 +4,7 @@ import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { assertCollectionAllowed, collectionStopped, includesOwner, launchControls, quarantine } from "../lib/holding/operations.ts";
-import { PassHealth, saveHealth } from "../lib/holding/operations-health.ts";
+import { assertHeartbeatMode, completedHealthyPass, PassHealth, saveHealth } from "../lib/holding/operations-health.ts";
 import { deliverAlert } from "../lib/holding/operations-alerts.ts";
 import type { HoldSnapshot } from "../lib/holding/snapshot.ts";
 import type { Receipt } from "../lib/holding/types.ts";
@@ -164,4 +164,31 @@ test("empty history reads do not count as observed history or matched reward act
   assert.equal(report.owners.nonemptyHistory, 2);
   assert.equal(report.owners.matchedReward, 1);
   assert.equal(report.pilot.verdict, "not_assessed");
+});
+
+test("only complete healthy passes qualify for success heartbeats; idle is not pilot validation", () => {
+  const health = new PassHealth("reviewer", false);
+  health.feedAvailable = true;
+  const idle = health.report();
+  assert.equal(completedHealthyPass(idle), true);
+  assert.equal(idle.pilot.verdict, "not_assessed");
+  const working = { ...idle, issues: [], owners: { ...idle.owners, selected: 1, processed: 1 } };
+  assert.equal(completedHealthyPass(working), true);
+  assert.equal(completedHealthyPass({ ...working, owners: { ...working.owners, processed: 0 } }), false);
+  assert.equal(completedHealthyPass({ ...working, failures: 1 }), false);
+  for (const issue of ["feed_unavailable", "wallet_failure", "pass_failure", "collection_quarantined",
+    "history_gap", "uncertain_history", "held_amount_requires_refund", "pending_over_30h", "pending_over_72h"]) {
+    assert.equal(completedHealthyPass({ ...working, issues: [issue] }), false, issue);
+  }
+});
+
+test("configured worker monitors require an explicit matching observation or submission mode", () => {
+  const endpoint = "https://monitor.example/private-check";
+  for (const submit of [false, true]) {
+    assert.doesNotThrow(() => assertHeartbeatMode({ submit }));
+    for (const expectedMode of [undefined, "", "founders", "invalid-private-secret"])
+      assert.throws(() => assertHeartbeatMode({ endpoint, expectedMode, submit }), /requires HOLD_HEARTBEAT_MODE/);
+    assert.throws(() => assertHeartbeatMode({ endpoint, expectedMode: submit ? "observe" : "submit", submit }), /does not match/);
+    assert.doesNotThrow(() => assertHeartbeatMode({ endpoint, expectedMode: submit ? "submit" : "observe", submit }));
+  }
 });

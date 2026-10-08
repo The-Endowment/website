@@ -157,8 +157,9 @@ export async function holdSnapshot(
       !config.retired &&
       BigInt(now) >= config.paused_until &&
       config.active &&
-      (config.params.activate_bps === 0 ||
-        BigInt(now) - config.last_count_at <= 3n * 86400n),
+      config.last_count_at > 0n &&
+      config.last_count_at <= BigInt(now) &&
+      BigInt(now) - config.last_count_at <= 3n * 86400n,
   );
   const cap =
     [

@@ -11,14 +11,20 @@ import { walletTick } from "../lib/holding/worker.ts";
 import type { Consent } from "../lib/holding/types.ts";
 import { HOLD_COLLECTION_RELEASED } from "../lib/holding/release.ts";
 import { assertCollectionAllowed, collectionStopped, includesOwner, launchControls, quarantine } from "../lib/holding/operations.ts";
-import { PassHealth, saveHealth } from "../lib/holding/operations-health.ts";
+import { assertHeartbeatMode, completedHealthyPass, PassHealth, saveHealth } from "../lib/holding/operations-health.ts";
 import { deliverAlert } from "../lib/holding/operations-alerts.ts";
+import { deliverHeartbeat } from "../lib/operations-heartbeat.ts";
+
+const selectedRole = process.argv.find((a) => a.startsWith("--role="))?.split("=")[1];
+const heartbeatEndpoint = selectedRole === "collector"
+  ? process.env.HOLD_COLLECTOR_HEARTBEAT_URL : process.env.HOLD_REVIEWER_HEARTBEAT_URL;
 
 async function main() {
-  const role = process.argv.find((a) => a.startsWith("--role="))?.split("=")[1];
+  const role = selectedRole;
   const mode = process.argv.find((a) => a.startsWith("--mode="))?.split("=")[1];
   const submit = process.argv.includes("--submit");
   if (role !== "collector" && role !== "reviewer") throw new Error("Use --role=collector or --role=reviewer");
+  assertHeartbeatMode({ endpoint: heartbeatEndpoint, expectedMode: process.env.HOLD_HEARTBEAT_MODE, submit });
   if (submit && !HOLD_COLLECTION_RELEASED) throw new Error("Draft release hold: submission requires a reviewed rollout");
   const rpcUrl = process.env.SOLANA_RPC_URL, data = process.env.HOLD_DATA_DIR, config = await flagshipConfig();
   if (!rpcUrl || !data || !PROGRAM_ID || !config)
@@ -103,6 +109,7 @@ async function main() {
     try {
       if (role === "collector" && await collectionStopped(stopFile)) health.issues.add("collection_quarantined");
       const report = health.report();
+      if (!completedHealthyPass(report)) process.exitCode = 1;
       await saveHealth(directory, report);
       const alert = await deliverAlert(directory, report, process.env.HOLD_ALERT_WEBHOOK).catch(() => "failed");
       if (alert === "failed") { console.error("Alert delivery failed; inspect local health report."); process.exitCode = 1; }
@@ -110,7 +117,24 @@ async function main() {
     } finally { await rm(lock, { recursive: true }); }
   }
 }
-main().catch(() => {
-  console.error("Worker failed before or while writing health; check configuration, lock, durable storage and external heartbeat monitor.");
-  process.exitCode = 1;
-});
+
+async function run() {
+  try { await main(); }
+  catch {
+    console.error("Worker failed before or while writing health; check configuration, lock, durable storage and external heartbeat monitor.");
+    process.exitCode = 1;
+  }
+  // This is deliberately outside main: startup, journal, alert and lock-cleanup
+  // failures must not leave a successful heartbeat behind. A killed/hung worker
+  // cannot send either ping; its independent check must alert on a missed deadline.
+  if (selectedRole === "collector" || selectedRole === "reviewer") {
+    const heartbeat = await deliverHeartbeat({ endpoint: heartbeatEndpoint, role: selectedRole,
+      success: !process.exitCode });
+    if (heartbeat === "failed") {
+      console.error("Heartbeat delivery failed; the completed pass was not repeated. Check the independent monitor.");
+      process.exitCode = 1;
+    }
+    console.log(JSON.stringify({ role: selectedRole, heartbeat }));
+  }
+}
+await run();
