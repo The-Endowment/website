@@ -6,6 +6,7 @@ import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { mock, test } from "node:test";
 import { deliverHeartbeat, type MonitoredRole } from "../lib/operations-heartbeat.ts";
+import { archiveFeed } from "../lib/holding/feed.ts";
 
 test("heartbeats are optional and each configured role sends only a fixed completed-pass payload", async () => {
   let calls = 0;
@@ -17,18 +18,18 @@ test("heartbeats are optional and each configured role sends only a fixed comple
     assert.ok(options.signal instanceof AbortSignal);
     const body = JSON.parse(String(options.body));
     assert.equal(body.result, "completed");
-    assert.ok(["collector", "reviewer", "refresher"].includes(body.role));
+    assert.ok(["collector", "reviewer", "refresher", "collector-feed", "reviewer-feed"].includes(body.role));
     assert.deepEqual(Object.keys(body).sort(), ["result", "role"]);
     assert.equal(String(options.body).includes("private"), false);
     return new Response("", { status: 200 });
   }) as typeof fetch;
   assert.equal(await deliverHeartbeat({ role: "collector", success: true }, request), "disabled");
   assert.equal(calls, 0);
-  for (const role of ["collector", "reviewer", "refresher"] as MonitoredRole[]) {
+  for (const role of ["collector", "reviewer", "refresher", "collector-feed", "reviewer-feed"] as MonitoredRole[]) {
     assert.equal(await deliverHeartbeat({ endpoint: "https://monitor.example/check?token=private", role,
       success: true }, request), "delivered");
   }
-  assert.equal(calls, 3);
+  assert.equal(calls, 5);
 });
 
 test("a failed pass uses the failure endpoint without dropping its authentication query", async () => {
@@ -122,7 +123,7 @@ test("missing or mismatched heartbeat mode cannot report worker success or start
   }
 });
 
-test("a complete observation worker pass pings success only when the monitor expects observe", () => {
+test("a complete observation worker pass pings success only when the monitor expects observe", async () => {
   for (const role of ["collector", "reviewer"]) {
     for (const expectedMode of ["observe", "submit", ""]) {
       const directory = mkdtempSync(join(tmpdir(), "heartbeat-mode-"));
@@ -135,13 +136,14 @@ test("a complete observation worker pass pings success only when the monitor exp
           return new Response('', {status:200});
         }
         if ('${expectedMode}' !== 'observe') throw new Error('worker work before mode validation');
-        if (String(url) === 'https://www.stonkfun.xyz/api/public/v1/rewards?limit=100')
-          return Response.json({data:{recentDistributions:[]}});
         if (String(url) === 'https://rpc.example/' && JSON.parse(options.body).method === 'getProgramAccounts')
           return Response.json({result:[]});
         throw new Error('unexpected network work');
       };`;
       try {
+        await archiveFeed(directory, { request: (async () => Response.json({
+          data: { recentDistributions: [] }, meta: { generatedAt: new Date().toISOString() },
+        })) as typeof fetch });
         const child = spawnSync(process.execPath, ["--experimental-strip-types", "--import",
           `data:text/javascript,${encodeURIComponent(stub)}`,
           fileURLToPath(new URL("../scripts/held-rewards.mts", import.meta.url)), `--role=${role}`], {

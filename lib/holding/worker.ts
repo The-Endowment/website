@@ -26,9 +26,11 @@ export type WorkerOptions = {
   submit: boolean;
   keyFile?: string;
   feed: Map<string, Distribution>;
+  loadFeed?: () => Promise<Map<string, Distribution>>;
   source: SourcePolicy;
   role: "collector" | "reviewer";
   beforeCollect?: (snapshot: HoldSnapshot) => Promise<void>;
+  beforeRelease?: () => Promise<void>;
   observe?: (event:
     | { kind: "snapshot"; snapshot: HoldSnapshot }
     | { kind: "observations"; observations: Observation[] }
@@ -65,8 +67,11 @@ export async function walletTick(
           state.slot,
           s.slot,
         );
+        // A long pass must see payouts captured while other wallets were read.
+        // Load after history retrieval; missing/late feed records grant no credit.
+        const feed = o.loadFeed ? await o.loadFeed() : o.feed;
         const observations = h.transactions.map((tx) => {
-          const result = classify(tx, source, owner, o.source, o.feed);
+          const result = classify(tx, source, owner, o.source, feed);
           // Missing payout time cannot establish whether it followed consent.
           return result.kind === "reward" &&
             (tx.blockTime === null ||
@@ -180,11 +185,20 @@ export async function walletTick(
           outcomes.push({ receipt: entry.address, action });
           continue;
         }
+        let releaseBlocked = false;
+        const beforeRelease = async () => {
+          if (action !== "clear") return;
+          try { await o.beforeRelease?.(); }
+          catch (error) { releaseBlocked = true; throw error; }
+        };
         const result = await withJournal(
           resolve(o.directory, "settlements"),
           entry.address,
           async (outbox) =>
             settleOutbox(outbox, o.rpc, entry.address, async () => {
+              // Prior positive decisions do not override a newly invalid feed.
+              // The outbox first reconciles any existing signed transaction.
+              await beforeRelease();
               const signer = await keySigner(o.keyFile);
               if (signer.address !== s.policy.reviewer)
                 throw new Error("Wrong reviewer key");
@@ -213,8 +227,13 @@ export async function walletTick(
                 expiresAt: s.now + 60,
                 evidenceHash: decision?.evidenceHash ?? "0".repeat(64),
               });
-            }),
-        );
+            }, beforeRelease),
+        ).catch((error) => {
+          if (!releaseBlocked) throw error;
+          // A release-only outage must not prevent later refunds. Signed bytes
+          // remain durable if the feed failed just before broadcast.
+          return "blocked";
+        });
         outcomes.push({ receipt: entry.address, action, result });
       }
       return { status: "reviewed", outcomes };

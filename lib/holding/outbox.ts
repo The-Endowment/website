@@ -31,6 +31,7 @@ export async function settleOutbox(
   rpc: RpcCall,
   receipt: string,
   prepare: () => Promise<Prepared>,
+  beforePublish?: () => Promise<void>,
 ) {
   const prior = journal.state?.pending;
   if (prior) {
@@ -55,6 +56,7 @@ export async function settleOutbox(
     { ...boundary(receipt, 0, null, "0"), pending },
     "Prepared settlement before broadcast",
   );
+  await beforePublish?.();
   await publish(rpc, pending.wire);
   return "submitted";
 }

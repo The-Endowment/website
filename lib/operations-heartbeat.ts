@@ -1,4 +1,4 @@
-export type MonitoredRole = "collector" | "reviewer" | "refresher";
+export type MonitoredRole = "collector" | "reviewer" | "refresher" | "collector-feed" | "reviewer-feed";
 export type HeartbeatDelivery = "disabled" | "delivered" | "failed";
 
 /** One independent Healthchecks-compatible check per role. Only completed passes
