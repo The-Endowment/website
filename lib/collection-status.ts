@@ -14,5 +14,6 @@ export function collectionStatus(config: Fields, now: number): CollectionStatus 
   if (BigInt(now) < config.pausedUntil) return "paused";
   if (config.params.activateBps === 0 && config.reserved[0] === 0) return "founders";
   if (!config.active) return "building";
-  return now - Number(config.lastCountAt) <= ACTIVE_MAX_AGE_SECS ? "on" : "count-due";
+  return config.lastCountAt > 0n && Number(config.lastCountAt) <= now &&
+    now - Number(config.lastCountAt) <= ACTIVE_MAX_AGE_SECS ? "on" : "count-due";
 }

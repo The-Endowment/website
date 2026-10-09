@@ -103,6 +103,24 @@ export class PassHealth {
 }
 export type HealthReport = ReturnType<PassHealth["report"]>;
 
+/** An observation pass must never satisfy a monitor expecting funded operation.
+ * Configure this independently of the worker command so dropping --submit fails. */
+export function assertHeartbeatMode(input: { endpoint?: string; expectedMode?: string; submit: boolean }) {
+  if (!input.endpoint) return;
+  if (input.expectedMode !== "observe" && input.expectedMode !== "submit")
+    throw new Error("Configured worker heartbeat requires HOLD_HEARTBEAT_MODE=observe or submit");
+  if (input.submit !== (input.expectedMode === "submit"))
+    throw new Error("Worker submission mode does not match HOLD_HEARTBEAT_MODE");
+}
+
+/** An idle pass can be operationally healthy without proving pilot coverage.
+ * Every other issue prevents a success heartbeat, including safely quarantined
+ * collectors and reviewer passes that could not obtain complete evidence. */
+export function completedHealthyPass(report: HealthReport) {
+  return report.failures === 0 && report.owners.processed === report.owners.selected &&
+    report.issues.every((issue) => issue === "no_wallets_selected");
+}
+
 export async function writeJson(directory: string, name: string, value: unknown) {
   const path = join(directory, name);
   const file = await open(path + ".tmp", "w", 0o600);

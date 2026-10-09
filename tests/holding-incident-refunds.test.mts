@@ -110,7 +110,7 @@ test("a zero-approval review refunds before the hold ends, including during an i
   assert.equal(bank.wires.length, 1);
 });
 
-test("missing review is not a rejection; pause never postpones the fixed refund deadline", async t => {
+test("incident receipts refund immediately even without independent payout evidence", async t => {
   const { bank, options, tick, decision } = await scenario(t);
   options.submit = false;
   bank.move("reward", 40n);
@@ -119,17 +119,17 @@ test("missing review is not a rejection; pause never postpones the fixed refund 
   bank.config.paused_until = PAUSED;
   const first = await tick(); // history begins after collection: no decision
   assert.equal(await decision(), undefined);
-  assert.equal("outcomes" in first && first.outcomes[0].action, "wait");
+  assert.equal("outcomes" in first && first.outcomes[0].action, "refund");
   bank.advance(86400);
   const duringPause = await tick();
-  assert.equal("outcomes" in duringPause && duringPause.outcomes[0].action, "wait");
+  assert.equal("outcomes" in duringPause && duringPause.outcomes[0].action, "refund");
   bank.advance(2 * 86400);
   const expired = await tick();
   assert.equal("outcomes" in expired && expired.outcomes[0].action, "refund");
   assert.equal(bank.wires.length, 0);
 });
 
-test("positive or partial approval cannot release during the hold or an incident", async t => {
+test("positive or partial approval never survives an incident, including after restart", async t => {
   const { bank, options, tick, decision } = await scenario(t);
   options.submit = false;
   await tick([]);
@@ -141,13 +141,13 @@ test("positive or partial approval cannot release during the hold or an incident
   bank.config.paused_until = PAUSED;
   const early = await tick();
   assert.equal((await decision())?.amount, "15");
-  assert.equal("outcomes" in early && early.outcomes[0].action, "wait");
+  assert.equal("outcomes" in early && early.outcomes[0].action, "refund");
   bank.advance(86400);
   const paused = await tick();
-  assert.equal("outcomes" in paused && paused.outcomes[0].action, "wait");
+  assert.equal("outcomes" in paused && paused.outcomes[0].action, "refund");
   bank.config.paused_until = BigInt(bank.time());
   const resumed = await tick();
-  assert.equal("outcomes" in resumed && resumed.outcomes[0].action, "clear");
+  assert.equal("outcomes" in resumed && resumed.outcomes[0].action, "refund");
   assert.equal(bank.wires.length, 0);
 });
 

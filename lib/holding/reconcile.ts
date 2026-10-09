@@ -140,6 +140,7 @@ export function settlementPlan(
     !snapshot.consent?.enabled ||
     snapshot.consent.epoch !== receipt.consent_epoch ||
     snapshot.config.retired ||
+    (snapshot.config.pause_started_at > 0n && receipt.collected_at <= snapshot.config.pause_started_at) ||
     snapshot.goalReached ||
     now >= refundDeadline(receipt, snapshot.config)
   )

@@ -116,11 +116,10 @@ for (const scenario of ["before hold", "after hold", "during pause", "deregister
         bank.config.pause_started_at = BigInt(bank.time());
         bank.config.paused_until = BigInt(bank.time() + 86400);
       }
-      // A registered holder continues to wait during the hold or a pause;
-      // an elapsed hold with valid evidence can otherwise be cleared.
+      // Incident receipts are refundable immediately; ordinary holds still wait.
       const registered = await tick();
       assert.equal("outcomes" in registered && registered.outcomes[0].action,
-        scenario === "after hold" ? "clear" : "wait");
+        scenario === "after hold" ? "clear" : scenario === "during pause" ? "refund" : "wait");
       bank.removeLandlord();
       if (scenario === "deregistered") bank.consent.enabled = false;
       const pruned = await tick();
