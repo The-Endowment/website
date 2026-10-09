@@ -78,9 +78,11 @@ const instructions = Object.fromEntries(
       },
     ]),
 );
+// Error names by code, so logs never rely on a hand-maintained number list.
+const errors = Object.fromEntries(idl.errors.map(({ code, name }) => [code, name]));
 const data =
   JSON.stringify(
-    { address: idl.address, accounts, types, instructions },
+    { address: idl.address, accounts, types, instructions, errors },
     null,
     2,
   ) + "\n";

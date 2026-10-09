@@ -23,6 +23,8 @@ type Schema = {
       args: Field[];
     }
   >;
+  /** Program error names by Anchor code (6000 + index). */
+  errors: Record<string, string>;
 };
 export const schema = schemaJson as Schema;
 export const concat = (...parts: Uint8Array[]) =>

@@ -1,4 +1,4 @@
-import { decodeAccount } from "./holding/codec.ts";
+import { decodeAccount, schema } from "./holding/codec.ts";
 import type { Config as ConfigAccount, Landlord as LandlordAccount } from "./holding/accounts.ts";
 /**
  * The endowment program's client: addresses, account decoders and instruction
@@ -94,22 +94,11 @@ export const MAX_VAULT_DAYS_OF_BUYS = 3;
 export const REQUIRED_ATTESTATIONS = 3;
 export const MIN_ATTEST_SPACING_SECS = 30 * 60;
 
-/** The program's error codes the keeper reports by name (anchor: 6000 + index in `EndowmentError`). */
-export const PROGRAM_ERRORS: Record<number, string> = {
-  6008: "NothingToBuy",
-  6011: "PriceImpactTooHigh",
-  6012: "SlippageExceeded",
-  6013: "BuyTooSoon",
-  6028: "FeeTooHigh",
-  6029: "TransferHookEnabled",
-  6030: "TwapUnavailable",
-  6031: "PriceAboveTwap",
-  6032: "PoolSwapDisabled",
-  6041: "VaultFrozen",
-  6048: "PriceBelowTwap",
-  6049: "FloorAboveQuote",
-  6050: "NotAttested",
-};
+/** The program's error names by code, generated from the compiled IDL (scripts/sync-holding-schema.mjs),
+ * so a renumbered enum can't mislabel keeper logs. A hand-kept list drifted by two once. */
+export const PROGRAM_ERRORS: Record<number, string> = Object.fromEntries(
+  Object.entries(schema.errors).map(([code, name]) => [Number(code), name]),
+);
 /** Match `MIN_DELEGATION` (u64::MAX / 2). */
 export const MIN_DELEGATION = BigInt("9223372036854775807");
 export const DEFAULT_ADDRESS = address("11111111111111111111111111111111");
