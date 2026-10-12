@@ -95,3 +95,40 @@ test("PENIS-only holding policy excludes other coins and preserves wallet arriva
   assert.equal(classify(tx(), account, owner, narrow, feed()).receivedAt, 1_800_000_000);
   assert.equal(classify(tx(), account, owner, narrow, new Map([[signature, { ...payout, mint: owner }]])).kind, "other");
 });
+
+test("scoped feeds accept shared transaction signatures across generating coins and quote tokens", () => {
+  const otherCoin = { ...payout, mint: owner, amountRaw: "200" };
+  const otherQuote = { ...payout, quoteMint: owner, amountRaw: "300" };
+  const scope = { mint: payout.mint, quoteMint: policy.mint };
+  for (const rows of [[otherCoin, payout, otherQuote], [otherQuote, payout, otherCoin]]) {
+    assert.deepEqual([...distributions({ data: { recentDistributions: rows } }, scope).values()], [payout]);
+  }
+  assert.equal(distributions({ data: { recentDistributions: [otherCoin, otherQuote] } }, scope).size, 0);
+  assert.throws(() => distributions({ data: { recentDistributions: [payout, otherCoin] } }), /Conflicting distribution record/);
+});
+
+test("scoped feeds deduplicate core records but still reject relevant conflicts and malformed data", () => {
+  const scope = { mint: payout.mint, quoteMint: policy.mint };
+  const rows = [{ ...payout, distributedAt: "2026-10-09T12:00:00Z" },
+    { ...payout, distributedAt: "2026-10-09T12:00:01Z", holderCount: 7 }];
+  assert.deepEqual([...distributions({ data: { recentDistributions: rows } }, scope).values()], [payout]);
+  assert.throws(() => distributions({ data: { recentDistributions: [payout, { ...payout, amountRaw: "99" }] } }, scope), /Conflicting distribution record/);
+  for (const malformed of [{ ...payout, amountRaw: "1.5" }, { ...payout, signature: "bad" }, null]) {
+    assert.throws(() => distributions({ data: { recentDistributions: [malformed] } }, scope));
+  }
+});
+
+test("mixed coin PUMP payouts in one transaction never authorize the combined payout as PENIS rewards", () => {
+  const scoped = distributions({ data: { recentDistributions: [payout,
+    { ...payout, mint: owner, amountRaw: "50" }] } }, { mint: payout.mint, quoteMint: policy.mint });
+  for (const destination of [account, owner]) {
+    const mixed = tx("1000", destination === account ? "1150" : "1100");
+    mixed.transaction.message.instructions.push({ programId: policy.tokenProgram, parsed: {
+      type: "transferChecked", info: { source: policy.source, destination, authority: policy.authority,
+        mint: policy.mint, tokenAmount: { amount: "50", decimals: 6 } },
+    } });
+    const result = classify(mixed, account, owner, { ...policy, rewardMint: payout.mint }, scoped);
+    assert.equal(result.kind, "other");
+    assert.equal(result.amount, "0");
+  }
+});

@@ -1,10 +1,11 @@
-import { mkdir, open, readFile, rm } from "node:fs/promises";
+import { mkdir, rm } from "node:fs/promises";
 import { resolve, join } from "node:path";
 import { address, getBase58Decoder } from "@solana/kit";
 import { TOKEN_2022_PROGRAM_ADDRESS } from "@solana-program/token-2022";
 import { base64ToBytes, flagshipConfig, PROGRAM_ID, PENIS_MINT, PUMP_MINT, type Instance } from "../lib/endowment.ts";
 import { jsonRpc } from "../lib/reporter/rpc.ts";
-import { archiveFeed } from "../lib/holding/feed.ts";
+import { readArchivedFeed, assertFeedFresh } from "../lib/holding/feed.ts";
+import { bindRoleDirectory } from "../lib/holding/directory.ts";
 import { decodeAccount, schema } from "../lib/holding/codec.ts";
 import { pendingReceipts } from "../lib/holding/snapshot.ts";
 import { walletTick } from "../lib/holding/worker.ts";
@@ -30,28 +31,26 @@ async function main() {
   if (!rpcUrl || !data || !PROGRAM_ID || !config)
     throw new Error("Set reviewed flagship configuration, SOLANA_RPC_URL, and a durable HOLD_DATA_DIR");
   const directory = resolve(data), stopFile = resolve(process.env.HOLD_STOP_FILE ?? join(directory, "collection.stop"));
-  await mkdir(directory, { recursive: true, mode: 0o700 });
+  await bindRoleDirectory(directory, role);
   const lock = join(directory, "worker.lock");
   await mkdir(lock);
   const health = new PassHealth(role, submit, mode);
   try {
-    const roleFile = join(directory, "role");
-    try {
-      if ((await readFile(roleFile, "utf8")) !== role)
-        throw new Error("Collector and reviewer must not share their data directory");
-    } catch (e) {
-      if ((e as NodeJS.ErrnoException).code !== "ENOENT") throw e;
-      const file = await open(roleFile, "wx", 0o600);
-      try { await file.writeFile(role); await file.sync(); } finally { await file.close(); }
-    }
     const controls = await launchControls({ role, submit, mode, stopFile, foundersFile: process.env.HOLD_FOUNDERS_FILE });
     if (role === "collector" && await collectionStopped(stopFile)) health.issues.add("collection_quarantined");
     const rpc = jsonRpc(rpcUrl);
     const inst: Instance = { program: PROGRAM_ID, config, coinMint: PENIS_MINT, dividendMint: PUMP_MINT,
       coinTokenProgram: TOKEN_2022_PROGRAM_ADDRESS, dividendTokenProgram: TOKEN_2022_PROGRAM_ADDRESS };
-    const feed = await archiveFeed(directory).then((records) => {
+    const requireFreshFeed = () => assertFeedFresh(directory).catch(async () => {
+      health.feedAvailable = false;
+      health.issues.add("feed_unavailable");
+      if (role === "collector") await quarantine(stopFile, "feed_unavailable");
+      throw new Error("Payout archive no longer usable");
+    });
+    const loadFeed = () => readArchivedFeed(directory).then((records) => {
       health.feedAvailable = true; health.feedRecords = records.size; return records;
     }).catch(async () => {
+      health.feedAvailable = false;
       health.issues.add("feed_unavailable");
       if (role === "collector") {
         await quarantine(stopFile, "feed_unavailable");
@@ -59,6 +58,7 @@ async function main() {
       }
       return new Map(); // Missing evidence never blocks reviewer refunds.
     });
+    const feed = await loadFeed();
     const receipts = await pendingReceipts(rpc, inst);
     health.receipts(receipts);
     if (role === "collector" && health.issues.has("pending_over_30h"))
@@ -80,9 +80,13 @@ async function main() {
     health.ownersDiscovered = owners.size; health.ownersSelected = selected.length;
     for (const owner of selected) {
       try {
-        const result = await walletTick({ rpc, rpcUrl, inst, directory, submit, role, feed,
+        const result = await walletTick({ rpc, rpcUrl, inst, directory, submit, role, feed, loadFeed,
           keyFile: process.env.HOLD_KEYPAIR_FILE,
+          beforeRelease: requireFreshFeed,
           beforeCollect: async (snapshot) => {
+            // Capture can fail during a long wallet pass. Recheck immediately
+            // before signing and broadcast, without fetching the public feed.
+            await requireFreshFeed();
             if (health.issues.has("history_gap") || health.issues.has("uncertain_history"))
               await quarantine(stopFile, "history_evidence_gap");
             await assertCollectionAllowed(controls, owner, snapshot);

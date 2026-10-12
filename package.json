@@ -9,6 +9,7 @@
     "lint": "eslint",
     "test": "node --test tests/*.test.mts",
     "holding:once": "node scripts/held-rewards.mts",
+    "holding:feed": "node scripts/capture-payout-feed.mts",
     "refresher:once": "node scripts/refresher.mts"
   },
   "dependencies": {

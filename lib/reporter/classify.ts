@@ -1,7 +1,8 @@
 import { raw, type Distribution, type Observation, type ParsedInstruction, type ParsedTransaction, type SourcePolicy } from "./types.ts";
 
-/** Only the public distribution feed is used; malformed/conflicting records fail closed. */
-export function distributions(input: unknown): Map<string, Distribution> {
+/** A transaction can distribute rewards for several coins. Scope before checking
+ * conflicts so unrelated coin records cannot collide with the selected payout. */
+export function distributions(input: unknown, scope?: Pick<Distribution, "mint" | "quoteMint">): Map<string, Distribution> {
   const entries = (input as { data?: { recentDistributions?: unknown } })?.data?.recentDistributions;
   if (!Array.isArray(entries)) throw new Error("Missing recent distribution records");
   const records = new Map<string, Distribution>();
@@ -11,11 +12,13 @@ export function distributions(input: unknown): Map<string, Distribution> {
       throw new Error("Malformed distribution identity");
     }
     raw(entry.amountRaw);
+    if (scope && (entry.mint !== scope.mint || entry.quoteMint !== scope.quoteMint)) continue;
     const previous = records.get(entry.signature);
     if (previous && (previous.mint !== entry.mint || previous.quoteMint !== entry.quoteMint || previous.amountRaw !== entry.amountRaw)) {
       throw new Error("Conflicting distribution record");
     }
-    records.set(entry.signature, entry);
+    records.set(entry.signature, { signature: entry.signature, mint: entry.mint,
+      quoteMint: entry.quoteMint, amountRaw: entry.amountRaw });
   }
   return records;
 }
