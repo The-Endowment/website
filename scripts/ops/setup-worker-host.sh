@@ -33,6 +33,8 @@ DATA=/var/lib/endowment
 REPO=https://github.com/The-Endowment/website.git
 
 echo "== Packages"
+# List services that need restarting after package installs, never restart them.
+export NEEDRESTART_MODE=l DEBIAN_FRONTEND=noninteractive
 apt-get update -qq
 apt-get install -y -qq git curl ca-certificates >/dev/null
 if ! command -v node >/dev/null || [ "$(node -p 'process.versions.node.split(".")[0]')" -lt 24 ]; then
@@ -139,6 +141,11 @@ PrivateTmp=yes
 ProtectSystem=strict
 ProtectHome=yes
 ReadWritePaths=$DATA
+# Yield to anything else on the host (e.g. a validator).
+Nice=10
+CPUWeight=20
+IOWeight=20
+MemoryMax=1G
 EOF
 }
 timer() { # name, interval
