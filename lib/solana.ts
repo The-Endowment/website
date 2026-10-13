@@ -11,7 +11,10 @@ import {
 export { PENIS_MINT as PENIS, PUMP_MINT, PROGRAM_ID };
 
 export const TOKEN_DECIMALS = 6;
-export const RPC_URL = process.env.NEXT_PUBLIC_SOLANA_RPC_URL ?? "https://api.mainnet-beta.solana.com";
+// The browser key is locked to the site's domain, so server-side reads (which
+// send no Origin) use the server key when one is configured.
+export const RPC_URL = (typeof window === "undefined" && process.env.SOLANA_RPC_URL)
+  || process.env.NEXT_PUBLIC_SOLANA_RPC_URL || "https://api.mainnet-beta.solana.com";
 
 /** A read-only RPC client for pages that don't need a wallet. */
 export const readRpc = () => createSolanaRpc(RPC_URL);
