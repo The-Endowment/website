@@ -132,3 +132,20 @@ test("mixed coin PUMP payouts in one transaction never authorize the combined pa
     assert.equal(result.amount, "0");
   }
 });
+
+test("v2 holder-row totals preserve the full on-chain batch check and net holder credit", async () => {
+  const { distributionTotals } = await import('../lib/holding/payout-history.ts');
+  const rows = [
+    {signature, holder: owner, assetMint: policy.mint, amountRaw: '100', createdAt: '2026-10-14T00:00:00Z'},
+    {signature, holder: account, assetMint: policy.mint, amountRaw: '50', createdAt: '2026-10-14T00:00:00Z'},
+  ];
+  const transaction = tx('1000', '1097');
+  transaction.transaction.message.instructions.push({programId: policy.tokenProgram, parsed: {type: 'transferChecked', info: {
+    source: policy.source, destination: owner, authority: policy.authority, mint: policy.mint, tokenAmount: {amount: '50', decimals: 6},
+  }}});
+  const records = (values: typeof rows) => distributions({data: {recentDistributions: distributionTotals(values, [])}});
+  const result = classify(transaction, account, owner, {...policy, rewardMint: payout.mint}, records(rows));
+  assert.equal(result.kind, 'reward'); assert.equal(result.amount, '97');
+  assert.equal(classify(transaction, account, owner, policy, records(rows.slice(0, 1))).kind, 'other');
+  assert.equal(classify(transaction, account, owner, policy, records([...rows, rows[0]])).amount, '97');
+});

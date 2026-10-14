@@ -27,11 +27,11 @@ function run(script: "capture-payout-feed" | "held-rewards", role: Role, directo
 
 function captureStub(role: Role, success = true, allowFeed = true) {
   return `globalThis.fetch = async (url, options) => {
-    if (String(url) === 'https://www.stonkfun.xyz/api/public/v1/rewards?limit=100') {
+    if (String(url) === 'https://www.stonkfun.xyz/api/v2/tokens/JE3HT7SbCgXDQWV6xp3oiiAisDzq4HyZ8wyEVBDCs45Z/rewards/payouts?limit=100&order=desc') {
       if (!${allowFeed}) throw new Error('fetch before role validation');
       console.log('stubbed_feed_request');
       if (!${success}) throw new Error('provider-private-secret');
-      return Response.json({data:{recentDistributions:[]},meta:{generatedAt:new Date().toISOString()}});
+      return Response.json({rows:[],page:{limit:100,order:"desc",nextCursor:null}},{headers:{date:new Date().toUTCString()}});
     }
     if (String(url) !== 'https://monitor.example/${role}-feed${success ? "" : "/fail"}')
       throw new Error('unexpected network work');
@@ -126,8 +126,8 @@ for (const state of ["missing", "stale"] as const) {
         if (state === "stale") {
           const now = Date.now() - 180000;
           await archiveFeed(directory, { now: () => now, request: (async () => Response.json({
-            data: { recentDistributions: [] }, meta: { generatedAt: new Date(now).toISOString() },
-          })) as typeof fetch });
+            rows: [], page: { limit: 100, order: "desc", nextCursor: null },
+          }, { headers: { date: new Date(now).toUTCString() } })) as typeof fetch });
         }
         const child = run("held-rewards", role, directory, workerStub(role));
         assert.equal(child.error, undefined);

@@ -142,8 +142,8 @@ test("a complete observation worker pass pings success only when the monitor exp
       };`;
       try {
         await archiveFeed(directory, { request: (async () => Response.json({
-          data: { recentDistributions: [] }, meta: { generatedAt: new Date().toISOString() },
-        })) as typeof fetch });
+          rows: [], page: { limit: 100, order: "desc", nextCursor: null },
+        }, { headers: { date: new Date().toUTCString() } })) as typeof fetch });
         const child = spawnSync(process.execPath, ["--experimental-strip-types", "--import",
           `data:text/javascript,${encodeURIComponent(stub)}`,
           fileURLToPath(new URL("../scripts/held-rewards.mts", import.meta.url)), `--role=${role}`], {
