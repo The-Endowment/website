@@ -17,7 +17,7 @@ if (role !== "collector" && role !== "reviewer") {
     await bindRoleDirectory(directory, role);
     const feed = await archiveFeed(directory);
     success = true;
-    console.log(JSON.stringify({ role, capture: "completed", archivedRecords: feed.size,
+    console.log(JSON.stringify({ role, capture: "completed", archivedHolderRows: feed.records.size,
       completeCoverageProven: false }));
   } catch {
     // Archive errors may contain provider URLs or response bodies; keep logs fixed.

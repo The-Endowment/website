@@ -4,6 +4,7 @@ import { createHash } from "node:crypto";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { test, type TestContext } from "node:test";
+import { walletPayouts } from "../lib/reporter/payouts.ts";
 import { PENIS_MINT, PUMP_MINT } from "../lib/endowment.ts";
 import { archiveFeed, assertFeedFresh, FEED_MAX_AGE_MS, readArchivedFeed } from "../lib/holding/feed.ts";
 import { PAYOUT_URL, payoutKey, type HistoryArchive, type Payout } from "../lib/holding/payout-history.ts";
@@ -13,6 +14,7 @@ const row = (letter: string, extra: Partial<Payout> = {}): Payout => ({
   signature: letter.repeat(64), holder: "H".repeat(32), assetMint: PUMP_MINT,
   amountRaw: "10", createdAt: new Date(start - 5000).toISOString(), ...extra,
 });
+const evidence = (rows: Payout[]) => walletPayouts(rows, {mint: PENIS_MINT, quoteMint: PUMP_MINT});
 const total = (letter: string, amountRaw = "10") => ({ signature: letter.repeat(64), mint: PENIS_MINT, quoteMint: PUMP_MINT, amountRaw });
 const page = (rows: unknown[], nextCursor: string | null = null) => ({ rows, page: { limit: 100, order: "desc", nextCursor } });
 function reply(body: unknown, time = start, status = 200, headers: Record<string, string> = {}): Response {
@@ -51,8 +53,9 @@ test("holder rows spanning pages become one exact transaction total; base payout
     page([a, row("B", { assetMint: PENIS_MINT, amountRaw: "999" })], "opaque+cursor/=1"),
     page([b]),
   ]) });
-  assert.deepEqual([...records.values()], [total("A")]);
-  assert.deepEqual([...await readArchivedFeed(dir, { now: () => start })], [...records]);
+  assert.deepEqual(records, evidence([a, b]));
+  assert.deepEqual((await saved(dir)).data.recentDistributions, [total("A")]);
+  assert.deepEqual(await readArchivedFeed(dir, { now: () => start }), records);
   assert.equal((await saved(dir)).rows.length, 3);
   assert.equal((await saved(dir)).coverage.completeCoverageProven, false);
   assert.equal((await stat(join(dir, "payout-feed.json"))).mode & 0o777, 0o600);
@@ -67,8 +70,8 @@ test("more than 100 new rows are paged back to the prior head instead of declari
   const records = await archiveFeed(dir, { now: () => start + 30000, request: responses([
     page(burst.slice(0, 100), "next"), page([burst[100], row("A")]),
   ], start + 30000) });
-  assert.equal(records.size, 2);
-  assert.equal(records.get("B".repeat(64))!.amountRaw, "101");
+  assert.equal(records.records.size, 102);
+  assert.equal((await saved(dir)).data.recentDistributions.find(r => r.signature === "B".repeat(64))!.amountRaw, "101");
   assert.equal((await saved(dir)).coverage.gap, null);
   assert.deepEqual((await saved(dir)).headKeys, burst.slice(0, 100).map(payoutKey));
 });
@@ -94,7 +97,8 @@ test("cold backfill is bounded and resumes on the next process without publishin
     return reply(calls++ === 0 ? page([rows[5]], "last") : page([rows[6]]), start + 30000);
   }) as typeof fetch;
   const result = await archiveFeed(dir, { now: () => start + 30000, request });
-  assert.equal(result.get("A".repeat(64))!.amountRaw, "7");
+  assert.equal(result.records.size, 7);
+  assert.deepEqual((await saved(dir)).data.recentDistributions, [total("A", "7")]);
   assert.equal((await saved(dir)).fetchedAt, new Date(start).toISOString());
   await assert.rejects(stat(join(dir, "payout-history-pending.json")), { code: "ENOENT" });
 });
@@ -106,7 +110,7 @@ test("a long backfill cannot refresh history until a new scan catches up to the 
   await assert.rejects(archiveFeed(dir, { now: () => late, request: responses([page([row("F")])], late) }), /stale/);
   assert.equal((await saved(dir)).fetchedAt, new Date(start).toISOString());
   const r = await archiveFeed(dir, { now: () => late + 1000, request: responses([page([row("G"), row("A")], "unused")], late + 1000) });
-  assert.equal(r.size, 7); assert.equal((await saved(dir)).coverage.gap, null);
+  assert.equal(r.records.size, 7); assert.equal((await saved(dir)).coverage.gap, null);
 });
 
 test("an outage can catch up through history without clearing any collector stop file", async (t) => {
@@ -125,7 +129,7 @@ test("short and empty intermediate pages follow nextCursor; only null means hist
   const r = await archiveFeed(dir, { now: () => start, request: responses([
     page([row("A")], "a"), page([], "b"), page([row("B")]),
   ]) });
-  assert.equal(r.size, 2);
+  assert.equal(r.records.size, 2);
 });
 
 test("exact duplicate holder rows do not inflate transaction totals", async (t) => {
@@ -133,7 +137,7 @@ test("exact duplicate holder rows do not inflate transaction totals", async (t) 
   const r = await archiveFeed(dir, { now: () => start, request: responses([
     page([row("A"), row("A")], "next"), page([row("A"), row("B")]),
   ]) });
-  assert.deepEqual([...r.values()], [total("A"), total("B")]);
+  assert.deepEqual(r, evidence([row("A"), row("B")]));
 });
 
 test("changed holder amounts poison a previously healthy archive without replacing accepted data", async (t) => {
@@ -220,7 +224,7 @@ test("legacy amount conflicts fail migration without overwriting the legacy arch
 });
 
 test("initial empty history is allowed, but disappearance of previously seen rows latches a gap", async (t) => {
-  const dir = await directory(t); assert.equal((await capture(dir, [])).size, 0);
+  const dir = await directory(t); assert.equal((await capture(dir, [])).records.size, 0);
   await capture(dir, [row("A")], start + 1000);
   await assert.rejects(capture(dir, [], start + 2000), /manual review/);
   assert.equal((await saved(dir)).coverage.gap?.reason, "window_disjoint");
@@ -236,9 +240,9 @@ test("single-writer lock protects capture; readers retain a complete old archive
   await started;
   try {
     await assert.rejects(capture(dir, [row("C")]), { code: "EEXIST" });
-    assert.deepEqual([...(await readArchivedFeed(dir, { now: () => start + 30000 })).values()], [total("A")]);
+    assert.deepEqual(await readArchivedFeed(dir, { now: () => start + 30000 }), evidence([row("A")]));
   } finally { release(); }
-  assert.equal((await first).size, 2);
+  assert.equal((await first).records.size, 2);
   assert.ok((await stat(join(dir, "worker.lock"))).isDirectory());
 });
 
@@ -264,7 +268,7 @@ test("restart after atomic publication removes only the already-committed checkp
   const text = await readFile(join(dir, "payout-feed.json"), "utf8");
   await writeFile(join(dir, "payout-history-pending.json"), JSON.stringify({ resultHash: createHash('sha256').update(text).digest('hex') }));
   const records = await archiveFeed(dir, { now: () => start, request: (async () => { throw new Error('must not fetch'); }) as typeof fetch });
-  assert.equal(records.size, 1);
+  assert.equal(records.records.size, 1);
   await assert.rejects(stat(join(dir, "payout-history-pending.json")), { code: "ENOENT" });
 });
 
@@ -299,4 +303,15 @@ test("a damaged completion marker cannot publish a checkpoint that still has pag
   await writeFile(path, JSON.stringify(pending));
   await assert.rejects(capture(dir, [row('F')]), /checkpoint completion/);
   await assert.rejects(readArchivedFeed(dir, {now: () => start}), {code: 'ENOENT'});
+});
+
+test("legacy transaction totals cannot fill absent holder evidence in a completed v2 archive", async t => {
+  const dir = await directory(t); await capture(dir,[row("A")]);
+  const archive = await saved(dir);
+  archive.legacyDistributions = [total("B")];
+  archive.data.recentDistributions.push(total("B"));
+  await writeFile(join(dir,"payout-feed.json"),JSON.stringify(archive));
+  const records = await readArchivedFeed(dir,{now:()=>start});
+  assert.deepEqual(records,evidence([row("A")]));
+  assert.equal([...records.records.values()].some(r=>r.signature === "B".repeat(64)),false);
 });

@@ -40,7 +40,7 @@ export function mergeRows(...groups: Payout[][]): Payout[] {
 }
 
 /** Called only after a whole scan reaches its prior head or the end of history.
- * Keep the existing finalized on-chain batch-total comparison in classify(). */
+ * Totals are migration/archive integrity evidence only, never wallet eligibility. */
 export function distributionTotals(rows: Payout[], legacy: Distribution[]): Distribution[] {
   const sums = new Map<string, bigint>();
   for (const r of mergeRows(rows)) {

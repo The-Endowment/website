@@ -1,10 +1,11 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
+import { walletPayouts, VERIFICATION_VERSION, type WalletPayout, type WalletPayoutFeed } from "../lib/reporter/payouts.ts";
 import { classify, distributions } from "../lib/reporter/classify.ts";
 import { boundary, observe } from "../lib/reporter/ledger.ts";
 import { raw, type Distribution, type ParsedTransaction, type SourcePolicy } from "../lib/reporter/types.ts";
 
-const policy: SourcePolicy = { mint: "pumpCmXqMfrsAkQ5r49WcJnRayYRqmXz6ae8H7H9Dfn", tokenProgram: "TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb", authority: "HuBMeYW3aDn8BH65fo8xxbP4oiexyup8udzKyccgi8Ga", source: "J8vxiGw4gPng3JTN9HoKJs3ioCD5fnjKGDtRHPVGgaGo" };
+const policy: SourcePolicy = { rewardMint: "JE3HT7SbCgXDQWV6xp3oiiAisDzq4HyZ8wyEVBDCs45Z", mint: "pumpCmXqMfrsAkQ5r49WcJnRayYRqmXz6ae8H7H9Dfn", tokenProgram: "TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb", authority: "HuBMeYW3aDn8BH65fo8xxbP4oiexyup8udzKyccgi8Ga", source: "J8vxiGw4gPng3JTN9HoKJs3ioCD5fnjKGDtRHPVGgaGo" };
 const account = "WnhwaPaZXDTQ9GXPiZ3NwWpXVtKff15kVCWR7Arhenw", owner = "HpsRzXK3xWQxD1Px1KoExP5KYWs5gByEu47z6Ne6gDNf";
 const signature = "2B5BH3rVXuVg7SaQwy8SacbMQg1WKMkTVFTZn8yHq4iixXvTFxwV3kwmN8ryVKbRAu1HMSZAac4gn8m3C6BHvNHi";
 const payout: Distribution = { signature, mint: "JE3HT7SbCgXDQWV6xp3oiiAisDzq4HyZ8wyEVBDCs45Z", quoteMint: policy.mint, amountRaw: "100" };
@@ -17,7 +18,24 @@ function tx(before = "1000", after = "1100"): ParsedTransaction {
     } } }],
   } }, meta: { err: null, preTokenBalances: [balance(before)], postTokenBalances: [balance(after)], innerInstructions: [] } };
 }
-const feed = () => distributions({ data: { recentDistributions: [payout] } });
+const holderRow: WalletPayout = {signature, holder: owner, assetMint: policy.mint, amountRaw: "100", createdAt: "2026-10-14T00:00:00Z"};
+const feed = (rows: WalletPayout[] = [holderRow], mint = policy.rewardMint!) => walletPayouts(rows, {mint, quoteMint: policy.mint});
+const otherAccount = "J".repeat(32), otherOwner = "K".repeat(32);
+function addPayout(transaction: ParsedTransaction, destination = otherAccount, wallet = otherOwner, amount = "50") {
+  let index = transaction.transaction.message.accountKeys.findIndex(k => k.pubkey === destination);
+  if (index < 0) {
+    index = transaction.transaction.message.accountKeys.length;
+    transaction.transaction.message.accountKeys.push({pubkey: destination, signer: false});
+    const balance = (n: string) => ({accountIndex: index, owner: wallet, mint: policy.mint, programId: policy.tokenProgram,
+      uiTokenAmount: {amount: n, decimals: 6}});
+    transaction.meta!.preTokenBalances.push(balance("0"));
+    transaction.meta!.postTokenBalances.push(balance(amount));
+  }
+  transaction.transaction.message.instructions.push({programId: policy.tokenProgram, parsed: {type: "transferChecked", info: {
+    source: policy.source, destination, authority: policy.authority, mint: policy.mint, tokenAmount: {amount, decimals: 6},
+  }}});
+  return transaction;
+}
 
 test("only matching finalized distributor transfers add net credited rewards", () => {
   assert.equal(classify(tx(), account, owner, policy, feed()).amount, "100");
@@ -25,23 +43,23 @@ test("only matching finalized distributor transfers add net credited rewards", (
   assert.equal(fee.kind, "reward"); assert.equal(fee.amount, "97");
 });
 
-test("other generating coins paying PUMP qualify; STONK payouts do not", () => {
-  const other = { ...payout, mint: owner };
-  assert.equal(classify(tx(), account, owner, policy, new Map([[signature, other]])).kind, "reward");
-  assert.equal(classify(tx(), account, owner, policy, new Map([[signature, { ...payout, quoteMint: owner }]])).kind, "other");
+test("explicit generating coin and asset scope are mandatory", () => {
+  assert.equal(classify(tx(), account, owner, policy, feed([holderRow], otherOwner)).kind, "other");
+  assert.equal(classify(tx(), account, owner, {...policy, rewardMint: undefined}, feed()).kind, "other");
+  assert.equal(classify(tx(), account, owner, policy, feed([{...holderRow, assetMint: otherOwner}])).kind, "other");
   const stonk = tx(); stonk.meta!.postTokenBalances[0].mint = owner;
   assert.equal(classify(stonk, account, owner, policy, feed()).kind, "uncertain");
 });
 
 test("purchases, missing API batches, wrong sources and unsigned authorities never become rewards", () => {
-  assert.equal(classify(tx(), account, owner, policy, new Map()).kind, "other");
+  assert.equal(classify(tx(), account, owner, policy, feed([])).kind, "other");
   for (const field of ["source", "authority"]) {
     const purchase = tx(); purchase.transaction.message.instructions[0].parsed!.info[field] = owner;
-    assert.equal(classify(purchase, account, owner, policy, feed()).kind, "other");
+    assert.notEqual(classify(purchase, account, owner, policy, feed()).kind, "reward");
   }
   const unsigned = tx(); unsigned.transaction.message.accountKeys[1].signer = false;
-  assert.equal(classify(unsigned, account, owner, policy, feed()).kind, "other");
-  assert.equal(classify(tx(), account, owner, policy, new Map([[signature, { ...payout, amountRaw: "101" }]])).kind, "other");
+  assert.equal(classify(unsigned, account, owner, policy, feed()).kind, "uncertain");
+  assert.equal(classify(tx(), account, owner, policy, feed([{...holderRow, amountRaw: "101"}])).kind, "other");
 });
 
 test("spending rewards then buying replacements cannot restore eligibility", () => {
@@ -93,7 +111,7 @@ test("PENIS-only holding policy excludes other coins and preserves wallet arriva
   const narrow = { ...policy, rewardMint: payout.mint };
   assert.equal(classify(tx(), account, owner, narrow, feed()).kind, "reward");
   assert.equal(classify(tx(), account, owner, narrow, feed()).receivedAt, 1_800_000_000);
-  assert.equal(classify(tx(), account, owner, narrow, new Map([[signature, { ...payout, mint: owner }]])).kind, "other");
+  assert.equal(classify(tx(), account, owner, narrow, feed([holderRow], owner)).kind, "other");
 });
 
 test("scoped feeds accept shared transaction signatures across generating coins and quote tokens", () => {
@@ -118,34 +136,123 @@ test("scoped feeds deduplicate core records but still reject relevant conflicts 
   }
 });
 
-test("mixed coin PUMP payouts in one transaction never authorize the combined payout as PENIS rewards", () => {
-  const scoped = distributions({ data: { recentDistributions: [payout,
-    { ...payout, mint: owner, amountRaw: "50" }] } }, { mint: payout.mint, quoteMint: policy.mint });
-  for (const destination of [account, owner]) {
-    const mixed = tx("1000", destination === account ? "1150" : "1100");
-    mixed.transaction.message.instructions.push({ programId: policy.tokenProgram, parsed: {
-      type: "transferChecked", info: { source: policy.source, destination, authority: policy.authority,
-        mint: policy.mint, tokenAmount: { amount: "50", decimals: 6 } },
-    } });
-    const result = classify(mixed, account, owner, { ...policy, rewardMint: payout.mint }, scoped);
-    assert.equal(result.kind, "other");
-    assert.equal(result.amount, "0");
+test("mixed coin payouts to DIFFERENT owners no longer require a whole-batch total match", () => {
+  const mixed = addPayout(tx("1000", "1097"));
+  const result = classify(mixed, account, owner, policy, feed());
+  assert.equal(result.kind, "reward"); assert.equal(result.amount, "97");
+  assert.deepEqual(result.payoutEvidence, {version: VERIFICATION_VERSION, mint: policy.rewardMint, wallet: owner, signature,
+    assetMint: policy.mint, apiGross: "100", targetAccount: account, ownerGross: "100", creditedNet: "97", createdAt: holderRow.createdAt});
+});
+
+test("same wallet mixed coins, equal-sized transfers and alternate accounts cannot misattribute rewards", () => {
+  for (const amount of ["50", "100"]) {
+    const same = addPayout(tx("1000", (1100n + BigInt(amount)).toString()), account, owner, amount);
+    assert.equal(classify(same, account, owner, policy, feed()).kind, "other");
+    const alternate = addPayout(tx(), otherAccount, owner, amount);
+    for (const expected of ["100", (100n + BigInt(amount)).toString()])
+      assert.equal(classify(alternate, account, owner, policy, feed([{...holderRow, amountRaw: expected}])).kind, "other");
+  }
+  const combined = tx("1000", "1150");
+  combined.transaction.message.instructions[0].parsed!.info.tokenAmount = {amount: "150", decimals: 6};
+  assert.equal(classify(combined, account, owner, policy, feed()).kind, "other");
+});
+
+test("multiple same-target transfers may match exact holder gross, but only reconciled net is credited", () => {
+  const multiple = addPayout(tx("1000", "1143"), account, owner);
+  const rows = [{...holderRow, amountRaw: "150"}];
+  assert.equal(classify(multiple, account, owner, policy, feed(rows)).amount, "143");
+  assert.equal(classify(multiple, account, owner, policy, feed([...rows, rows[0]])).amount, "143");
+  assert.equal(classify(tx("1000", "1000"), account, owner, policy, feed()).kind, "other");
+  const fee = tx("1000", "1097"); fee.transaction.message.instructions[0].parsed!.type = "transferCheckedWithFee";
+  assert.equal(classify(fee, account, owner, policy, feed()).amount, "97");
+  const ordinary = addPayout(tx("1000", "1150"), account, owner);
+  ordinary.transaction.message.instructions[1].parsed!.info.source = otherAccount;
+  assert.equal(classify(ordinary, account, owner, policy, feed()).kind, "other");
+});
+
+test("wallet identity, signature, scope and legacy aggregate-only data cannot substitute for a holder row", () => {
+  for (const row of [{...holderRow, holder: account}, {...holderRow, holder: otherOwner},
+    {...holderRow, signature: "Z".repeat(64)}, {...holderRow, amountRaw: "0"}])
+    assert.equal(classify(tx(), account, owner, policy, feed([row])).kind, "other");
+  assert.equal(classify(tx(), account, owner, policy,
+    distributions({data:{recentDistributions:[payout]}}) as unknown as WalletPayoutFeed).kind, "other");
+  for (const amountRaw of ["-1", "01", "1.1", "18446744073709551616"])
+    assert.throws(() => feed([{...holderRow, amountRaw}]));
+  assert.throws(() => feed([holderRow, {...holderRow, amountRaw: "99"}]));
+  assert.throws(() => feed([{...holderRow, holder: "bad"}]));
+});
+
+test("every distributor destination must have unambiguous stable owner and token identity", () => {
+  const changes: ((t: ParsedTransaction) => void)[] = [
+    t => { t.meta!.preTokenBalances.pop(); }, // newly created other account
+    t => { t.meta!.postTokenBalances.pop(); }, // closed other account
+    t => { t.meta!.postTokenBalances[1].owner = owner; },
+    t => { delete t.meta!.postTokenBalances[1].owner; },
+    t => { t.meta!.postTokenBalances[1].mint = otherOwner; },
+    t => { t.meta!.postTokenBalances[1].programId = otherOwner; },
+    t => { t.meta!.postTokenBalances[1].uiTokenAmount.decimals = 9; },
+    t => { t.meta!.preTokenBalances.push(t.meta!.preTokenBalances[1]); },
+    t => { t.transaction.message.accountKeys.push(t.transaction.message.accountKeys[2]); },
+    t => { t.meta!.postTokenBalances[1].accountIndex = 99; },
+  ];
+  for (const change of changes) {
+    const mixed = addPayout(tx()); change(mixed);
+    assert.equal(classify(mixed, account, owner, policy, feed()).kind, "uncertain");
   }
 });
 
-test("v2 holder-row totals preserve the full on-chain batch check and net holder credit", async () => {
-  const { distributionTotals } = await import('../lib/holding/payout-history.ts');
-  const rows = [
-    {signature, holder: owner, assetMint: policy.mint, amountRaw: '100', createdAt: '2026-10-14T00:00:00Z'},
-    {signature, holder: account, assetMint: policy.mint, amountRaw: '50', createdAt: '2026-10-14T00:00:00Z'},
-  ];
-  const transaction = tx('1000', '1097');
-  transaction.transaction.message.instructions.push({programId: policy.tokenProgram, parsed: {type: 'transferChecked', info: {
-    source: policy.source, destination: owner, authority: policy.authority, mint: policy.mint, tokenAmount: {amount: '50', decimals: 6},
-  }}});
-  const records = (values: typeof rows) => distributions({data: {recentDistributions: distributionTotals(values, [])}});
-  const result = classify(transaction, account, owner, {...policy, rewardMint: payout.mint}, records(rows));
-  assert.equal(result.kind, 'reward'); assert.equal(result.amount, '97');
-  assert.equal(classify(transaction, account, owner, policy, records(rows.slice(0, 1))).kind, 'other');
-  assert.equal(classify(transaction, account, owner, policy, records([...rows, rows[0]])).amount, '97');
+test("owner-change-and-restore and close/reinitialize of OTHER destinations are never hidden by stable metadata", () => {
+  for (const types of [["setAuthority", "setAuthority"], ["closeAccount", "initializeAccount3"]]) {
+    const mixed = addPayout(tx());
+    for (const type of types) mixed.transaction.message.instructions.push({programId: policy.tokenProgram,
+      parsed:{type, info:{account: otherAccount, newAuthority: owner}}});
+    assert.equal(classify(mixed, account, owner, policy, feed()).kind, "uncertain");
+  }
+  const delegated = addPayout(tx(), otherAccount, owner, "100");
+  delegated.transaction.message.instructions[1].parsed!.info.authority = otherOwner;
+  assert.equal(classify(delegated, account, owner, policy, feed()).kind, "uncertain");
+});
+
+test("checked transfers require mint and decimals; unchecked distributor transfers require proven source identity", () => {
+  for (const field of ["mint", "tokenAmount"]) {
+    const bad = tx(); delete bad.transaction.message.instructions[0].parsed!.info[field];
+    assert.equal(classify(bad, account, owner, policy, feed()).kind, "uncertain");
+  }
+  const bad = tx(); bad.transaction.message.instructions[0].parsed!.info.tokenAmount = {amount:"100", decimals:9};
+  assert.equal(classify(bad, account, owner, policy, feed()).kind, "uncertain");
+  const unchecked = tx(); unchecked.transaction.message.instructions[0].parsed = {type:"transfer",info:{
+    source:policy.source, destination:account, authority:policy.authority, amount:"100"}};
+  assert.equal(classify(unchecked, account, owner, policy, feed()).kind, "uncertain");
+  unchecked.transaction.message.accountKeys.push({pubkey:policy.source,signer:false});
+  const balance = {accountIndex:2,owner:policy.authority,mint:policy.mint,programId:policy.tokenProgram,
+    uiTokenAmount:{amount:"1000",decimals:6}};
+  unchecked.meta!.preTokenBalances.push(balance);
+  unchecked.meta!.postTokenBalances.push({...balance,uiTokenAmount:{amount:"900",decimals:6}});
+  assert.equal(classify(unchecked, account, owner, policy, feed()).kind, "reward");
+});
+
+test("source authority changes cannot be hidden by a checked transfer", () => {
+  const changed = tx();
+  for (const newAuthority of [otherOwner, policy.authority]) changed.transaction.message.instructions.push({
+    programId: policy.tokenProgram, parsed: {type:"setAuthority", info:{account:policy.source,newAuthority}},
+  });
+  assert.equal(classify(changed, account, owner, policy, feed()).kind, "uncertain");
+});
+
+test("saved public API rows match seven real finalized wallet receipts without a batch-total requirement", async () => {
+  const fixture = (await import("./fixtures/stonk-holder-payout.json", {with:{type:"json"}})).default;
+  const transaction = fixture.transaction as ParsedTransaction;
+  const records = feed(fixture.rows);
+  assert.equal(fixture.rows.length,7);
+  assert.equal(transaction.meta!.err,null);
+  for(const row of fixture.rows) {
+    const post = transaction.meta!.postTokenBalances.find(b => b.owner === row.holder && b.mint === row.assetMint)!;
+    const pre = transaction.meta!.preTokenBalances.find(b => b.accountIndex === post.accountIndex)!;
+    const destination = transaction.transaction.message.accountKeys[post.accountIndex].pubkey;
+    const expectedNet = BigInt(post.uiTokenAmount.amount)-BigInt(pre.uiTokenAmount.amount);
+    assert.equal(expectedNet,BigInt(row.amountRaw)); // This observed sample has no withheld fee.
+    const result = classify(transaction,destination,row.holder,policy,records);
+    assert.equal(result.kind,"reward"); assert.equal(result.amount,expectedNet.toString());
+    assert.equal(result.payoutEvidence!.apiGross,row.amountRaw);
+  }
 });

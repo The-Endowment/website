@@ -21,6 +21,10 @@ export type Observation = {
   signature: string; slot: number; receivedAt?: number | null; before: string; after: string;
   kind: "reward" | "outflow" | "other" | "failed" | "uncertain";
   amount: string; reason: string;
+  payoutEvidence?: {
+    version: string; mint: string; wallet: string; signature: string; assetMint: string;
+    apiGross: string; targetAccount: string; ownerGross: string; creditedNet: string; createdAt: string;
+  };
 };
 export type Prepared = {
   wire: string; signature: string; nonce: string; amount: string;

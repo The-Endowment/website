@@ -3,6 +3,7 @@ import { mkdir, open, readFile, rename, rmdir, unlink } from "node:fs/promises";
 import { join } from "node:path";
 import { distributions } from "../reporter/classify.ts";
 import type { Distribution } from "../reporter/types.ts";
+import { walletPayouts, type WalletPayoutFeed } from "../reporter/payouts.ts";
 import { FEED_MAX_AGE_MS, FEED_SCOPE, archiveState, checkCaptureTime, type FeedClock } from "./feed-state.ts";
 import {
   PAYOUT_URL, distributionTotals, historyArchive, mergeRows, payoutKey, payoutPage, timestamp, validateGap,
@@ -32,14 +33,14 @@ async function save(directory: string, name: string, value: unknown): Promise<st
   try { await dir.sync(); } finally { await dir.close(); }
   return hash(text);
 }
-function healthy(archive: HistoryArchive, now: number): Map<string, Distribution> {
+function healthy(archive: HistoryArchive, now: number): WalletPayoutFeed {
   checkCaptureTime(archive.fetchedAt, now);
   if (archive.coverage.gap) throw new Error("Possible payout feed gap; manual review required");
-  return distributions(archive, FEED_SCOPE);
+  return walletPayouts(archive.rows, FEED_SCOPE);
 }
 
 /** Wallet passes never fetch the provider or consume a partial backfill. */
-export async function readArchivedFeed(directory: string, { now = Date.now }: FeedClock = {}): Promise<Map<string, Distribution>> {
+export async function readArchivedFeed(directory: string, { now = Date.now }: FeedClock = {}): Promise<WalletPayoutFeed> {
   const value = JSON.parse(await readFile(join(directory, ARCHIVE), "utf8"));
   if (value?.version !== 2) throw new Error("Payout history needs a completed v2 baseline");
   return healthy(historyArchive(value), now());
@@ -90,7 +91,7 @@ async function responseBody(response: Response): Promise<unknown> {
 /** v2 gives holder rows and opaque cursors. Fetch from the newest page until
  * all prior head rows have been re-observed (or the end on the first scan).
  * Partial scans persist separately, never becoming signing evidence. */
-export async function archiveFeed(directory: string, { request = fetch, now = Date.now }: FeedClock & { request?: typeof fetch } = {}): Promise<Map<string, Distribution>> {
+export async function archiveFeed(directory: string, { request = fetch, now = Date.now }: FeedClock & { request?: typeof fetch } = {}): Promise<WalletPayoutFeed> {
   await mkdir(directory, { recursive: true, mode: 0o700 });
   const lock = join(directory, "feed.lock");
   await mkdir(lock, { mode: 0o700 });

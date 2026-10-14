@@ -1,3 +1,4 @@
+import { VERIFICATION_VERSION } from "../reporter/payouts.ts";
 import { createHash } from "node:crypto";
 import { getBase58Encoder } from "@solana/kit";
 import { boundary, observe } from "../reporter/ledger.ts";
@@ -13,6 +14,7 @@ import type { Receipt } from "./types.ts";
 import type { HoldSnapshot } from "./snapshot.ts";
 import { refundDeadline } from "./bounds.ts";
 export type Decision = {
+  verificationVersion?: string;
   amount: string;
   evidenceHash: string;
   sweepSignature: string;
@@ -85,6 +87,7 @@ export async function reconcileHistory(
           : entry.receipt.amount
         : 0n;
       reviews[entry.address] = {
+        verificationVersion: VERIFICATION_VERSION,
         amount: amount.toString(),
         sweepSignature: observation.signature,
         collectedAt: entry.receipt.collected_at.toString(),
@@ -150,6 +153,9 @@ export function settlementPlan(
   // or for an incident pause to end. Absence of a decision still waits below.
   const hasEvidence = decision && /^[0-9a-f]{64}$/.test(decision.evidenceHash);
   if (hasEvidence && raw(decision.amount) === 0n) return "refund";
+  // A previous verifier's positive decision cannot authorize a fresh release.
+  if (decision && raw(decision.amount) > 0n && decision.verificationVersion !== VERIFICATION_VERSION)
+    return "refund";
   if (now < receipt.release_at || now < snapshot.config.paused_until)
     return "wait";
   if (!decision || !hasEvidence) return "refund";
@@ -170,14 +176,22 @@ export async function resetReviewer(
   snapshot: HoldSnapshot,
   cursor: string | null,
 ) {
+  const previous = journal.state as ReviewedLedger | null;
+  const reviews = previous?.reviewer === snapshot.policy.reviewer ? Object.fromEntries(
+    Object.entries(previous.reviews ?? {}).map(([receipt, decision]) => [receipt,
+      decision.verificationVersion === VERIFICATION_VERSION ? decision : {
+        ...decision, amount: "0", verificationVersion: VERIFICATION_VERSION,
+        evidenceHash: hash({ previous: decision.evidenceHash, version: VERIFICATION_VERSION,
+          reason: "Verifier migration: old decision cannot authorize release" }),
+      }]),
+  ) : {};
   // A restarted/missing history never reuses the collector's claimed amount.
   await journal.save(
     {
       ...boundary(snapshot.binding, snapshot.slot, cursor, snapshot.balance),
       reviewer: snapshot.policy.reviewer,
-      reviews: (journal.state as ReviewedLedger | null)?.reviewer === snapshot.policy.reviewer
-        ? (journal.state as ReviewedLedger).reviews ?? {} : {},
+      reviews,
     } as ReviewedLedger,
-    "Reviewer boundary; same-reviewer decisions retained, unswept eligibility discarded",
+    "Reviewer boundary; current-verifier decisions retained, legacy decisions zeroed, unswept eligibility discarded",
   );
 }

@@ -1,3 +1,4 @@
+import { VERIFICATION_VERSION } from "../lib/reporter/payouts.ts";
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { getBase58Decoder } from "@solana/kit";
@@ -175,7 +176,7 @@ test("a receipt mentioned by another instruction does not count as collection ev
 test("hold, expiry, revocation, goal, pause and missing evidence fail closed", () => {
   const decision = {
     amount: "15",
-    evidenceHash: "1".repeat(64),
+    verificationVersion: VERIFICATION_VERSION, evidenceHash: "1".repeat(64),
     sweepSignature: "tx",
     collectedAt: "100",
   };
@@ -198,7 +199,7 @@ test("hold, expiry, revocation, goal, pause and missing evidence fail closed", (
 });
 test("missing landlord refunds immediately; temporary inactivity alone does not", () => {
   const decision = {
-    amount: "40", evidenceHash: "1".repeat(64), sweepSignature: "tx", collectedAt: "100",
+    amount: "40", verificationVersion: VERIFICATION_VERSION, evidenceHash: "1".repeat(64), sweepSignature: "tx", collectedAt: "100",
   };
   for (const now of [86499, 86500]) {
     const s = snapshot(now);
@@ -226,7 +227,7 @@ test("day boundaries discard uncollected eligibility but retain decisions for al
   (j.state as ReviewedLedger).reviews = {
     [receiptKey]: {
       amount: "15",
-      evidenceHash: "1".repeat(64),
+      verificationVersion: VERIFICATION_VERSION, evidenceHash: "1".repeat(64),
       sweepSignature: "tx",
       collectedAt: "100",
     },
@@ -242,11 +243,26 @@ test("day boundaries discard uncollected eligibility but retain decisions for al
 test("reviewer rotation discards the previous reviewer's decisions", async () => {
   const j = journal();
   (j.state as ReviewedLedger).reviews = { [receiptKey]: {
-    amount: "40", evidenceHash: "1".repeat(64), sweepSignature: "old", collectedAt: "100",
+    amount: "40", verificationVersion: VERIFICATION_VERSION, evidenceHash: "1".repeat(64), sweepSignature: "old", collectedAt: "100",
   } };
   const s = snapshot();
   s.policy.reviewer = "replacement" as typeof s.policy.reviewer;
   await resetReviewer(j, s, "new-boundary");
   assert.deepEqual((j.state as ReviewedLedger).reviews, {});
   assert.equal(settlementPlan(receipt, s), "refund");
+});
+
+test("legacy or wrong-version positive reviews become auditable zero decisions and cannot clear directly", async () => {
+  for (const verificationVersion of [undefined, "legacy-verifier"]) {
+    const decision = {verificationVersion, amount:"40", evidenceHash:"a".repeat(64), sweepSignature:"old", collectedAt:"100"};
+    assert.equal(settlementPlan(receipt, snapshot(), decision), "refund");
+    assert.equal(settlementPlan({...receipt, reviewed:true, approved_amount:40n,
+      review_evidence:Array(32).fill(170)}, snapshot(), decision), "refund");
+    const j = journal(); (j.state as ReviewedLedger).reviews = {[receiptKey]:decision};
+    await resetReviewer(j, {...snapshot(), binding:"new-verifier"}, "new-boundary");
+    const migrated = (j.state as ReviewedLedger).reviews![receiptKey];
+    assert.equal(migrated.amount,"0"); assert.equal(migrated.verificationVersion,VERIFICATION_VERSION);
+    assert.notEqual(migrated.evidenceHash,decision.evidenceHash);
+    assert.equal(settlementPlan(receipt, snapshot(200), migrated),"refund");
+  }
 });

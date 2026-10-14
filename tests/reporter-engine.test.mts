@@ -220,3 +220,26 @@ test("journal lock and truncated records stop signing", async () => {
     await assert.rejects(withJournal(directory, source, async () => {}), /Truncated/);
   } finally { await rm(directory, { recursive: true }); }
 });
+
+test("verifier migration discards old credit only after pending collector transactions are resolved", async () => {
+  for (const status of ["none", "live", "finalized", "failed", "expired"] as const) {
+    const journal = memory({...boundary("legacy-verifier", 10, "old", "1100"), eligible:"100",
+      pending: status === "none" ? null : {wire:"old-signed-bytes", signature:"old-collection", amount:"100", nonce:"1",
+        expiresAt:1, lastValidBlockHeight:"200", evidenceHash:"a".repeat(64)}});
+    const network = io(journal), calls: string[] = [];
+    network.snapshot = async () => ({...snapshot, binding:"stonk-holder-v1:consent-1"});
+    network.status = async () => {calls.push("status"); return status === "finalized" || status === "failed" ? status : "pending";};
+    network.height = async () => status === "expired" ? 201n : 200n;
+    network.cursor = async () => {calls.push("boundary"); return "current";};
+    network.observations = async () => {throw new Error("Migration must not replay history");};
+    network.prepare = async () => {throw new Error("Migration must not sign");};
+    network.publish = async () => {throw new Error("Migration must not rebroadcast");};
+    const result = await runWallet(journal, network, true);
+    assert.equal(result.status, status === "live" ? "pending" : "boundary");
+    if (status === "live") {assert.equal(journal.state?.pending?.signature,"old-collection"); assert.deepEqual(calls,["status"]);}
+    else {
+      assert.equal(journal.state?.pending,null); assert.equal(journal.state?.eligible,"0");
+      assert.deepEqual(calls,status === "none" ? ["boundary"] : ["status","boundary"]);
+    }
+  }
+});

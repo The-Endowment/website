@@ -1,3 +1,4 @@
+import { VERIFICATION_VERSION } from "../reporter/payouts.ts";
 import { address, getBase58Decoder, isSome, type Address } from "@solana/kit";
 import { getTokenDecoder } from "@solana-program/token-2022";
 import {
@@ -198,6 +199,7 @@ export async function holdSnapshot(
     // must still replay collections which landed just before an incident, so
     // those two changes cannot hide their outstanding receipt evidence.
     binding: [
+      VERIFICATION_VERSION,
       ...(role === "reviewer" ? ["reviewer-v1"] : []),
       inst.config,
       owner,

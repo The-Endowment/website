@@ -1,3 +1,4 @@
+import { VERIFICATION_VERSION } from "../lib/reporter/payouts.ts";
 import assert from "node:assert/strict";
 import { test, type TestContext } from "node:test";
 import { createPrivateKey, createPublicKey } from "node:crypto";
@@ -156,7 +157,7 @@ test("invalid or absent review evidence cannot trigger early clearance or reject
   bank.move("reward", 40n);
   bank.move("sweep", 40n);
   const snapshot = await holdSnapshot(bank.rpc, bank.inst, bank.owner, 0, "reviewer");
-  const rejected = { amount: "0", evidenceHash: "a".repeat(64), sweepSignature: "sweep", collectedAt: bank.receipt.collected_at.toString() };
+  const rejected = { amount: "0", verificationVersion: VERIFICATION_VERSION, evidenceHash: "a".repeat(64), sweepSignature: "sweep", collectedAt: bank.receipt.collected_at.toString() };
   assert.equal(settlementPlan(bank.receipt, snapshot, rejected), "refund");
   assert.equal(settlementPlan(bank.receipt, snapshot, undefined), "wait");
   assert.equal(settlementPlan(bank.receipt, snapshot, { ...rejected, evidenceHash: "invalid" }), "wait");

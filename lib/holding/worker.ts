@@ -1,11 +1,12 @@
 import { type Address } from "@solana/kit";
 import { resolve } from "node:path";
 import { ata, type Instance } from "../endowment.ts";
+import type { WalletPayoutFeed } from "../reporter/payouts.ts";
 import { classify } from "../reporter/classify.ts";
 import { runWallet } from "../reporter/engine.ts";
 import { withJournal } from "../reporter/journal.ts";
 import { history, latestCursor, type RpcCall } from "../reporter/rpc.ts";
-import type { Distribution, Observation, SourcePolicy } from "../reporter/types.ts";
+import type { Observation, SourcePolicy } from "../reporter/types.ts";
 import { collectIx, reviewIx, settleIx } from "./client.ts";
 import { holdSnapshot, type HoldSnapshot } from "./snapshot.ts";
 import {
@@ -25,8 +26,8 @@ export type WorkerOptions = {
   directory: string;
   submit: boolean;
   keyFile?: string;
-  feed: Map<string, Distribution>;
-  loadFeed?: () => Promise<Map<string, Distribution>>;
+  feed: WalletPayoutFeed;
+  loadFeed?: () => Promise<WalletPayoutFeed>;
   source: SourcePolicy;
   role: "collector" | "reviewer";
   beforeCollect?: (snapshot: HoldSnapshot) => Promise<void>;
