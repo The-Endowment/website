@@ -286,3 +286,49 @@ test("conflicting rows, wrong scope and invalid distributor evidence never enter
   const alternate = addPayout(tx(), otherAccount, owner);
   assert.equal(classify(alternate, account, owner, policy, feed([]), now).kind, "other");
 });
+
+test("a fresh completed archive ten minutes past a missing payout ends the wait without giving credit", () => {
+  const transaction = tx(), received = transaction.blockTime!;
+  const archived = (at: number, rows: WalletPayout[] = []): WalletPayoutFeed => ({
+    ...feed(rows), completedArchive: {fetchedAt: new Date(at * 1000).toISOString()},
+  });
+  assert.throws(() => classify(transaction, account, owner, policy, archived(received + 599), received + 600), MissingPayoutEvidence);
+  for (const now of [received + 600, received + 720]) {
+    const result = classify(transaction, account, owner, policy, archived(received + 600), now);
+    assert.equal(result.kind, "other"); assert.equal(result.amount, "0");
+    assert.equal(result.payoutAttribution, "covered_absent");
+    assert.equal(result.payoutEvidence, undefined);
+  }
+  const present = classify(transaction, account, owner, policy, archived(received + 600, [holderRow]), received + 600);
+  assert.equal(present.kind, "reward"); assert.equal(present.amount, "100");
+  const conflict = classify(transaction, account, owner, policy, archived(received + 600, [{...holderRow, amountRaw: "101"}]), received + 600);
+  assert.equal(conflict.kind, "other"); assert.equal(conflict.payoutAttribution, undefined);
+});
+
+test("stale, future, malformed or synthetic archive metadata cannot shorten the durable wait", () => {
+  const transaction = tx(), received = transaction.blockTime!, now = received + 1000;
+  for (const completedArchive of [undefined, {fetchedAt: "not-a-date"}, {fetchedAt: ""},
+    {fetchedAt: new Date((now - 121) * 1000).toISOString()},
+    {fetchedAt: new Date((now + 1) * 1000).toISOString()},
+  ]) {
+    assert.throws(() => classify(transaction, account, owner, policy, {...feed([]), completedArchive}, now), MissingPayoutEvidence);
+  }
+  // Data or arbitrary scope fields cannot promote a synthetic/fallback feed.
+  const fakeScope = {mint: policy.rewardMint!, quoteMint: policy.mint,
+    completedArchive: {fetchedAt: new Date(now * 1000).toISOString()}};
+  const fallback = walletPayouts([], fakeScope);
+  assert.equal(fallback.completedArchive, undefined);
+  assert.throws(() => classify(transaction, account, owner, policy, fallback, now), MissingPayoutEvidence);
+  // Another holder's new row timestamp is not a completed archive capture time.
+  const newRow = {...holderRow, holder: otherOwner, createdAt: new Date(now * 1000).toISOString()};
+  assert.throws(() => classify(transaction, account, owner, policy, feed([newRow]), now), MissingPayoutEvidence);
+});
+
+test("expired persisted waits stay visible even after archive recovery; old first-seen exclusions are normal", () => {
+  const transaction = tx(), received = transaction.blockTime!, now = received + PAYOUT_EVIDENCE_WAIT_SECONDS;
+  const archived = {...feed([]), completedArchive: {fetchedAt: new Date(now * 1000).toISOString()}};
+  assert.equal(classify(transaction, account, owner, policy, archived, now, now).payoutAttribution, "expired");
+  assert.equal(classify(transaction, account, owner, policy, archived, now).payoutAttribution, "covered_absent");
+  assert.equal(classify(transaction, account, owner, policy, feed([]), now).payoutAttribution, "expired");
+  assert.equal(classify(transaction, account, owner, policy, {...archived, records: feed().records}, now, now).kind, "reward");
+});

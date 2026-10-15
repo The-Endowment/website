@@ -31,5 +31,6 @@ export function observe(previous: Ledger, observations: Observation[], slot: num
   delete ledger.settled;
   // The complete batch has been replayed (including excluded expired rows).
   delete ledger.payoutWaitUntil;
+  delete ledger.payoutWaitStartedAt;
   return { ledger, reason: "Finalized history reconciled" };
 }

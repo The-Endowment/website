@@ -20,6 +20,8 @@ The first traversal and stored holder rows can be substantially larger than the 
 
 Capture output now calls its count `archivedHolderRows`; worker health retains `feed.archivedRecords` for compatibility, but that count now means indexed PUMP holder rows, not transaction batches.
 
+Only a validated, fresh, gap-free completed archive exports its first-page `fetchedAt` to the wallet verifier. That capture time can end a missing-row wait after a ten-minute margin over the finalized transfer time, without crediting the unmatched receipt. The verifier rechecks freshness and rejects future metadata at use. Partial checkpoints, synthetic empty fallbacks, API row timestamps and final-page completion time cannot satisfy this rule. Capture time is not a provider indexing watermark: a genuinely late or omitted API row can still lose eligibility. The six-hour durable batch cap remains the fallback; an actually expired recorded wait stays alertable even if capture has just recovered.
+
 ## Optional fresh-baseline history floor
 
 `HOLD_HISTORY_FLOOR` accepts an explicit ISO timestamp, for example a conservatively verified pre-enrollment boundary. It is **unset by default**. Only set it after the fresh-baseline checks below; a timestamp alone cannot establish that old payouts are irrelevant. A program's latest upgrade time is not its first deployment time and is not automatically safe to use.

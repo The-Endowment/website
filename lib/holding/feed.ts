@@ -37,7 +37,7 @@ async function save(directory: string, name: string, value: unknown): Promise<st
 function healthy(archive: HistoryArchive, now: number): WalletPayoutFeed {
   checkCaptureTime(archive.fetchedAt, now);
   if (archive.coverage.gap) throw new Error("Possible payout feed gap; manual review required");
-  return walletPayouts(archive.rows, FEED_SCOPE);
+  return { ...walletPayouts(archive.rows, FEED_SCOPE), completedArchive: { fetchedAt: archive.fetchedAt } };
 }
 
 /** Wallet passes never fetch the provider or consume a partial backfill. */

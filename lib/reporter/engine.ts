@@ -53,9 +53,12 @@ export async function runWallet(journal: Journal, io: ReporterIO, submit = false
   } catch (error) {
     if (error instanceof MissingPayoutEvidence) {
       const retryUntil = Math.min(ledger.payoutWaitUntil ?? Infinity, error.retryUntil);
-      if (ledger.payoutWaitUntil !== retryUntil) await journal.save({...ledger, payoutWaitUntil: retryUntil},
-        "Awaiting payout attribution; history cursor retained", {signature: error.observation.signature, retryUntil});
-      return { status: "awaiting_payout", reason: error.message, retryUntil };
+      const waitStartedAt = ledger.payoutWaitStartedAt ?? snapshot.now;
+      if (ledger.payoutWaitUntil !== retryUntil || ledger.payoutWaitStartedAt === undefined)
+        await journal.save({...ledger, payoutWaitUntil: retryUntil, payoutWaitStartedAt: waitStartedAt},
+          "Awaiting payout attribution; history cursor retained", {signature: error.observation.signature, retryUntil, waitStartedAt});
+      return { status: "awaiting_payout", reason: error.message, retryUntil, waitStartedAt,
+        waitSeconds: Math.max(0, snapshot.now - waitStartedAt) };
     }
     return reset(`Observation gap: ${error instanceof Error ? error.message : "unknown failure"}`);
   }

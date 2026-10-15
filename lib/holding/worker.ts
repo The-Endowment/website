@@ -81,6 +81,13 @@ export async function walletTick(
             return { ...error.observation, kind: "uncertain" as const,
               reason: "Payout predates consent" };
           }
+          if (result.payoutAttribution && tx.blockTime !== null
+              && BigInt(tx.blockTime) < (s.consent?.started_at ?? 0n)) {
+            // A never-eligible pre-consent receipt is not an attribution outage.
+            const excluded = {...result, reason: "Payout predates consent; no new eligibility"};
+            delete excluded.payoutAttribution;
+            return excluded;
+          }
           // Missing payout time cannot establish whether it followed consent.
           return result.kind === "reward" &&
             (tx.blockTime === null ||
@@ -153,6 +160,8 @@ export async function walletTick(
       }
       let s = await snapshot(journal.state?.slot ?? 0);
       let evidenceRetry: MissingPayoutEvidence | undefined;
+      let waitStartedAt: number | undefined;
+      let waitSeconds: number | undefined;
       if (!journal.state || journal.state.binding !== s.binding) {
         await resetReviewer(
           journal,
@@ -174,10 +183,12 @@ export async function walletTick(
           if (error instanceof MissingPayoutEvidence) {
             evidenceRetry = error;
             const retryUntil = Math.min(journal.state!.payoutWaitUntil ?? Infinity, error.retryUntil);
-            if (journal.state!.payoutWaitUntil !== retryUntil) await journal.save(
-              {...journal.state!, payoutWaitUntil: retryUntil},
-              "Awaiting payout attribution; reviewer history retained",
-              {signature: error.observation.signature, retryUntil});
+            waitStartedAt = journal.state!.payoutWaitStartedAt ?? s.now;
+            waitSeconds = Math.max(0, s.now - waitStartedAt);
+            if (journal.state!.payoutWaitUntil !== retryUntil || journal.state!.payoutWaitStartedAt === undefined)
+              await journal.save({...journal.state!, payoutWaitUntil: retryUntil, payoutWaitStartedAt: waitStartedAt},
+                "Awaiting payout attribution; reviewer history retained",
+                {signature: error.observation.signature, retryUntil, waitStartedAt});
           }
           else {
             await resetReviewer(journal, s, await latestCursor(o.rpc, source, s.slot));
@@ -259,7 +270,7 @@ export async function walletTick(
         outcomes.push({ receipt: entry.address, action, result });
       }
       return evidenceRetry
-        ? { status: "awaiting_payout", reason: evidenceRetry.message, retryUntil: evidenceRetry.retryUntil, outcomes }
+        ? { status: "awaiting_payout", reason: evidenceRetry.message, retryUntil: evidenceRetry.retryUntil, waitStartedAt, waitSeconds, outcomes }
         : { status: "reviewed", outcomes };
     },
   );

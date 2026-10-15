@@ -21,6 +21,7 @@ export type Observation = {
   signature: string; slot: number; receivedAt?: number | null; before: string; after: string;
   kind: "reward" | "outflow" | "other" | "failed" | "uncertain";
   amount: string; reason: string;
+  payoutAttribution?: "expired" | "covered_absent";
   payoutEvidence?: {
     version: string; mint: string; wallet: string; signature: string; assetMint: string;
     apiGross: string; targetAccount: string; ownerGross: string; creditedNet: string; createdAt: string;
@@ -38,6 +39,8 @@ export type Ledger = {
   settled?: { slot: number; nonce: string };
   // First unresolved receipt bounds the entire uncommitted history batch.
   payoutWaitUntil?: number;
+  // Operational alert age starts when this worker actually begins waiting.
+  payoutWaitStartedAt?: number;
 };
 export function raw(value: unknown): bigint {
   if (typeof value !== "string" || !/^(0|[1-9]\d*)$/.test(value)) throw new Error("Invalid base-unit amount");

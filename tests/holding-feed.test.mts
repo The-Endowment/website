@@ -14,7 +14,7 @@ const row = (letter: string, extra: Partial<Payout> = {}): Payout => ({
   signature: letter.repeat(64), holder: "H".repeat(32), assetMint: PUMP_MINT,
   amountRaw: "10", createdAt: new Date(start - 5000).toISOString(), ...extra,
 });
-const evidence = (rows: Payout[]) => walletPayouts(rows, {mint: PENIS_MINT, quoteMint: PUMP_MINT});
+const evidence = (rows: Payout[], fetchedAt = start) => ({...walletPayouts(rows, {mint: PENIS_MINT, quoteMint: PUMP_MINT}), completedArchive: {fetchedAt: new Date(fetchedAt).toISOString()}});
 const total = (letter: string, amountRaw = "10") => ({ signature: letter.repeat(64), mint: PENIS_MINT, quoteMint: PUMP_MINT, amountRaw });
 const page = (rows: unknown[], nextCursor: string | null = null) => ({ rows, page: { limit: 100, order: "desc", nextCursor } });
 function reply(body: unknown, time = start, status = 200, headers: Record<string, string> = {}): Response {
@@ -100,6 +100,7 @@ test("cold backfill is bounded and resumes on the next process without publishin
   assert.equal(result.records.size, 7);
   assert.deepEqual((await saved(dir)).data.recentDistributions, [total("A", "7")]);
   assert.equal((await saved(dir)).fetchedAt, new Date(start).toISOString());
+  assert.equal(result.completedArchive?.fetchedAt, new Date(start).toISOString());
   await assert.rejects(stat(join(dir, "payout-history-pending.json")), { code: "ENOENT" });
 });
 

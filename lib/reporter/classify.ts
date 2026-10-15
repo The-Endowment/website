@@ -1,4 +1,4 @@
-import { VERIFICATION_VERSION, walletPayoutKey, type WalletPayoutFeed } from "./payouts.ts";
+import { archiveGraceElapsed, VERIFICATION_VERSION, walletPayoutKey, type WalletPayoutFeed } from "./payouts.ts";
 import { MissingPayoutEvidence, PAYOUT_EVIDENCE_WAIT_SECONDS, raw, type Distribution, type Observation, type ParsedInstruction, type ParsedTransaction, type SourcePolicy } from "./types.ts";
 
 /** A transaction can distribute rewards for several coins. Scope before checking
@@ -138,9 +138,17 @@ export function classify(tx: ParsedTransaction, account: string, owner: string, 
     // remain conservative exclusions, and no API timestamp can extend the wait.
     if (!record && !alternateAccount && incoming > 0n && incoming === approvedIncoming
         && incoming === ownerGross && delta > 0n && Number.isSafeInteger(now)
-        && Number.isSafeInteger(tx.blockTime) && tx.blockTime! <= now
-        && now < retryUntil) {
-      throw new MissingPayoutEvidence({ ...base, kind: "other", reason: "Holder payout evidence pending" }, retryUntil);
+        && Number.isSafeInteger(tx.blockTime) && tx.blockTime! >= 0 && tx.blockTime! <= now) {
+      // A real expired wait must remain observable even if capture has just
+      // recovered. Old receipts first seen after catch-up need not start a wait.
+      if (!(batchWaitUntil !== undefined && now >= batchWaitUntil)
+          && archiveGraceElapsed(feed, tx.blockTime!, now))
+        return { ...base, kind: "other", payoutAttribution: "covered_absent",
+          reason: "Holder row absent after completed-archive grace; unverified receipt excluded" };
+      if (now < retryUntil)
+        throw new MissingPayoutEvidence({ ...base, kind: "other", reason: "Holder payout evidence pending" }, retryUntil);
+      return { ...base, kind: "other", payoutAttribution: "expired",
+        reason: "Holder payout evidence deadline expired; unverified receipt excluded" };
     }
     if (record && record.signature === signature && record.holder === owner && record.assetMint === policy.mint
         && !alternateAccount && incoming > 0n && incoming === approvedIncoming && incoming === ownerGross

@@ -415,9 +415,9 @@ for (const role of ["collector", "reviewer"] as const) {
       async journal => structuredClone(journal.state));
     await tick(); const original = await state();
     bank.move("reward", 40n); const rows = new Map(bank.feed.records); bank.feed.records.clear();
-    assert.equal((await tick()).status, "awaiting_payout"); assert.deepEqual(await state(), {...original, payoutWaitUntil: Number(bank.consent.started_at) + 1 + 6 * 3600});
+    assert.equal((await tick()).status, "awaiting_payout"); assert.deepEqual(await state(), {...original, payoutWaitUntil: Number(bank.consent.started_at) + 1 + 6 * 3600, payoutWaitStartedAt: Number(bank.consent.started_at) + 1});
     bank.move("spend", 25n); bank.move("buy", 25n);
-    assert.equal((await tick()).status, "awaiting_payout"); assert.deepEqual(await state(), {...original, payoutWaitUntil: Number(bank.consent.started_at) + 1 + 6 * 3600});
+    assert.equal((await tick()).status, "awaiting_payout"); assert.deepEqual(await state(), {...original, payoutWaitUntil: Number(bank.consent.started_at) + 1 + 6 * 3600, payoutWaitStartedAt: Number(bank.consent.started_at) + 1});
     for (const [key, row] of rows) bank.feed.records.set(key, row);
     const recovered = await tick();
     assert.equal(recovered.status, role === "collector" ? "dry_run" : "reviewed");
@@ -469,7 +469,7 @@ test("reviewer missing-row wait reconciles pending settlements and leaves refund
   assert.equal("outcomes" in reconciled && reconciled.outcomes[0].result, "reconciled");
   const stillWaiting = await walletTick(options, bank.owner, bank.receipts());
   assert.equal("outcomes" in stillWaiting && stillWaiting.outcomes[0].result, "waiting_for_payout");
-  await withJournal(join(directory, "wallets"), bank.a.dividend_account, async j => assert.deepEqual(j.state, {...original, payoutWaitUntil: Number(bank.consent.started_at) + 1 + 6 * 3600}));
+  await withJournal(join(directory, "wallets"), bank.a.dividend_account, async j => assert.deepEqual(j.state, {...original, payoutWaitUntil: Number(bank.consent.started_at) + 1 + 6 * 3600, payoutWaitStartedAt: Number(bank.consent.started_at) + 2}));
   bank.consent.enabled = false; options.submit = false;
   const refund = await walletTick(options, bank.owner, bank.receipts());
   assert.equal(refund.status, "awaiting_payout");
@@ -499,6 +499,8 @@ for (const role of ["collector", "reviewer"] as const) {
     bank.advance(3 * 3600); bank.move("reward", 20n); bank.feed.records.clear();
     const next = await tick(); assert.equal(next.status, "awaiting_payout");
     assert.equal("retryUntil" in next && next.retryUntil, deadline);
+    assert.equal("waitSeconds" in next && next.waitSeconds, 3 * 3600 + 1);
+    assert.equal("waitStartedAt" in next && next.waitStartedAt, Number(bank.consent.started_at) + 1);
     bank.advance(deadline - bank.time());
     // A fresh missing row cannot restart the six-hour clock for this held batch.
     bank.move("reward", 10n); bank.feed.records.clear();
@@ -531,4 +533,21 @@ test("a missing API row for a pre-consent transfer does not hold the wallet", as
   await withJournal(join(directory, "wallets"), bank.a.dividend_account, async journal => {
     assert.equal(journal.state!.eligible, "0"); assert.equal(journal.state!.payoutWaitUntil, undefined);
   });
+});
+
+
+test("old missing pre-consent payout does not report an attribution expiry", async t => {
+  const bank = await holdingBank(), directory = await mkdtemp(join(tmpdir(), "hold-preconsent-expiry-"));
+  t.after(() => rm(directory, {recursive: true, force: true}));
+  t.mock.method(Date, "now", () => bank.time() * 1000);
+  const seen: import("../lib/reporter/types.ts").Observation[] = [];
+  const options: WorkerOptions = {rpc: bank.rpc, rpcUrl: "http://127.0.0.1:1", inst: bank.inst,
+    directory, role: "reviewer", submit: false, source: bank.source, feed: bank.feed,
+    observe: event => { if (event.kind === "observations") seen.push(...event.observations); }};
+  await walletTick(options, bank.owner, []);
+  const transaction = bank.move("reward", 40n); transaction.blockTime = Number(bank.consent.started_at) - 6 * 3600 - 1;
+  bank.feed.records.clear();
+  assert.equal((await walletTick(options, bank.owner, [])).status, "reviewed");
+  assert.equal(seen.length, 1); assert.equal(seen[0].kind, "other");
+  assert.equal(seen[0].payoutAttribution, undefined);
 });

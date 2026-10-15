@@ -12,6 +12,9 @@ function validate(state: Ledger) {
       || state.slot < 0 || (state.cursor !== null && typeof state.cursor !== "string")) throw new Error("Invalid journal state");
   if (state.payoutWaitUntil !== undefined && (!Number.isSafeInteger(state.payoutWaitUntil) || state.payoutWaitUntil < 0))
     throw new Error("Invalid payout evidence deadline");
+  if (state.payoutWaitStartedAt !== undefined && (!Number.isSafeInteger(state.payoutWaitStartedAt)
+      || state.payoutWaitStartedAt < 0 || state.payoutWaitUntil === undefined
+      || state.payoutWaitStartedAt > state.payoutWaitUntil)) throw new Error("Invalid payout wait start");
   if (raw(state.eligible) > raw(state.balance)) throw new Error("Invalid journal eligibility");
   if (state.settled) {
     if (state.pending || !Number.isSafeInteger(state.settled.slot) || state.settled.slot < state.slot) throw new Error("Invalid settled submission checkpoint");

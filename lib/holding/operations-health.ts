@@ -10,6 +10,8 @@ export type WorkerEvent = { kind: "snapshot"; snapshot: HoldSnapshot } |
 export class PassHealth {
   readonly startedAt = new Date().toISOString();
   readonly issues = new Set<string>();
+  readonly notes = new Set<string>();
+  readonly payoutWait = { wallets: 0, overdueWallets: 0, oldestSeconds: 0, expiredReceipts: 0, coveredAbsentReceipts: 0 };
   readonly statuses: Record<string, number> = {};
   readonly observations = { reward: 0, outflow: 0, other: 0, failed: 0, uncertain: 0 };
   private observedOwners = new Set<string>();
@@ -52,6 +54,13 @@ export class PassHealth {
         this.observations[o.kind]++;
         if (o.kind === "reward") this.matchedRewardOwners.add(owner);
         if (o.kind === "uncertain") this.issues.add("uncertain_history");
+        if (o.payoutAttribution === "expired") {
+          this.payoutWait.expiredReceipts++;
+          this.issues.add("payout_evidence_expired");
+        } else if (o.payoutAttribution === "covered_absent") {
+          this.payoutWait.coveredAbsentReceipts++;
+          this.notes.add("payout_absent_after_grace");
+        }
       }
     }
   }
@@ -66,11 +75,24 @@ export class PassHealth {
       if (age >= 72 * 3600) this.issues.add("pending_over_72h");
     }
   }
-  outcome(result: { status: string; reason?: string; amount?: string }) {
+  outcome(result: { status: string; reason?: string; amount?: string; retryUntil?: number; waitStartedAt?: number; waitSeconds?: number }) {
     this.ownersProcessed++;
     this.statuses[result.status] = (this.statuses[result.status] ?? 0) + 1;
     if (result.reason?.startsWith("Observation gap:")) this.issues.add("history_gap");
-    if (result.status === "awaiting_payout") this.issues.add("payout_evidence_pending");
+    if (result.status === "awaiting_payout") {
+      this.payoutWait.wallets++;
+      if (![result.retryUntil, result.waitStartedAt, result.waitSeconds].every(n => Number.isSafeInteger(n) && n! >= 0)
+          || result.waitStartedAt! > result.retryUntil!) {
+        this.issues.add("payout_wait_telemetry_invalid");
+      } else {
+        this.notes.add("payout_evidence_pending");
+        this.payoutWait.oldestSeconds = Math.max(this.payoutWait.oldestSeconds, result.waitSeconds!);
+        if (result.waitSeconds! > 3600) {
+          this.payoutWait.overdueWallets++;
+          this.issues.add("payout_evidence_overdue");
+        }
+      }
+    }
     if (result.status === "dry_run" && result.amount) this.proposedAmount += BigInt(result.amount);
     if (result.status === "submitted" && result.amount) this.submittedAmount += BigInt(result.amount);
   }
@@ -82,7 +104,7 @@ export class PassHealth {
     return {
       version: 1, role: this.role, mode: this.mode ?? "observation", submit: this.submit,
       startedAt: this.startedAt, finishedAt: new Date().toISOString(),
-      issues: [...this.issues].sort(), failures: this.failures,
+      issues: [...this.issues].sort(), notes: [...this.notes].sort(), payoutWait: {...this.payoutWait}, failures: this.failures,
       owners: { discovered: this.ownersDiscovered, selected: this.ownersSelected,
         processed: this.ownersProcessed, activeObserved: this.activeOwners.size,
         historyRead: this.observedOwners.size, nonemptyHistory: this.nonemptyHistoryOwners.size,
@@ -115,7 +137,8 @@ export function assertHeartbeatMode(input: { endpoint?: string; expectedMode?: s
 }
 
 /** An idle pass can be operationally healthy without proving pilot coverage.
- * Every other issue prevents a success heartbeat, including safely quarantined
+ * Brief attribution waits are notes, not issues. Every issue prevents a success
+ * heartbeat, including safely quarantined
  * collectors and reviewer passes that could not obtain complete evidence. */
 export function completedHealthyPass(report: HealthReport) {
   return report.failures === 0 && report.owners.processed === report.owners.selected &&

@@ -193,14 +193,45 @@ test("configured worker monitors require an explicit matching observation or sub
   }
 });
 
-test("awaiting payout attribution is visible and cannot send a healthy heartbeat", () => {
-  const health = new PassHealth("collector", false);
-  health.feedAvailable = true;
-  health.ownersSelected = 1;
-  health.outcome({status: "awaiting_payout", reason: "Waiting for holder payout evidence"});
-  const report = health.report();
-  assert.equal(report.statuses.awaiting_payout, 1);
-  assert.deepEqual(report.issues, ["payout_evidence_pending"]);
-  assert.equal(completedHealthyPass(report), false);
-  assert.equal(report.failures, 0);
+test("brief attribution waits are healthy notes; only unresolved waits over one hour alert", () => {
+  for (const waitSeconds of [0, 120, 3600, 3601]) {
+    const health = new PassHealth("collector", false);
+    health.feedAvailable = true; health.ownersSelected = 1;
+    health.outcome({status: "awaiting_payout", retryUntil: 21600, waitStartedAt: 0, waitSeconds});
+    const report = health.report();
+    assert.equal(report.statuses.awaiting_payout, 1);
+    assert.deepEqual(report.notes, ["payout_evidence_pending"]);
+    assert.deepEqual(report.issues, waitSeconds > 3600 ? ["payout_evidence_overdue"] : []);
+    assert.equal(report.payoutWait.oldestSeconds, waitSeconds);
+    assert.equal(completedHealthyPass(report), waitSeconds <= 3600);
+    assert.equal(report.failures, 0);
+  }
+});
+
+test("expiry alerts even after completed replay; normal covered absence remains a healthy note", () => {
+  for (const role of ["collector", "reviewer"] as const) for (const status of ["expired", "covered_absent"] as const) {
+    const health = new PassHealth(role, false); health.feedAvailable = true; health.ownersSelected = 1;
+    health.observe(owner, {kind: "observations", observations: [{signature: "payout", slot: 20,
+      before: "0", after: "10", amount: "0", kind: "other", reason: "No attribution", payoutAttribution: status}]});
+    health.outcome({status: role === "collector" ? "idle" : "reviewed"});
+    const report = health.report();
+    assert.equal(completedHealthyPass(report), status === "covered_absent");
+    assert.deepEqual(report.issues, status === "expired" ? ["payout_evidence_expired"] : []);
+    assert.equal(report.payoutWait.expiredReceipts, status === "expired" ? 1 : 0);
+    assert.equal(report.payoutWait.coveredAbsentReceipts, status === "covered_absent" ? 1 : 0);
+  }
+});
+
+test("brief attribution waits cannot hide other failures or malformed wait telemetry", () => {
+  const valid = {status: "awaiting_payout", retryUntil: 21600, waitStartedAt: 0, waitSeconds: 120};
+  for (const issue of ["feed_unavailable", "history_gap", "collection_quarantined", "wallet_failure"]) {
+    const health = new PassHealth("reviewer", false); health.feedAvailable = true; health.ownersSelected = 1;
+    health.outcome(valid); health.issues.add(issue); assert.equal(completedHealthyPass(health.report()), false);
+  }
+  for (const input of [{status: "awaiting_payout"}, {...valid, waitSeconds: NaN}, {...valid, waitStartedAt: -1},
+      {...valid, waitStartedAt: 30000}, {...valid, waitSeconds: 1.5}]) {
+    const health = new PassHealth("reviewer", false); health.feedAvailable = true; health.ownersSelected = 1;
+    health.outcome(input); assert.equal(completedHealthyPass(health.report()), false);
+    assert.ok(health.issues.has("payout_wait_telemetry_invalid"));
+  }
 });
