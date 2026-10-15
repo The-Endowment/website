@@ -78,6 +78,9 @@ export function historyArchive(value: unknown): HistoryArchive {
     throw new Error("Invalid payout history floor");
   const rows = mergeRows(a.rows), keys = new Set(rows.map(payoutKey));
   if (rows.length !== a.rows.length || a.headKeys.some((k) => !keys.has(k))) throw new Error("Invalid payout head");
+  // Rows below the floor may be a transaction cut at a page boundary.
+  if (a.historyFloor !== undefined && rows.some((r) => timestamp(r.createdAt) < timestamp(a.historyFloor!)))
+    throw new Error("Payout history archive holds rows below its floor");
   const expected = distributionTotals(rows, a.legacyDistributions);
   const actual = distributions(a, FEED_SCOPE);
   if (actual.size !== expected.length || expected.some((r) => JSON.stringify(actual.get(r.signature)) !== JSON.stringify(r)))
