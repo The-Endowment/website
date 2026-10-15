@@ -230,10 +230,9 @@ export async function archiveFeed(directory: string, { request = fetch, now = Da
         if ([...oldRecords.keys()].some((signature) => !recovered.has(signature)))
           pending.gap ??= { detectedAt: new Date(now()).toISOString(), reason: "window_disjoint" };
       }
-      const records = distributions({ data: { recentDistributions: totals } }, FEED_SCOPE);
-      for (const [signature, prior] of oldRecords) {
-        if (records.get(signature)?.amountRaw !== prior.amountRaw) throw new Error("Published payout total changed");
-      }
+      // V2 sums cover retained rows, not necessarily a whole transaction. A
+      // later boundary page may add distinct holders. mergeRows keeps existing
+      // rows immutable; distributionTotals still checks pinned legacy totals.
       archive = historyArchive({ version: 2, source: PAYOUT_URL, fetchedAt: pending.headAt!,
         ...(pending.historyFloor === undefined ? {} : { historyFloor: pending.historyFloor }),
         baselineAt: new Date(Math.min(timestamp(pending.baselineAt), timestamp(pending.headAt!))).toISOString(),

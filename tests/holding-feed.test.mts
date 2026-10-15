@@ -46,7 +46,7 @@ function legacy(gap: unknown = null) {
     data: { recentDistributions: [total("A")] } };
 }
 
-test("holder rows spanning pages become one exact transaction total; base payouts are excluded", async (t) => {
+test("holder rows spanning pages are summed once; base payouts are excluded", async (t) => {
   const dir = await directory(t);
   const a = row("A", { amountRaw: "6" }), b = row("A", { holder: "J".repeat(32), amountRaw: "4" });
   const records = await archiveFeed(dir, { now: () => start, request: responses([
@@ -141,19 +141,86 @@ test("exact duplicate holder rows do not inflate transaction totals", async (t) 
   assert.deepEqual(r, evidence([row("A"), row("B")]));
 });
 
-test("changed holder amounts poison a previously healthy archive without replacing accepted data", async (t) => {
-  const dir = await directory(t); await capture(dir, [row("A")]);
-  await assert.rejects(capture(dir, [row("A", { amountRaw: "11" })], start + 1000), /record changed/);
-  assert.equal((await saved(dir)).coverage.gap?.reason, "feed_invalid");
-  assert.deepEqual((await saved(dir)).data.recentDistributions, [total("A")]);
-  await assert.rejects(readArchivedFeed(dir, { now: () => start + 1000 }), /manual review/);
+test("changed holder amounts or timestamps still poison an archive when valid new holders are added", async (t) => {
+  for (const change of [{ amountRaw: "11" }, { createdAt: new Date(start - 4999).toISOString() }]) {
+    const dir = await directory(t); await capture(dir, [row("A")]);
+    await assert.rejects(capture(dir, [row("A", change), row("A", { holder: "J".repeat(32) })], start + 1000), /record changed/);
+    const archive = await saved(dir);
+    assert.equal(archive.coverage.gap?.reason, "feed_invalid");
+    assert.deepEqual(archive.rows, [row("A")]);
+    assert.deepEqual(archive.data.recentDistributions, [total("A")]);
+    await assert.rejects(readArchivedFeed(dir, { now: () => start + 1000 }), /manual review/);
+  }
 });
 
-test("new rows for a previously published signature cannot silently change a finalized total", async (t) => {
+test("new distinct holders can extend a v2 retained-row sum without changing prior evidence", async (t) => {
   const dir = await directory(t); await capture(dir, [row("A")]);
-  await assert.rejects(capture(dir, [row("A", { holder: "J".repeat(32) }), row("A")], start + 1000), /total changed/);
-  assert.deepEqual((await saved(dir)).data.recentDistributions, [total("A")]);
-  assert.equal((await saved(dir)).coverage.gap?.reason, "feed_invalid");
+  const added = row("A", { holder: "J".repeat(32) });
+  const records = await capture(dir, [added, row("A"), added], start + 1000);
+  assert.deepEqual(records, evidence([row("A"), added], start + 1000));
+  const archive = await saved(dir);
+  assert.deepEqual(archive.rows, [row("A"), added]);
+  assert.deepEqual(archive.data.recentDistributions, [total("A", "20")]);
+  assert.equal(archive.coverage.gap, null);
+});
+
+test("a later boundary page can complete the 8-of-17 holder transaction retained below a cold history floor", async (t) => {
+  const dir = await directory(t), floor = new Date(start - 1000).toISOString();
+  const alphabet = "123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz";
+  const suffix = (i: number) => alphabet[Math.floor(i / 58)] + alphabet[i % 58];
+  const older = Array.from({ length: 92 }, (_, i) => row("S", {
+    signature: "S".repeat(62) + suffix(i), createdAt: new Date(start - 10000 - i).toISOString(),
+  }));
+  const boundary = Array.from({ length: 17 }, (_, i) => row("G", {
+    holder: "H".repeat(30) + suffix(i), createdAt: new Date(start - 20000).toISOString(),
+  }));
+  const firstPage = [...older, ...boundary.slice(0, 8)];
+  await archiveFeed(dir, { now: () => start, historyFloor: floor,
+    request: responses([page(firstPage, "older-than-floor")]) });
+  const before = await saved(dir);
+  assert.equal(before.rows.length, 100);
+  assert.deepEqual(before.data.recentDistributions.find(r => r.signature === boundary[0].signature), total("G", "80"));
+
+  // New payouts move the last old head row onto page four, which also contains
+  // the nine unseen holders of the same older transaction. No old row changes.
+  const burst = Array.from({ length: 201 }, (_, i) => row("T", {
+    signature: "T".repeat(62) + suffix(i), createdAt: new Date(start + 1000 - i).toISOString(),
+  }));
+  const all = [...burst, ...older, ...boundary];
+  const records = await archiveFeed(dir, { now: () => start + 30000, request: responses([
+    page(all.slice(0, 100), "p2"), page(all.slice(100, 200), "p3"),
+    page(all.slice(200, 300), "p4"), page(all.slice(300), "not-needed"),
+  ], start + 30000) });
+  const after = await saved(dir);
+  assert.equal(records.records.size, 310);
+  assert.deepEqual(after.rows.slice(0, 100), before.rows);
+  assert.deepEqual(after.rows.filter(r => r.signature === boundary[0].signature), boundary);
+  assert.deepEqual(after.data.recentDistributions.find(r => r.signature === boundary[0].signature), total("G", "170"));
+  assert.deepEqual(after.headKeys, burst.slice(0, 100).map(payoutKey));
+  assert.equal(after.historyFloor, floor);
+  assert.equal(after.coverage.completeCoverageProven, false);
+  assert.equal(after.coverage.gap, null);
+  assert.deepEqual(await readArchivedFeed(dir, { now: () => start + 30000 }), records);
+});
+
+test("adding a distinct holder never clears an existing gap", async (t) => {
+  for (const reason of ["feed_invalid", "window_disjoint", "capture_stalled"] as const) {
+    const dir = await directory(t); await capture(dir, [row("A")]);
+    const archive = await saved(dir), gap = { detectedAt: new Date(start).toISOString(), reason };
+    archive.coverage.gap = gap;
+    await writeFile(join(dir, "payout-feed.json"), JSON.stringify(archive));
+    await assert.rejects(capture(dir, [row("A"), row("A", { holder: "J".repeat(32) })], start + 1000), /manual review/);
+    assert.deepEqual((await saved(dir)).coverage.gap, gap);
+    assert.deepEqual((await saved(dir)).data.recentDistributions, [total("A", "20")]);
+    await assert.rejects(readArchivedFeed(dir, { now: () => start + 1000 }), /manual review/);
+  }
+});
+
+test("a new holder for the same signature cannot substitute for a missing prior head row", async (t) => {
+  const dir = await directory(t); await capture(dir, [row("A")]);
+  await assert.rejects(capture(dir, [row("A", { holder: "J".repeat(32) })], start + 1000), /manual review/);
+  assert.equal((await saved(dir)).coverage.gap?.reason, "window_disjoint");
+  await assert.rejects(readArchivedFeed(dir, { now: () => start + 1000 }), /manual review/);
 });
 
 test("malformed pages, amounts, order and cursors never publish new eligibility", async (t) => {
@@ -242,6 +309,23 @@ test("legacy amount conflicts fail migration without overwriting the legacy arch
   assert.equal(await readFile(join(dir, "payout-feed.json"), "utf8"), old);
 });
 
+test("new holder rows cannot change a legacy total during or after v2 migration", async (t) => {
+  for (const migrated of [false, true]) {
+    const dir = await directory(t), old = JSON.stringify(legacy());
+    await writeFile(join(dir, "payout-feed.json"), old);
+    if (migrated) await capture(dir, [row("A")]);
+    await assert.rejects(capture(dir, [row("A"), row("A", { holder: "J".repeat(32) })], start + 1000), /Legacy payout total changed/);
+    if (migrated) {
+      const archive = await saved(dir);
+      assert.equal(archive.coverage.gap?.reason, "feed_invalid");
+      assert.deepEqual(archive.legacyDistributions, [total("A")]);
+      assert.deepEqual(archive.rows, [row("A")]);
+      assert.deepEqual(archive.data.recentDistributions, [total("A")]);
+      assert.equal(await readFile(join(dir, "payout-feed.pre-v2.json"), "utf8"), old);
+    } else assert.equal(await readFile(join(dir, "payout-feed.json"), "utf8"), old);
+  }
+});
+
 test("initial empty history is allowed, but disappearance of previously seen rows latches a gap", async (t) => {
   const dir = await directory(t); assert.equal((await capture(dir, [])).records.size, 0);
   await capture(dir, [row("A")], start + 1000);
@@ -303,6 +387,14 @@ test("aggregate overflow is rejected even though each individual holder amount f
   await assert.rejects(capture(dir, [row("A", {amountRaw: ((1n << 64n) - 1n).toString()}),
     row("A", {holder: "J".repeat(32), amountRaw: "1"})]), /exceeds u64/);
   await assert.rejects(readArchivedFeed(dir, {now: () => start}), {code: "ENOENT"});
+});
+
+test("adding a holder cannot overflow an existing retained-row sum", async (t) => {
+  const dir = await directory(t), largest = row("A", { amountRaw: ((1n << 64n) - 1n).toString() });
+  await capture(dir, [largest]);
+  await assert.rejects(capture(dir, [largest, row("A", { holder: "J".repeat(32), amountRaw: "1" })], start + 1000), /exceeds u64/);
+  assert.deepEqual((await saved(dir)).rows, [largest]);
+  assert.equal((await saved(dir)).coverage.gap?.reason, "feed_invalid");
 });
 
 test("oversized responses cannot overwrite previously accepted evidence", async (t) => {

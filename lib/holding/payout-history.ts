@@ -40,7 +40,7 @@ export function mergeRows(...groups: Payout[][]): Payout[] {
   return [...rows.values()];
 }
 
-/** Called only after a whole scan reaches its prior head or the end of history.
+/** Derived sums of retained rows, which may grow as distinct holders are found.
  * Totals are migration/archive integrity evidence only, never wallet eligibility. */
 export function distributionTotals(rows: Payout[], legacy: Distribution[]): Distribution[] {
   const sums = new Map<string, bigint>();
