@@ -371,17 +371,47 @@ test("malformed JSON, aborted bodies and HTML 200 retry the saved cursor without
 
 const floorAt = new Date(start - 60000).toISOString();
 const oldRow = (letter: string) => row(letter, {createdAt: new Date(start - 120000).toISOString()});
-test("explicit cold history floor retains the boundary page, stops before older pages and persists across captures", async t => {
+test("explicit cold history floor keeps rows at or after it, stops before older pages and persists across captures", async t => {
   const dir = await directory(t);
   const result = await archiveFeed(dir, {historyFloor: floorAt, now: () => start, request: responses([
     page([row("A")], "boundary"), page([row("B", {createdAt: floorAt}), oldRow("C")], "not-fetched"),
   ])});
-  assert.equal(result.records.size, 3);
+  assert.equal(result.records.size, 2);
   assert.equal((await saved(dir)).historyFloor, floorAt);
-  assert.deepEqual((await saved(dir)).rows, [row("A"), row("B", {createdAt: floorAt}), oldRow("C")]);
+  assert.deepEqual((await saved(dir)).rows, [row("A"), row("B", {createdAt: floorAt})]);
   await capture(dir, [row("D"), row("A")], start + 30000);
   assert.equal((await saved(dir)).historyFloor, floorAt);
-  assert.equal((await saved(dir)).rows.length, 4); // no pruning
+  assert.equal((await saved(dir)).rows.length, 3); // no pruning above the floor
+});
+
+test("a below-floor transaction cut at the floor page boundary never becomes a published total", async t => {
+  // Live shape: 17 holder rows of one signature span two pages; the floor stop
+  // keeps 8, and a later scan's boundary page returns the other 9.
+  const dir = await directory(t);
+  const holders = Array.from({length: 17}, (_, i) => row("X", {
+    holder: "H".repeat(31) + "ABCDEFGHJKLMNPQRS"[i], createdAt: oldRow("X").createdAt}));
+  await archiveFeed(dir, {historyFloor: floorAt, now: () => start, request: responses([
+    page([row("A"), ...holders.slice(0, 8)], "rest-of-X"),
+  ])});
+  assert.deepEqual((await saved(dir)).rows, [row("A")]);
+  assert.deepEqual((await saved(dir)).headKeys, [payoutKey(row("A"))]);
+  assert.deepEqual((await saved(dir)).data.recentDistributions, [total("A")]);
+  await archiveFeed(dir, {now: () => start + 30000, request: responses([
+    page([row("N")], "p1"), page([row("A"), ...holders.slice(8)], "older"),
+  ], start + 30000)});
+  const archive = await saved(dir);
+  assert.equal(archive.coverage.gap, null);
+  assert.deepEqual(archive.rows.map((r) => r.signature[0]).sort(), ["A", "N"]);
+  assert.deepEqual(archive.data.recentDistributions.map((r) => r.signature[0]).sort(), ["A", "N"]);
+});
+
+test("an archive holding rows below its floor is rejected", async t => {
+  const dir = await directory(t);
+  await archiveFeed(dir, {historyFloor: floorAt, now: () => start, request: responses([page([row("A"), oldRow("B")], "unused")])});
+  const archive = await saved(dir);
+  archive.rows.push(oldRow("B")); archive.data.recentDistributions.push(total("B"));
+  await writeFile(join(dir, "payout-feed.json"), JSON.stringify(archive));
+  await assert.rejects(readArchivedFeed(dir, {now: () => start}), /below its floor/);
 });
 
 test("history floor is strictly older, does not infer end on an empty page, and resumes after restart", async t => {
@@ -392,13 +422,13 @@ test("history floor is strictly older, does not infer end on an empty page, and 
   ])}), /backfill pending/);
   assert.equal(JSON.parse(await readFile(join(dir, "payout-history-pending.json"), "utf8")).historyFloor, floorAt);
   await archiveFeed(dir, {now: () => start + 30000, request: responses([page([oldRow("B")], "unused")], start + 30000)});
-  assert.equal((await saved(dir)).rows.length, 2);
+  assert.equal((await saved(dir)).rows.length, 1);
   assert.equal((await saved(dir)).historyFloor, floorAt);
 });
 
 test("floor cannot satisfy missing prior head rows or clear a gap", async t => {
   const dir = await directory(t);
-  await archiveFeed(dir, {historyFloor: floorAt, now: () => start, request: responses([page([row("A"), oldRow("B")], "unused")])});
+  await archiveFeed(dir, {historyFloor: floorAt, now: () => start, request: responses([page([row("A"), row("B"), oldRow("Z")], "unused")])});
   await assert.rejects(archiveFeed(dir, {now: () => start + 1000, request: responses([
     page([row("A"), oldRow("C")], "must-continue"), page([]),
   ], start + 1000)}), /manual review/);

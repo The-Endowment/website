@@ -222,7 +222,15 @@ export async function archiveFeed(directory: string, { request = fetch, now = Da
     if (!pending.complete) throw new Error("Payout history backfill pending; resume on the next capture");
     let archive: HistoryArchive;
     try {
-      const rows = mergeRows(priorRows, pending.rows);
+      // Pages split a transaction's holder rows anywhere (keyset on time,
+      // signature, holder), so the page that reaches the floor usually cuts its
+      // oldest transaction short, and a later boundary page can return the rest.
+      // Below-floor rows are out of scope: drop them. Every retained row is at or
+      // after the floor, and a strictly older row was seen, so each retained
+      // transaction is complete.
+      const floorTime = pending.historyFloor === undefined ? -Infinity : timestamp(pending.historyFloor);
+      const rows = mergeRows(priorRows, pending.rows).filter((r) => timestamp(r.createdAt) >= floorTime);
+      const retained = new Set(rows.map(payoutKey));
       const legacyDistributions = previous?.legacyDistributions ?? [...oldRecords.values()];
       const totals = distributionTotals(rows, legacyDistributions);
       if (!previous && oldRecords.size) {
@@ -237,7 +245,8 @@ export async function archiveFeed(directory: string, { request = fetch, now = Da
       archive = historyArchive({ version: 2, source: PAYOUT_URL, fetchedAt: pending.headAt!,
         ...(pending.historyFloor === undefined ? {} : { historyFloor: pending.historyFloor }),
         baselineAt: new Date(Math.min(timestamp(pending.baselineAt), timestamp(pending.headAt!))).toISOString(),
-        coverage: { completeCoverageProven: false, gap: pending.gap }, headKeys: pending.headKeys, rows, legacyDistributions,
+        coverage: { completeCoverageProven: false, gap: pending.gap },
+        headKeys: pending.headKeys.filter((k) => retained.has(k)), rows, legacyDistributions,
         data: { recentDistributions: totals } });
     } catch (error) { await poison(); throw error; }
     if (original !== null && !previous) {
