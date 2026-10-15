@@ -1,11 +1,12 @@
 import { type Address } from "@solana/kit";
 import { resolve } from "node:path";
 import { ata, type Instance } from "../endowment.ts";
+import type { WalletPayoutFeed } from "../reporter/payouts.ts";
 import { classify } from "../reporter/classify.ts";
 import { runWallet } from "../reporter/engine.ts";
 import { withJournal } from "../reporter/journal.ts";
 import { history, latestCursor, type RpcCall } from "../reporter/rpc.ts";
-import type { Distribution, Observation, SourcePolicy } from "../reporter/types.ts";
+import { MissingPayoutEvidence, type Observation, type SourcePolicy } from "../reporter/types.ts";
 import { collectIx, reviewIx, settleIx } from "./client.ts";
 import { holdSnapshot, type HoldSnapshot } from "./snapshot.ts";
 import {
@@ -25,8 +26,8 @@ export type WorkerOptions = {
   directory: string;
   submit: boolean;
   keyFile?: string;
-  feed: Map<string, Distribution>;
-  loadFeed?: () => Promise<Map<string, Distribution>>;
+  feed: WalletPayoutFeed;
+  loadFeed?: () => Promise<WalletPayoutFeed>;
   source: SourcePolicy;
   role: "collector" | "reviewer";
   beforeCollect?: (snapshot: HoldSnapshot) => Promise<void>;
@@ -68,10 +69,25 @@ export async function walletTick(
           s.slot,
         );
         // A long pass must see payouts captured while other wallets were read.
-        // Load after history retrieval; missing/late feed records grant no credit.
+        // Load after history retrieval; an absent recent holder row holds the whole batch.
         const feed = o.loadFeed ? await o.loadFeed() : o.feed;
         const observations = h.transactions.map((tx) => {
-          const result = classify(tx, source, owner, o.source, feed);
+          let result: Observation;
+          try { result = classify(tx, source, owner, o.source, feed, s.now, state.payoutWaitUntil); }
+          catch (error) {
+            if (!(error instanceof MissingPayoutEvidence) || tx.blockTime === null
+                || BigInt(tx.blockTime) >= (s.consent?.started_at ?? 0n)) throw error;
+            // A payout before consent cannot become eligible when the API catches up.
+            return { ...error.observation, kind: "uncertain" as const,
+              reason: "Payout predates consent" };
+          }
+          if (result.payoutAttribution && tx.blockTime !== null
+              && BigInt(tx.blockTime) < (s.consent?.started_at ?? 0n)) {
+            // A never-eligible pre-consent receipt is not an attribution outage.
+            const excluded = {...result, reason: "Payout predates consent; no new eligibility"};
+            delete excluded.payoutAttribution;
+            return excluded;
+          }
           // Missing payout time cannot establish whether it followed consent.
           return result.kind === "reward" &&
             (tx.blockTime === null ||
@@ -143,6 +159,9 @@ export async function walletTick(
         );
       }
       let s = await snapshot(journal.state?.slot ?? 0);
+      let evidenceRetry: MissingPayoutEvidence | undefined;
+      let waitStartedAt: number | undefined;
+      let waitSeconds: number | undefined;
       if (!journal.state || journal.state.binding !== s.binding) {
         await resetReviewer(
           journal,
@@ -161,12 +180,20 @@ export async function walletTick(
             o.inst.program,
           );
         } catch (error) {
-          await resetReviewer(
-            journal,
-            s,
-            await latestCursor(o.rpc, source, s.slot),
-          );
-          throw error; // no signing in a tick with a history failure
+          if (error instanceof MissingPayoutEvidence) {
+            evidenceRetry = error;
+            const retryUntil = Math.min(journal.state!.payoutWaitUntil ?? Infinity, error.retryUntil);
+            waitStartedAt = journal.state!.payoutWaitStartedAt ?? s.now;
+            waitSeconds = Math.max(0, s.now - waitStartedAt);
+            if (journal.state!.payoutWaitUntil !== retryUntil || journal.state!.payoutWaitStartedAt === undefined)
+              await journal.save({...journal.state!, payoutWaitUntil: retryUntil, payoutWaitStartedAt: waitStartedAt},
+                "Awaiting payout attribution; reviewer history retained",
+                {signature: error.observation.signature, retryUntil, waitStartedAt});
+          }
+          else {
+            await resetReviewer(journal, s, await latestCursor(o.rpc, source, s.slot));
+            throw error; // no signing in a tick with a history failure
+          }
         }
       }
       const outcomes = [];
@@ -180,8 +207,11 @@ export async function walletTick(
           kind: "review", receipt: entry.address,
           collected: entry.receipt.amount.toString(), eligible: decision.amount,
         });
-        const action = settlementPlan(entry.receipt, s, decision);
-        if (action === "wait" || !o.submit) {
+        const planned = settlementPlan(entry.receipt, s, decision);
+        // Missing attribution never permits new clearance, but chain-driven
+        // refunds and reconciliation of already signed settlements must continue.
+        const action = evidenceRetry && planned === "clear" ? "wait" : planned;
+        if ((action === "wait" && !evidenceRetry) || !o.submit) {
           outcomes.push({ receipt: entry.address, action });
           continue;
         }
@@ -194,8 +224,10 @@ export async function walletTick(
         const result = await withJournal(
           resolve(o.directory, "settlements"),
           entry.address,
-          async (outbox) =>
-            settleOutbox(outbox, o.rpc, entry.address, async () => {
+          async (outbox) => {
+            if (action === "wait" && !outbox.state?.pending) return "waiting_for_payout";
+            return settleOutbox(outbox, o.rpc, entry.address, async () => {
+              if (action === "wait") throw evidenceRetry;
               // Prior positive decisions do not override a newly invalid feed.
               // The outbox first reconciles any existing signed transaction.
               await beforeRelease();
@@ -227,7 +259,8 @@ export async function walletTick(
                 expiresAt: s.now + 60,
                 evidenceHash: decision?.evidenceHash ?? "0".repeat(64),
               });
-            }, beforeRelease),
+            }, beforeRelease);
+          },
         ).catch((error) => {
           if (!releaseBlocked) throw error;
           // A release-only outage must not prevent later refunds. Signed bytes
@@ -236,7 +269,9 @@ export async function walletTick(
         });
         outcomes.push({ receipt: entry.address, action, result });
       }
-      return { status: "reviewed", outcomes };
+      return evidenceRetry
+        ? { status: "awaiting_payout", reason: evidenceRetry.message, retryUntil: evidenceRetry.retryUntil, waitStartedAt, waitSeconds, outcomes }
+        : { status: "reviewed", outcomes };
     },
   );
 }

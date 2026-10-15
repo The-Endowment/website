@@ -7,7 +7,7 @@ import { runWallet, type ReporterIO } from "../lib/reporter/engine.ts";
 import { boundary } from "../lib/reporter/ledger.ts";
 import { withJournal, type Journal } from "../lib/reporter/journal.ts";
 import type { Snapshot } from "../lib/reporter/snapshot.ts";
-import type { Ledger, Observation } from "../lib/reporter/types.ts";
+import { MissingPayoutEvidence, type Ledger, type Observation } from "../lib/reporter/types.ts";
 
 const source = "WnhwaPaZXDTQ9GXPiZ3NwWpXVtKff15kVCWR7Arhenw";
 const snapshot: Snapshot = { binding: "consent-1", slot: 11, now: 1_800_000_000, active: true, reason: "active", balance: "1100", nonce: "0", allowance: "999999", capacity: "999999", consentId: "1", collectionEpoch: "1", reporterEpoch: "1", reporter: "reporter" };
@@ -219,4 +219,116 @@ test("journal lock and truncated records stop signing", async () => {
     await appendFile(join(directory, `${source}.jsonl`), '{"partial":');
     await assert.rejects(withJournal(directory, source, async () => {}), /Truncated/);
   } finally { await rm(directory, { recursive: true }); }
+});
+
+test("verifier migration discards old credit only after pending collector transactions are resolved", async () => {
+  for (const status of ["none", "live", "finalized", "failed", "expired"] as const) {
+    const journal = memory({...boundary("legacy-verifier", 10, "old", "1100"), eligible:"100",
+      pending: status === "none" ? null : {wire:"old-signed-bytes", signature:"old-collection", amount:"100", nonce:"1",
+        expiresAt:1, lastValidBlockHeight:"200", evidenceHash:"a".repeat(64)}});
+    const network = io(journal), calls: string[] = [];
+    network.snapshot = async () => ({...snapshot, binding:"stonk-holder-v1:consent-1"});
+    network.status = async () => {calls.push("status"); return status === "finalized" || status === "failed" ? status : "pending";};
+    network.height = async () => status === "expired" ? 201n : 200n;
+    network.cursor = async () => {calls.push("boundary"); return "current";};
+    network.observations = async () => {throw new Error("Migration must not replay history");};
+    network.prepare = async () => {throw new Error("Migration must not sign");};
+    network.publish = async () => {throw new Error("Migration must not rebroadcast");};
+    const result = await runWallet(journal, network, true);
+    assert.equal(result.status, status === "live" ? "pending" : "boundary");
+    if (status === "live") {assert.equal(journal.state?.pending?.signature,"old-collection"); assert.deepEqual(calls,["status"]);}
+    else {
+      assert.equal(journal.state?.pending,null); assert.equal(journal.state?.eligible,"0");
+      assert.deepEqual(calls,status === "none" ? ["boundary"] : ["status","boundary"]);
+    }
+  }
+});
+
+
+test("typed payout retry preserves the entire cursor and later spending until attribution arrives", async () => {
+  const journal = memory(), network = io(journal), original = structuredClone(journal.state);
+  const pending = new MissingPayoutEvidence(reward, snapshot.now + 21600);
+  let prepares = 0; const prepare = network.prepare;
+  network.prepare = async (...args) => { prepares++; return prepare(...args); };
+  network.observations = async () => { throw pending; };
+  assert.equal((await runWallet(journal, network, true)).status, "awaiting_payout");
+  assert.deepEqual(journal.state, {...original, payoutWaitUntil: pending.retryUntil, payoutWaitStartedAt: snapshot.now}); assert.equal(prepares, 0);
+  const spend: Observation = {...reward, signature: "later-spend", slot: 12, before: "1100", after: "1060", kind: "outflow", amount: "40"};
+  network.snapshot = async () => ({...snapshot, slot: 12, balance: "1060"});
+  network.cursor = async () => spend.signature;
+  assert.equal((await runWallet(journal, network, true)).status, "awaiting_payout");
+  assert.deepEqual(journal.state, {...original, payoutWaitUntil: pending.retryUntil, payoutWaitStartedAt: snapshot.now}); assert.equal(prepares, 0);
+  network.observations = async (ledger) => {
+    assert.equal(ledger.cursor, "start"); return {observations: [reward, spend], cursor: spend.signature};
+  };
+  assert.equal((await runWallet(journal, network, true)).status, "submitted");
+  assert.equal(journal.state!.pending!.amount, "60"); assert.equal(prepares, 1);
+  assert.equal((await runWallet(journal, network, true)).status, "pending");
+  assert.equal(prepares, 1);
+});
+
+test("pending collector reconciliation precedes missing payout retry and never signs a duplicate", async () => {
+  const journal = memory(), network = io(journal);
+  await runWallet(journal, network, true);
+  let observations = 0;
+  network.prepare = async () => { throw new Error("duplicate signing"); };
+  network.observations = async () => { observations++; throw new MissingPayoutEvidence(reward, snapshot.now + 21600); };
+  assert.equal((await runWallet(journal, network, true)).status, "pending");
+  assert.equal(observations, 0);
+  network.status = async () => "finalized";
+  network.snapshot = async () => ({...snapshot, slot: 12, balance: "1000", nonce: "1"});
+  assert.equal((await runWallet(journal, network, true)).status, "awaiting_payout");
+  assert.equal(journal.state!.pending, null); assert.equal(journal.state!.cursor, "reward");
+  assert.deepEqual(journal.state!.settled, {slot: 12, nonce: "1"});
+  network.observations = async () => ({ observations: [{...reward, signature: "collection", slot: 12,
+    before: "1100", after: "1000", amount: "100", kind: "outflow"}], cursor: "collection" });
+  assert.equal((await runWallet(journal, network, true)).status, "idle");
+  assert.equal(journal.state!.eligible, "0");
+});
+
+test("payout batch deadlines survive journal reopen and invalid deadlines are rejected", async () => {
+  const directory = await mkdtemp(join(tmpdir(), "reporter-payout-deadline-"));
+  try {
+    await withJournal(directory, source, async journal => {
+      await journal.save({...memory().state!, payoutWaitUntil: snapshot.now + 21600}, "Waiting");
+      for (const invalid of [-1, NaN, Infinity, 1.5]) {
+        await assert.rejects(journal.save({...journal.state!, payoutWaitUntil: invalid}, "Invalid"), /Invalid payout evidence deadline/);
+      }
+      for (const invalid of [-1, NaN, Infinity, 1.5, snapshot.now + 21601]) {
+        await assert.rejects(journal.save({...journal.state!, payoutWaitStartedAt: invalid}, "Invalid start"), /Invalid payout wait start/);
+      }
+      await assert.rejects(journal.save({...memory().state!, payoutWaitStartedAt: snapshot.now}, "Orphaned start"), /Invalid payout wait start/);
+    });
+    await withJournal(directory, source, async journal => {
+      assert.equal(journal.state!.payoutWaitUntil, snapshot.now + 21600);
+      assert.equal(journal.state!.cursor, "start");
+    });
+  } finally { await rm(directory, {recursive: true, force: true}); }
+});
+
+test("actual first-wait age persists across restart without using the old payout time", async () => {
+  const directory = await mkdtemp(join(tmpdir(), "reporter-wait-age-"));
+  try {
+    const retryUntil = snapshot.now + 3600; // Receipt is already five hours old on first encounter.
+    await withJournal(directory, source, async journal => {
+      await journal.save({...memory().state!, payoutWaitUntil: retryUntil}, "Old deadline-only journal");
+      const network = io(journal);
+      network.observations = async () => { throw new MissingPayoutEvidence(reward, retryUntil); };
+      const first = await runWallet(journal, network);
+      assert.equal(first.status, "awaiting_payout");
+      assert.equal("waitSeconds" in first && first.waitSeconds, 0);
+      assert.equal(journal.state!.payoutWaitStartedAt, snapshot.now);
+    });
+    await withJournal(directory, source, async journal => {
+      const network = io(journal); network.snapshot = async () => ({...snapshot, now: snapshot.now + 120});
+      network.observations = async () => { throw new MissingPayoutEvidence(reward, retryUntil); };
+      const second = await runWallet(journal, network);
+      assert.equal("waitSeconds" in second && second.waitSeconds, 120);
+      assert.equal("retryUntil" in second && second.retryUntil, retryUntil);
+      network.observations = async () => ({observations: [reward], cursor: "reward"});
+      await runWallet(journal, network);
+      assert.equal(journal.state!.payoutWaitStartedAt, undefined);
+      assert.equal(journal.state!.payoutWaitUntil, undefined);
+    });
+  } finally { await rm(directory, {recursive: true, force: true}); }
 });

@@ -142,8 +142,8 @@ test("a complete observation worker pass pings success only when the monitor exp
       };`;
       try {
         await archiveFeed(directory, { request: (async () => Response.json({
-          data: { recentDistributions: [] }, meta: { generatedAt: new Date().toISOString() },
-        })) as typeof fetch });
+          rows: [], page: { limit: 100, order: "desc", nextCursor: null },
+        }, { headers: { date: new Date().toUTCString() } })) as typeof fetch });
         const child = spawnSync(process.execPath, ["--experimental-strip-types", "--import",
           `data:text/javascript,${encodeURIComponent(stub)}`,
           fileURLToPath(new URL("../scripts/held-rewards.mts", import.meta.url)), `--role=${role}`], {
@@ -162,5 +162,55 @@ test("a complete observation worker pass pings success only when the monitor exp
         assert.doesNotMatch(child.stdout + child.stderr, /monitor\.example|rpc\.example/);
       } finally { rmSync(directory, { recursive: true, force: true }); }
     }
+  }
+});
+
+// Isolate the wallet result, while exercising the real CLI's health persistence,
+// exit code and monitor endpoint selection. Wallet retry/replay is tested separately.
+test("worker CLI sends success for brief attribution notes and failure for overdue or expired evidence", async () => {
+  const codec = new URL("../lib/holding/codec.ts", import.meta.url).href;
+  const endowment = new URL("../lib/endowment.ts", import.meta.url).href;
+  for (const role of ["collector", "reviewer"] as const) for (const scenario of ["brief", "overdue", "expired", "covered"] as const) {
+    const directory = mkdtempSync(join(tmpdir(), "heartbeat-attribution-"));
+    const healthy = scenario === "brief" || scenario === "covered";
+    const workerSource = `export async function walletTick(options) {
+      ${scenario === "expired" || scenario === "covered" ? `options.observe({kind:'observations',observations:[{
+        signature:'receipt',slot:1,before:'0',after:'10',amount:'0',kind:'other',reason:'attribution',
+        payoutAttribution:'${scenario === "expired" ? "expired" : "covered_absent"}'}]});
+        return {status:'${role === "collector" ? "idle" : "reviewed"}'};` : `return {status:'awaiting_payout',
+          retryUntil:21600,waitStartedAt:0,waitSeconds:${scenario === "brief" ? 60 : 3601}};`}
+    }`;
+    const stub = `import {registerHooks} from 'node:module';
+      import {concat,encode,schema} from ${JSON.stringify(codec)};
+      import {flagshipConfig,PROGRAM_ID} from ${JSON.stringify(endowment)};
+      const config=await flagshipConfig();
+      const consent=Buffer.from(concat(Uint8Array.from(schema.accounts.CollectionConsent),encode({defined:{name:'CollectionConsent'}},
+        {config,owner:'11111111111111111111111111111111',bump:0,enabled:true,epoch:1n,next_nonce:0n,started_at:1n}))).toString('base64');
+      registerHooks({load(url,context,nextLoad){if(url.endsWith('/lib/holding/worker.ts'))
+        return {format:'module',shortCircuit:true,source:${JSON.stringify(workerSource)}};return nextLoad(url,context);}});
+      let rpcCalls=0;
+      globalThis.fetch=async(url,options)=>{
+        if(String(url)==='https://rpc.example/' && JSON.parse(options.body).method==='getProgramAccounts')
+          return Response.json({result:++rpcCalls===1?[]:[{account:{owner:PROGRAM_ID,data:[consent,'base64']}}]});
+        if(String(url)!=='https://monitor.example/${role}${healthy ? "" : "/fail"}') throw Error('wrong monitor');
+        if(JSON.parse(options.body).result!=='${healthy ? "completed" : "failed"}') throw Error('wrong result');
+        console.log('attribution_${scenario}_${healthy ? "completed" : "failed"}');return new Response('',{status:200});
+      };`;
+    try {
+      await archiveFeed(directory, {request: (async () => Response.json({rows: [], page: {limit: 100, order: "desc", nextCursor: null}},
+        {headers: {date: new Date().toUTCString()}})) as typeof fetch});
+      const child = spawnSync(process.execPath, ["--experimental-strip-types", "--import", `data:text/javascript,${encodeURIComponent(stub)}`,
+        fileURLToPath(new URL("../scripts/held-rewards.mts", import.meta.url)), `--role=${role}`], {
+        encoding: "utf8", timeout: 15000, env: {...process.env, HOLD_HEARTBEAT_MODE: "observe", HOLD_DATA_DIR: directory,
+          HOLD_STOP_FILE: join(directory, "stop"), HOLD_ALERT_WEBHOOK: "", SOLANA_RPC_URL: "https://rpc.example/",
+          NEXT_PUBLIC_ENDOWMENT_PROGRAM_ID: "HhJJRPcwABobT6jCEusieGuZxv6XvSKKvU32XyXASVF6",
+          NEXT_PUBLIC_ENDOWMENT_CREATOR: "b5b42jEAoEj3WJnf2R29aPuKkkeUWmRLFsg1b8R3Fta",
+          HOLD_COLLECTOR_HEARTBEAT_URL: "https://monitor.example/collector", HOLD_REVIEWER_HEARTBEAT_URL: "https://monitor.example/reviewer"},
+      });
+      assert.equal(child.error, undefined);
+      assert.equal(child.status, healthy ? 0 : 1, child.stdout + child.stderr);
+      assert.match(child.stdout, new RegExp(`attribution_${scenario}_${healthy ? "completed" : "failed"}`));
+      assert.doesNotMatch(child.stdout, /payout_wait_telemetry_invalid/);
+    } finally { rmSync(directory, {recursive: true, force: true}); }
   }
 });

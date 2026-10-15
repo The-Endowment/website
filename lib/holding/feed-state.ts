@@ -1,9 +1,10 @@
 import { PENIS_MINT, PUMP_MINT } from "../endowment.ts";
 import { distributions } from "../reporter/classify.ts";
 import type { Distribution } from "../reporter/types.ts";
+import { PAYOUT_FEED_MAX_AGE_MS } from "../reporter/payouts.ts";
 
 export const FEED_SCOPE = { mint: PENIS_MINT, quoteMint: PUMP_MINT };
-export const FEED_MAX_AGE_MS = 120_000;
+export const FEED_MAX_AGE_MS = PAYOUT_FEED_MAX_AGE_MS;
 export type FeedClock = { now?: () => number };
 type Gap = { detectedAt: string; reason: "capture_stalled" | "window_disjoint" | "feed_invalid" };
 type Window = { keys: string[]; oldestAt: string | null; newestAt: string | null };

@@ -1,3 +1,4 @@
+import { walletPayouts, walletPayoutKey } from "../../lib/reporter/payouts.ts";
 /** In-memory finalized RPC bank built from the public Rust/LiteSVM fixture.
  * Token movements below are scenarios, not a substitute for on-chain execution. */
 import { address, getBase58Decoder, type Address } from "@solana/kit";
@@ -6,7 +7,7 @@ import { base64ToBytes, type Instance } from "../../lib/endowment.ts";
 import { common, holdPda } from "../../lib/holding/client.ts";
 import { concat, decodeAccount, encode, schema } from "../../lib/holding/codec.ts";
 import type { Config, Landlord, Policy, Consent, Receipt } from "../../lib/holding/types.ts";
-import type { Distribution, ParsedTransaction, SourcePolicy } from "../../lib/reporter/types.ts";
+import type { ParsedTransaction, SourcePolicy } from "../../lib/reporter/types.ts";
 import type { RpcCall } from "../../lib/reporter/rpc.ts";
 export async function holdingBank() {
   const inst: Instance = {
@@ -30,7 +31,7 @@ export async function holdingBank() {
   const receiptKey = await holdPda(inst, "receipt", owner, 0n);
   const receipt = read<Receipt>("PendingCollection", receiptKey);
   let now = 1800000000, slot = 10, balance = 20n, landlordPresent = true;
-  const transactions: ParsedTransaction[] = [], wires: string[] = [], feed = new Map<string, Distribution>();
+  const transactions: ParsedTransaction[] = [], wires: string[] = [], feed = walletPayouts([], {mint: inst.coinMint, quoteMint: inst.dividendMint});
   const source: SourcePolicy = { mint: inst.dividendMint, rewardMint: inst.coinMint,
     tokenProgram: inst.dividendTokenProgram, authority: fixture.collector, source: fixture.pool };
   Object.assign(config, { active: true, retired: false, paused_until: 0n, pause_started_at: 0n,
@@ -72,7 +73,7 @@ export async function holdingBank() {
         } } }],
       } }, meta: { err: null, preTokenBalances: [tokenBalance(before)], postTokenBalances: [tokenBalance(balance)], innerInstructions: [] },
     };
-    if (kind === "reward") feed.set(signature, { signature, mint: inst.coinMint, quoteMint: inst.dividendMint, amountRaw: amount.toString() });
+    if (kind === "reward") feed.records.set(walletPayoutKey(signature, owner, inst.dividendMint), { signature, holder: owner, assetMint: inst.dividendMint, amountRaw: amount.toString(), createdAt: new Date(now * 1000).toISOString() });
     if (kind === "sweep") {
       tx.transaction.message.instructions.unshift({ programId: inst.program,
         accounts: schema.instructions.sweep.accounts.map(m => m.name === "receipt" ? receiptKey : m.name),
@@ -82,7 +83,7 @@ export async function holdingBank() {
         refund_at: BigInt(now + 259200), consent_epoch: consent.epoch, nonce: consent.next_nonce });
       consent.next_nonce++; policy.pending += amount;
     }
-    transactions.push(tx); sync();
+    transactions.push(tx); sync(); return tx;
   };
   const rpc = (async (method: string, params: unknown[]) => {
     sync();

@@ -1,3 +1,4 @@
+import { VERIFICATION_VERSION } from "../lib/reporter/payouts.ts";
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { holdingBank } from "./support/holding-bank.mts";
@@ -26,7 +27,7 @@ test("incident cutoff overrides prior approval forever; later contributions can 
   bank.receipt.approved_amount = 40n;
   bank.receipt.review_evidence = Array(32).fill(17);
   bank.advance(86400);
-  const decision = { amount: "40", evidenceHash: evidence, sweepSignature: "sweep",
+  const decision = { verificationVersion: VERIFICATION_VERSION, amount: "40", evidenceHash: evidence, sweepSignature: "sweep",
     collectedAt: bank.receipt.collected_at.toString() };
   for (const cutoff of [bank.receipt.collected_at, bank.receipt.collected_at + 1n]) {
     bank.config.pause_started_at = cutoff;

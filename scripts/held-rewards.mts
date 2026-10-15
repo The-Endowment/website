@@ -1,3 +1,4 @@
+import { walletPayouts } from "../lib/reporter/payouts.ts";
 import { mkdir, rm } from "node:fs/promises";
 import { resolve, join } from "node:path";
 import { address, getBase58Decoder } from "@solana/kit";
@@ -48,7 +49,7 @@ async function main() {
       throw new Error("Payout archive no longer usable");
     });
     const loadFeed = () => readArchivedFeed(directory).then((records) => {
-      health.feedAvailable = true; health.feedRecords = records.size; return records;
+      health.feedAvailable = true; health.feedRecords = records.records.size; return records;
     }).catch(async () => {
       health.feedAvailable = false;
       health.issues.add("feed_unavailable");
@@ -56,7 +57,7 @@ async function main() {
         await quarantine(stopFile, "feed_unavailable");
         throw new Error("Payout feed unavailable; collection quarantined");
       }
-      return new Map(); // Missing evidence never blocks reviewer refunds.
+      return walletPayouts([], { mint: PENIS_MINT, quoteMint: PUMP_MINT }); // Missing evidence never blocks reviewer refunds.
     });
     const feed = await loadFeed();
     const receipts = await pendingReceipts(rpc, inst);
