@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import { mkdir, open, readFile, rename, rmdir, unlink } from "node:fs/promises";
+import { mkdir, open, readdir, readFile, rename, rmdir, unlink } from "node:fs/promises";
 import { join } from "node:path";
 import { distributions } from "../reporter/classify.ts";
 import type { Distribution } from "../reporter/types.ts";
@@ -15,6 +15,7 @@ const ARCHIVE = "payout-feed.json", PENDING = "payout-history-pending.json";
 const PAGES_PER_PASS = 5, MAX_PAGES = 100_000;
 type Pending = {
   version: 1; source: string; baseHash: string; baselineAt: string; gap: Gap;
+  historyFloor?: string;
   headAt: string | null; headKeys: string[]; rows: Payout[];
   cursor: string | null; cursors: string[]; pages: number; oldestAt: string | null;
   complete: boolean; resultHash?: string;
@@ -60,9 +61,15 @@ function pendingState(value: unknown, baseHash: string): Pending {
       || (p.cursor !== null && (typeof p.cursor !== "string" || !p.cursor.length || p.cursor.length > 4096))
       || (p.resultHash !== undefined && !/^[a-f0-9]{64}$/.test(p.resultHash))) throw new Error("Invalid payout checkpoint");
   timestamp(p.baselineAt); validateGap(p.gap, p.baselineAt);
+  if (p.historyFloor !== undefined && timestamp(p.historyFloor) > timestamp(p.baselineAt))
+    throw new Error("Invalid payout checkpoint floor");
   if (p.headAt !== null) timestamp(p.headAt);
   if (p.oldestAt !== null) timestamp(p.oldestAt);
   const rows = mergeRows(p.rows), keys = new Set(rows.map(payoutKey));
+  const oldest = rows.reduce((time, r) => Math.min(time, timestamp(r.createdAt)), Infinity);
+  if ((rows.length === 0) !== (p.oldestAt === null)
+      || (p.oldestAt !== null && timestamp(p.oldestAt) !== oldest))
+    throw new Error("Invalid payout checkpoint oldest row");
   if (rows.length !== p.rows.length || new Set(p.headKeys).size !== p.headKeys.length
       || p.headKeys.some((k) => !keys.has(k)) || (p.pages === 0) !== (p.headAt === null)
       || (p.pages === 0 && (p.rows.length || p.cursors.length || p.cursor || p.complete)))
@@ -73,6 +80,11 @@ function pendingState(value: unknown, baseHash: string): Pending {
 /** Read a bounded response; one capture pass has a shared 20-second network
  * budget so five slow pages cannot overrun the 50-second systemd timeout. */
 async function responseBody(response: Response): Promise<unknown> {
+  const contentType = response.headers.get("content-type")?.split(";", 1)[0].trim().toLowerCase();
+  if (contentType !== "application/json") {
+    await response.body?.cancel();
+    throw new Error("Payout response is not JSON");
+  }
   if (!response.body) throw new Error("Empty payout response");
   const reader = response.body.getReader(), chunks: Uint8Array[] = [];
   let size = 0;
@@ -91,7 +103,7 @@ async function responseBody(response: Response): Promise<unknown> {
 /** v2 gives holder rows and opaque cursors. Fetch from the newest page until
  * all prior head rows have been re-observed (or the end on the first scan).
  * Partial scans persist separately, never becoming signing evidence. */
-export async function archiveFeed(directory: string, { request = fetch, now = Date.now }: FeedClock & { request?: typeof fetch } = {}): Promise<WalletPayoutFeed> {
+export async function archiveFeed(directory: string, { request = fetch, now = Date.now, historyFloor }: FeedClock & { request?: typeof fetch; historyFloor?: string } = {}): Promise<WalletPayoutFeed> {
   await mkdir(directory, { recursive: true, mode: 0o700 });
   const lock = join(directory, "feed.lock");
   await mkdir(lock, { mode: 0o700 });
@@ -104,6 +116,21 @@ export async function archiveFeed(directory: string, { request = fetch, now = Da
     const baselineAt = previous?.baselineAt ?? legacy?.baselineAt ?? new Date(now()).toISOString();
     const pendingText = await optional(join(directory, PENDING));
     const pendingValue = pendingText === null ? null : JSON.parse(pendingText);
+    const storedFloor = previous?.historyFloor ?? pendingValue?.historyFloor;
+    const floor = historyFloor === undefined ? storedFloor : new Date(timestamp(historyFloor)).toISOString();
+    if (floor !== undefined && timestamp(floor) > timestamp(baselineAt))
+      throw new Error("Payout history floor cannot follow the baseline");
+    if ((cached !== null || pendingValue !== null) && floor !== storedFloor)
+      throw new Error("Payout history floor is immutable; preserve existing history");
+    if (previous && pendingValue && previous.historyFloor !== pendingValue.historyFloor)
+      throw new Error("Payout checkpoint floor differs from archive");
+    if (floor !== undefined && cached === null && pendingValue === null) {
+      // This is an explicit new-baseline tool, never a way to truncate existing
+      // wallet history, pending outboxes, receipts or a latched incident.
+      const entries = await readdir(directory);
+      if (entries.some((name) => name !== "role" && name !== "feed.lock"))
+        throw new Error("Payout history floor requires a fresh role directory");
+    }
     // A crash after atomic publication but before checkpoint removal is harmless.
     if (previous && pendingValue?.resultHash === hash(original)) {
       await unlink(join(directory, PENDING));
@@ -111,13 +138,16 @@ export async function archiveFeed(directory: string, { request = fetch, now = Da
     }
     const pending: Pending = pendingValue === null ? {
       version: 1, source: PAYOUT_URL, baseHash: hash(original), baselineAt,
+      ...(floor === undefined ? {} : { historyFloor: floor }),
       gap: previous?.coverage.gap ?? legacy?.coverage.gap ?? null,
       headAt: null, headKeys: [], rows: [], cursor: null, cursors: [], pages: 0, oldestAt: null, complete: false,
     } : pendingState(pendingValue, hash(original));
     const target = previous?.headKeys ?? [];
+    const reachedFloor = (oldest: string | null) => target.length === 0 && pending.historyFloor !== undefined
+      && oldest !== null && timestamp(oldest) < timestamp(pending.historyFloor);
     const checkpointKeys = new Set(pending.rows.map(payoutKey));
     const checkpointComplete = pending.pages > 0 && (pending.cursor === null
-      || (target.length > 0 && target.every((k) => checkpointKeys.has(k))));
+      || (target.length > 0 && target.every((k) => checkpointKeys.has(k))) || reachedFloor(pending.oldestAt));
     if (pending.complete !== checkpointComplete) throw new Error("Invalid payout checkpoint completion");
     const priorRows = previous?.rows ?? [];
     const signal = AbortSignal.timeout(20_000);
@@ -152,8 +182,11 @@ export async function archiveFeed(directory: string, { request = fetch, now = Da
         if (age !== null && (!/^\d+$/.test(age) || Number(age) * 1000 > FEED_MAX_AGE_MS))
           throw new Error("Payout response cache is stale");
       } catch (error) { await response.body?.cancel(); throw error; }
+      // Transport/body failures are unavailable evidence, not contradictory
+      // evidence. Retry the same cursor without refreshing or poisoning history.
+      const body = await responseBody(response);
       try {
-        const page = payoutPage(await responseBody(response));
+        const page = payoutPage(body);
         let oldest = pending.oldestAt;
         for (const r of page.rows) {
           if (timestamp(r.createdAt) > capturedAt + 30_000 || (oldest !== null && timestamp(r.createdAt) > timestamp(oldest)))
@@ -172,7 +205,9 @@ export async function archiveFeed(directory: string, { request = fetch, now = Da
         pending.rows = rows; pending.oldestAt = oldest; pending.cursors.push(cursor); pending.pages++;
         pending.cursor = page.nextCursor;
         const reachedHead = target.length > 0 && target.every((k) => keys.has(k));
-        pending.complete = reachedHead || page.nextCursor === null;
+        // Retain the full boundary page. This does not prove completeness of
+        // older signatures: totals are retained-row integrity checks only.
+        pending.complete = reachedHead || page.nextCursor === null || reachedFloor(oldest);
         if (page.nextCursor === null && target.length && !reachedHead)
           pending.gap ??= { detectedAt: new Date(capturedAt).toISOString(), reason: "window_disjoint" };
         await save(directory, PENDING, pending);
@@ -194,6 +229,7 @@ export async function archiveFeed(directory: string, { request = fetch, now = Da
         if (records.get(signature)?.amountRaw !== prior.amountRaw) throw new Error("Published payout total changed");
       }
       archive = historyArchive({ version: 2, source: PAYOUT_URL, fetchedAt: pending.headAt!,
+        ...(pending.historyFloor === undefined ? {} : { historyFloor: pending.historyFloor }),
         baselineAt: new Date(Math.min(timestamp(pending.baselineAt), timestamp(pending.headAt!))).toISOString(),
         coverage: { completeCoverageProven: false, gap: pending.gap }, headKeys: pending.headKeys, rows, legacyDistributions,
         data: { recentDistributions: totals } });

@@ -27,7 +27,7 @@ The contract's 1.0× allowance adds a ceiling; it does not prove provenance. Thi
 
 Allowance also requires the holder's current attestation epoch and current count. While a daily count is open, its counted holders and the immediately previous completed round remain eligible; after it finishes, an omitted holder has no allowance. Recounting cannot backfill the skipped interval. The client mirrors this check before proposing a collection.
 
-A same-balance spend/rebuy can still happen between finalized observation and execution. Each collection enters the contract's pending vault, and the reviewer independently replays history through the successful sweep before approving release. Both services depend on correct RPC and feed data and correct code; hashes are evidence commitments, not trustless payout proofs. The public feed is finite (requested limit 100), so an outage can miss batches. Missing records fail closed; there is no estimate-based backfill. Deploying two copies of this code does not eliminate shared code/provider failure.
+A same-balance spend/rebuy can still happen between finalized observation and execution. Each collection enters the contract's pending vault, and the reviewer independently replays history through the successful sweep before approving release. Both services depend on correct RPC and feed data and correct code; hashes are evidence commitments, not trustless payout proofs. The v2 feed pages through available history in batches of at most 100 holder rows. Outages can be caught up only while prior evidence remains reachable; omissions, expired cursors and contradictory rows still fail closed. There is no estimate-based backfill. Deploying two copies of this code does not eliminate shared code/provider failure.
 
 ## Refund and lifecycle behavior
 
@@ -49,7 +49,7 @@ npm run holding:feed -- --role=collector
 npm run holding:feed -- --role=reviewer
 ```
 
-Capture requires no signing key, RPC or SOL. It makes one public-feed request per pass. At this cadence the two hosts together make approximately 2,880–5,760 feed requests per day, independently of wallet-history RPC traffic. Confirm provider limits and measured latency during the read-only pilot. Use a persistent scheduler; this command runs once and does not install hosting or a schedule.
+Capture requires no signing key, RPC or SOL. It makes up to five public-feed requests per pass, usually one after catch-up. At this cadence the two hosts together make approximately 2,880–5,760 requests per day with one page per pass, up to five times that during sustained pagination, independently of wallet-history RPC traffic. Confirm provider limits and measured latency during the read-only pilot. Use a persistent scheduler; this command runs once and does not install hosting or a schedule.
 
 After the first successful capture and reviewed contract/flagship configuration, run wallet passes separately:
 

@@ -3,7 +3,7 @@ import { test } from "node:test";
 import { walletPayouts, VERIFICATION_VERSION, type WalletPayout, type WalletPayoutFeed } from "../lib/reporter/payouts.ts";
 import { classify, distributions } from "../lib/reporter/classify.ts";
 import { boundary, observe } from "../lib/reporter/ledger.ts";
-import { raw, type Distribution, type ParsedTransaction, type SourcePolicy } from "../lib/reporter/types.ts";
+import { MissingPayoutEvidence, PAYOUT_EVIDENCE_WAIT_SECONDS, raw, type Distribution, type ParsedTransaction, type SourcePolicy } from "../lib/reporter/types.ts";
 
 const policy: SourcePolicy = { rewardMint: "JE3HT7SbCgXDQWV6xp3oiiAisDzq4HyZ8wyEVBDCs45Z", mint: "pumpCmXqMfrsAkQ5r49WcJnRayYRqmXz6ae8H7H9Dfn", tokenProgram: "TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb", authority: "HuBMeYW3aDn8BH65fo8xxbP4oiexyup8udzKyccgi8Ga", source: "J8vxiGw4gPng3JTN9HoKJs3ioCD5fnjKGDtRHPVGgaGo" };
 const account = "WnhwaPaZXDTQ9GXPiZ3NwWpXVtKff15kVCWR7Arhenw", owner = "HpsRzXK3xWQxD1Px1KoExP5KYWs5gByEu47z6Ne6gDNf";
@@ -255,4 +255,34 @@ test("saved public API rows match seven real finalized wallet receipts without a
     assert.equal(result.kind,"reward"); assert.equal(result.amount,expectedNet.toString());
     assert.equal(result.payoutEvidence!.apiGross,row.amountRaw);
   }
+});
+
+
+test("an absent exact holder row retries only an otherwise verified receipt for six chain-time hours", () => {
+  const transaction = tx("1000", "1097"), received = transaction.blockTime!;
+  for (const now of [received, received + PAYOUT_EVIDENCE_WAIT_SECONDS - 1]) {
+    assert.throws(() => classify(transaction, account, owner, policy, feed([]), now),
+      (error: unknown) => error instanceof MissingPayoutEvidence
+        && error.retryUntil === received + PAYOUT_EVIDENCE_WAIT_SECONDS
+        && error.observation.signature === signature && error.observation.after === "1097");
+  }
+  assert.equal(classify(transaction, account, owner, policy, feed([]), received + PAYOUT_EVIDENCE_WAIT_SECONDS).kind, "other");
+  // The API timestamp is irrelevant to both the deadline and received net.
+  assert.equal(classify(transaction, account, owner, policy,
+    feed([{...holderRow, createdAt: "2099-01-01T00:00:00Z"}]), received + 10).amount, "97");
+  for (const bad of [null, received + 1, 1.5]) {
+    const missingTime = {...transaction, blockTime: bad};
+    assert.equal(classify(missingTime, account, owner, policy, feed([]), received).kind, "other");
+  }
+});
+
+test("conflicting rows, wrong scope and invalid distributor evidence never enter the missing-row retry", () => {
+  const now = tx().blockTime! + 10;
+  assert.equal(classify(tx(), account, owner, policy, feed([{...holderRow, amountRaw: "101"}]), now).kind, "other");
+  assert.equal(classify(tx(), account, owner, policy, feed([], otherOwner), now).kind, "other");
+  assert.equal(classify(tx("1000", "1000"), account, owner, policy, feed([]), now).kind, "other");
+  const ordinary = tx(); ordinary.transaction.message.instructions[0].parsed!.info.source = owner;
+  assert.equal(classify(ordinary, account, owner, policy, feed([]), now).kind, "other");
+  const alternate = addPayout(tx(), otherAccount, owner);
+  assert.equal(classify(alternate, account, owner, policy, feed([]), now).kind, "other");
 });

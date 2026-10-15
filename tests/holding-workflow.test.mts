@@ -92,7 +92,7 @@ test("mixed-owner payout → collector → held receipt → independent partial 
   }
 });
 
-test("a completed review without payout evidence refunds immediately, even when the pool is unavailable", async (t) => {
+test("after the payout evidence retry deadline, a completed review refunds even without the pool", async (t) => {
   const bank = await holdingBank(), directory = await mkdtemp(join(tmpdir(), "hold-missing-evidence-"));
   t.mock.method(Date, "now", () => bank.time() * 1000);
   const options: WorkerOptions = { rpc: bank.rpc, rpcUrl: "http://127.0.0.1", inst: bank.inst,
@@ -100,6 +100,8 @@ test("a completed review without payout evidence refunds immediately, even when 
   try {
     await walletTick(options, bank.owner, []);
     bank.move("reward", 40n); bank.move("sweep", 40n);
+    assert.equal((await walletTick(options, bank.owner, bank.receipts())).status, "awaiting_payout");
+    bank.advance(6 * 3600);
     const rejected = await walletTick(options, bank.owner, bank.receipts());
     assert.equal("outcomes" in rejected && rejected.outcomes[0].action, "refund");
     bank.advance(86400); bank.removePool();
@@ -399,4 +401,134 @@ test("wallet payout eligibility uses finalized consent time, never the API publi
     });
     t.mock.restoreAll();
   }
+});
+
+for (const role of ["collector", "reviewer"] as const) {
+  test(`${role} preserves missing-payout history and replays later spending exactly once`, async t => {
+    const bank = await holdingBank(), directory = await mkdtemp(join(tmpdir(), "hold-late-row-"));
+    t.after(() => rm(directory, {recursive: true, force: true}));
+    t.mock.method(Date, "now", () => bank.time() * 1000);
+    const options: WorkerOptions = {rpc: bank.rpc, rpcUrl: "http://127.0.0.1:1", inst: bank.inst,
+      directory, role, submit: false, source: bank.source, feed: bank.feed};
+    const tick = () => walletTick(options, bank.owner, []);
+    const state = () => withJournal(join(directory, "wallets"), bank.a.dividend_account,
+      async journal => structuredClone(journal.state));
+    await tick(); const original = await state();
+    bank.move("reward", 40n); const rows = new Map(bank.feed.records); bank.feed.records.clear();
+    assert.equal((await tick()).status, "awaiting_payout"); assert.deepEqual(await state(), {...original, payoutWaitUntil: Number(bank.consent.started_at) + 1 + 6 * 3600});
+    bank.move("spend", 25n); bank.move("buy", 25n);
+    assert.equal((await tick()).status, "awaiting_payout"); assert.deepEqual(await state(), {...original, payoutWaitUntil: Number(bank.consent.started_at) + 1 + 6 * 3600});
+    for (const [key, row] of rows) bank.feed.records.set(key, row);
+    const recovered = await tick();
+    assert.equal(recovered.status, role === "collector" ? "dry_run" : "reviewed");
+    assert.equal((await state())!.eligible, "15");
+    await tick(); assert.equal((await state())!.eligible, "15");
+    assert.equal(bank.wires.length, 0);
+  });
+}
+
+test("reviewer missing-row wait reconciles pending settlements and leaves refunds available", async t => {
+  const bank = await holdingBank(), directory = await mkdtemp(join(tmpdir(), "hold-late-row-refund-"));
+  t.after(() => rm(directory, {recursive: true, force: true}));
+  t.mock.method(Date, "now", () => bank.time() * 1000);
+  let finalized = false, allowRefund = false;
+  const reviewerKey = await testKey(directory, "reviewer", 94);
+  bank.policy.reviewer = reviewerKey.address;
+  const server = createServer(async (req, res) => {
+    let body = ""; for await (const chunk of req) body += chunk;
+    const request = JSON.parse(body); assert.equal(request.method, "getLatestBlockhash");
+    res.setHeader("content-type", "application/json");
+    res.end(JSON.stringify({jsonrpc: "2.0", id: request.id, result: {context: {slot: 100}, value: {
+      blockhash: "11111111111111111111111111111111", lastValidBlockHeight: 1000,
+    }}}));
+  });
+  await new Promise<void>(resolve => server.listen(0, "127.0.0.1", resolve));
+  t.after(() => new Promise<void>((resolve, reject) => server.close(e => e ? reject(e) : resolve())));
+  const rpc: WorkerOptions["rpc"] = async <T,>(method: string, params: unknown[]) => {
+    if (method === "getSignatureStatuses") return {value: [finalized ? {confirmationStatus: "finalized", err: null} : null]} as T;
+    if (method === "getBlockHeight") return 100 as T;
+    if (method === "sendTransaction" && !allowRefund) throw new Error("No new settlement during evidence wait");
+    return bank.rpc<T>(method, params);
+  };
+  const options: WorkerOptions = {rpc, rpcUrl: "http://127.0.0.1:1", inst: bank.inst, directory,
+    role: "reviewer", submit: true, source: bank.source, feed: bank.feed}; // No signing key on purpose.
+  await walletTick(options, bank.owner, []);
+  bank.move("reward", 40n); bank.move("sweep", 40n); bank.feed.records.clear();
+  const original = await withJournal(join(directory, "wallets"), bank.a.dividend_account, async j => structuredClone(j.state));
+  await withJournal(join(directory, "settlements"), bank.receiptKey, async journal => {
+    await journal.save({...boundary(bank.receiptKey, 0, null, "0"), pending: {
+      wire: "already-signed", signature: "old-settlement", amount: "40", nonce: "0", expiresAt: bank.time()+100,
+      lastValidBlockHeight: "200", evidenceHash: "a".repeat(64),
+    }}, "Prior settlement");
+  });
+  const waiting = await walletTick(options, bank.owner, bank.receipts());
+  assert.equal(waiting.status, "awaiting_payout");
+  assert.equal("outcomes" in waiting && waiting.outcomes[0].result, "pending");
+  finalized = true;
+  const reconciled = await walletTick(options, bank.owner, bank.receipts());
+  assert.equal("outcomes" in reconciled && reconciled.outcomes[0].result, "reconciled");
+  const stillWaiting = await walletTick(options, bank.owner, bank.receipts());
+  assert.equal("outcomes" in stillWaiting && stillWaiting.outcomes[0].result, "waiting_for_payout");
+  await withJournal(join(directory, "wallets"), bank.a.dividend_account, async j => assert.deepEqual(j.state, {...original, payoutWaitUntil: Number(bank.consent.started_at) + 1 + 6 * 3600}));
+  bank.consent.enabled = false; options.submit = false;
+  const refund = await walletTick(options, bank.owner, bank.receipts());
+  assert.equal(refund.status, "awaiting_payout");
+  assert.equal("outcomes" in refund && refund.outcomes[0].action, "refund");
+  assert.equal(bank.wires.length, 0);
+  allowRefund = true; options.submit = true; options.keyFile = reviewerKey.path;
+  options.rpcUrl = `http://127.0.0.1:${(server.address() as {port: number}).port}`;
+  const submitted = await walletTick(options, bank.owner, bank.receipts());
+  assert.equal(submitted.status, "awaiting_payout");
+  assert.equal("outcomes" in submitted && submitted.outcomes[0].action, "refund");
+  assert.equal("outcomes" in submitted && submitted.outcomes[0].result, "submitted");
+  assert.equal(bank.wires.length, 1);
+});
+
+for (const role of ["collector", "reviewer"] as const) {
+  test(`${role} durable batch deadline prevents newer missing payouts starving history after restart`, async t => {
+    const bank = await holdingBank(), directory = await mkdtemp(join(tmpdir(), "hold-payout-deadline-"));
+    t.after(() => rm(directory, {recursive: true, force: true}));
+    t.mock.method(Date, "now", () => bank.time() * 1000);
+    const options: WorkerOptions = {rpc: bank.rpc, rpcUrl: "http://127.0.0.1:1", inst: bank.inst,
+      directory, role, submit: false, source: bank.source, feed: bank.feed};
+    const tick = () => walletTick({...options}, bank.owner, []); // Reopens durable journal every invocation.
+    await tick();
+    bank.move("reward", 40n); bank.feed.records.clear();
+    const first = await tick(); assert.equal(first.status, "awaiting_payout");
+    assert.ok("retryUntil" in first && first.retryUntil !== undefined); const deadline = first.retryUntil;
+    bank.advance(3 * 3600); bank.move("reward", 20n); bank.feed.records.clear();
+    const next = await tick(); assert.equal(next.status, "awaiting_payout");
+    assert.equal("retryUntil" in next && next.retryUntil, deadline);
+    bank.advance(deadline - bank.time());
+    // A fresh missing row cannot restart the six-hour clock for this held batch.
+    bank.move("reward", 10n); bank.feed.records.clear();
+    bank.move("reward", 5n); // A correct present row is still eligible.
+    const finished = await tick();
+    assert.equal(finished.status, role === "collector" ? "dry_run" : "reviewed");
+    await withJournal(join(directory, "wallets"), bank.a.dividend_account, async journal => {
+      assert.equal(journal.state!.eligible, "5");
+      assert.equal(journal.state!.payoutWaitUntil, undefined);
+      assert.equal(journal.state!.cursor, [...bank.feed.records.values()][0].signature);
+    });
+    bank.move("reward", 3n); bank.feed.records.clear();
+    const fresh = await tick(); assert.equal(fresh.status, "awaiting_payout");
+    assert.ok("retryUntil" in fresh && fresh.retryUntil !== undefined && fresh.retryUntil > deadline);
+    assert.equal(bank.wires.length, 0);
+  });
+}
+
+
+test("a missing API row for a pre-consent transfer does not hold the wallet", async t => {
+  const bank = await holdingBank(), directory = await mkdtemp(join(tmpdir(), "hold-preconsent-missing-"));
+  t.after(() => rm(directory, {recursive: true, force: true}));
+  t.mock.method(Date, "now", () => bank.time() * 1000);
+  const options: WorkerOptions = {rpc: bank.rpc, rpcUrl: "http://127.0.0.1:1", inst: bank.inst,
+    directory, role: "collector", submit: false, source: bank.source, feed: bank.feed};
+  await walletTick(options, bank.owner, []);
+  const tx = bank.move("reward", 40n); tx.blockTime = Number(bank.consent.started_at) - 1;
+  bank.feed.records.clear();
+  assert.equal((await walletTick(options, bank.owner, [])).status, "idle");
+  await withJournal(join(directory, "wallets"), bank.a.dividend_account, async journal => {
+    assert.equal(journal.state!.eligible, "0"); assert.equal(journal.state!.payoutWaitUntil, undefined);
+  });
 });

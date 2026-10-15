@@ -15,7 +15,7 @@ if (role !== "collector" && role !== "reviewer") {
     if (!process.env.HOLD_DATA_DIR) throw new Error("Missing durable directory");
     const directory = resolve(process.env.HOLD_DATA_DIR);
     await bindRoleDirectory(directory, role);
-    const feed = await archiveFeed(directory);
+    const feed = await archiveFeed(directory, { historyFloor: process.env.HOLD_HISTORY_FLOOR });
     success = true;
     console.log(JSON.stringify({ role, capture: "completed", archivedHolderRows: feed.records.size,
       completeCoverageProven: false }));

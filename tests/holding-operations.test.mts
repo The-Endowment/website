@@ -192,3 +192,15 @@ test("configured worker monitors require an explicit matching observation or sub
     assert.doesNotThrow(() => assertHeartbeatMode({ endpoint, expectedMode: submit ? "submit" : "observe", submit }));
   }
 });
+
+test("awaiting payout attribution is visible and cannot send a healthy heartbeat", () => {
+  const health = new PassHealth("collector", false);
+  health.feedAvailable = true;
+  health.ownersSelected = 1;
+  health.outcome({status: "awaiting_payout", reason: "Waiting for holder payout evidence"});
+  const report = health.report();
+  assert.equal(report.statuses.awaiting_payout, 1);
+  assert.deepEqual(report.issues, ["payout_evidence_pending"]);
+  assert.equal(completedHealthyPass(report), false);
+  assert.equal(report.failures, 0);
+});

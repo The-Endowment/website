@@ -29,5 +29,7 @@ export function observe(previous: Ledger, observations: Observation[], slot: num
   // The replay now includes the settled submission, so the ordinary ledger
   // slot provides the durable lower bound for future snapshots.
   delete ledger.settled;
+  // The complete batch has been replayed (including excluded expired rows).
+  delete ledger.payoutWaitUntil;
   return { ledger, reason: "Finalized history reconciled" };
 }

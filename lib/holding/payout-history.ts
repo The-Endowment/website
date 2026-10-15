@@ -7,6 +7,7 @@ export type Payout = { signature: string; holder: string; assetMint: string; amo
 export type Gap = FeedArchive["coverage"]["gap"];
 export type HistoryArchive = {
   version: 2; source: string; fetchedAt: string; baselineAt: string;
+  historyFloor?: string;
   coverage: { completeCoverageProven: false; gap: Gap };
   headKeys: string[]; rows: Payout[]; legacyDistributions: Distribution[];
   data: { recentDistributions: Distribution[] };
@@ -73,6 +74,8 @@ export function historyArchive(value: unknown): HistoryArchive {
       || a.headKeys.length > 100 || new Set(a.headKeys).size !== a.headKeys.length
       || timestamp(a.baselineAt) > timestamp(a.fetchedAt)) throw new Error("Invalid payout history archive");
   validateGap(a.coverage.gap, a.baselineAt);
+  if (a.historyFloor !== undefined && timestamp(a.historyFloor) > timestamp(a.baselineAt))
+    throw new Error("Invalid payout history floor");
   const rows = mergeRows(a.rows), keys = new Set(rows.map(payoutKey));
   if (rows.length !== a.rows.length || a.headKeys.some((k) => !keys.has(k))) throw new Error("Invalid payout head");
   const expected = distributionTotals(rows, a.legacyDistributions);

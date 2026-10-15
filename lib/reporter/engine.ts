@@ -1,6 +1,6 @@
 import { createHash } from "node:crypto";
 import { boundary, observe } from "./ledger.ts";
-import { raw, type Ledger, type Observation, type Prepared } from "./types.ts";
+import { MissingPayoutEvidence, raw, type Ledger, type Observation, type Prepared } from "./types.ts";
 import type { Journal } from "./journal.ts";
 import type { Snapshot } from "./snapshot.ts";
 
@@ -51,6 +51,12 @@ export async function runWallet(journal: Journal, io: ReporterIO, submit = false
     await journal.save(observed.ledger, observed.reason, batch.observations);
     ledger = observed.ledger;
   } catch (error) {
+    if (error instanceof MissingPayoutEvidence) {
+      const retryUntil = Math.min(ledger.payoutWaitUntil ?? Infinity, error.retryUntil);
+      if (ledger.payoutWaitUntil !== retryUntil) await journal.save({...ledger, payoutWaitUntil: retryUntil},
+        "Awaiting payout attribution; history cursor retained", {signature: error.observation.signature, retryUntil});
+      return { status: "awaiting_payout", reason: error.message, retryUntil };
+    }
     return reset(`Observation gap: ${error instanceof Error ? error.message : "unknown failure"}`);
   }
   let amount = raw(ledger.eligible);

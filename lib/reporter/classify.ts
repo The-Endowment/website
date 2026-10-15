@@ -1,5 +1,5 @@
 import { VERIFICATION_VERSION, walletPayoutKey, type WalletPayoutFeed } from "./payouts.ts";
-import { raw, type Distribution, type Observation, type ParsedInstruction, type ParsedTransaction, type SourcePolicy } from "./types.ts";
+import { MissingPayoutEvidence, PAYOUT_EVIDENCE_WAIT_SECONDS, raw, type Distribution, type Observation, type ParsedInstruction, type ParsedTransaction, type SourcePolicy } from "./types.ts";
 
 /** A transaction can distribute rewards for several coins. Scope before checking
  * conflicts so unrelated coin records cannot collide with the selected payout. */
@@ -64,7 +64,7 @@ function stableToken(tx: ParsedTransaction, account: string, policy: SourcePolic
 
 /** Finalized chain evidence proves source, owner and net receipt. The API
  * attributes the generating coin; it cannot authorize an API-only amount. */
-export function classify(tx: ParsedTransaction, account: string, owner: string, policy: SourcePolicy, feed: WalletPayoutFeed): Observation {
+export function classify(tx: ParsedTransaction, account: string, owner: string, policy: SourcePolicy, feed: WalletPayoutFeed, now = Math.floor(Date.now() / 1000), batchWaitUntil?: number): Observation {
   const signature = tx.transaction.signatures[0];
   const base = { signature, slot: tx.slot, receivedAt: tx.blockTime, before: "0", after: "0", amount: "0" };
   const uncertain = (reason: string): Observation => ({ ...base, kind: "uncertain", reason });
@@ -132,6 +132,16 @@ export function classify(tx: ParsedTransaction, account: string, owner: string, 
   if (policy.rewardMint && feed?.version === VERIFICATION_VERSION && feed.mint === policy.rewardMint
       && feed.quoteMint === policy.mint && feed.records instanceof Map) {
     const record = feed.records.get(walletPayoutKey(signature, owner, policy.mint));
+    const retryUntil = Number.isSafeInteger(tx.blockTime)
+      ? Math.min(tx.blockTime! + PAYOUT_EVIDENCE_WAIT_SECONDS, batchWaitUntil ?? Infinity) : 0;
+    // Only an absent exact row may be retried. Conflicting amounts/identities
+    // remain conservative exclusions, and no API timestamp can extend the wait.
+    if (!record && !alternateAccount && incoming > 0n && incoming === approvedIncoming
+        && incoming === ownerGross && delta > 0n && Number.isSafeInteger(now)
+        && Number.isSafeInteger(tx.blockTime) && tx.blockTime! <= now
+        && now < retryUntil) {
+      throw new MissingPayoutEvidence({ ...base, kind: "other", reason: "Holder payout evidence pending" }, retryUntil);
+    }
     if (record && record.signature === signature && record.holder === owner && record.assetMint === policy.mint
         && !alternateAccount && incoming > 0n && incoming === approvedIncoming && incoming === ownerGross
         && delta > 0n && raw(record.amountRaw) === ownerGross) {

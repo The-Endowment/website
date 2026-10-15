@@ -70,6 +70,7 @@ export class PassHealth {
     this.ownersProcessed++;
     this.statuses[result.status] = (this.statuses[result.status] ?? 0) + 1;
     if (result.reason?.startsWith("Observation gap:")) this.issues.add("history_gap");
+    if (result.status === "awaiting_payout") this.issues.add("payout_evidence_pending");
     if (result.status === "dry_run" && result.amount) this.proposedAmount += BigInt(result.amount);
     if (result.status === "submitted" && result.amount) this.submittedAmount += BigInt(result.amount);
   }

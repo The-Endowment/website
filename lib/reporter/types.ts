@@ -36,10 +36,26 @@ export type Ledger = {
   // A known submission was cleared durably, but its source history still needs
   // replay. Recovery must not read a bank older than the settled submission.
   settled?: { slot: number; nonce: string };
+  // First unresolved receipt bounds the entire uncommitted history batch.
+  payoutWaitUntil?: number;
 };
 export function raw(value: unknown): bigint {
   if (typeof value !== "string" || !/^(0|[1-9]\d*)$/.test(value)) throw new Error("Invalid base-unit amount");
   const amount = BigInt(value);
   if (amount > (1n << 64n) - 1n) throw new Error("Amount exceeds u64");
   return amount;
+}
+
+/** Preserve the whole wallet history while a proven distributor receipt waits
+ * for API attribution. Its deadline is fixed by finalized chain time. */
+export const PAYOUT_EVIDENCE_WAIT_SECONDS = 6 * 60 * 60;
+export class MissingPayoutEvidence extends Error {
+  readonly observation: Observation;
+  readonly retryUntil: number;
+  constructor(observation: Observation, retryUntil: number) {
+    super("Waiting for holder payout evidence");
+    this.name = "MissingPayoutEvidence";
+    this.observation = observation;
+    this.retryUntil = retryUntil;
+  }
 }
