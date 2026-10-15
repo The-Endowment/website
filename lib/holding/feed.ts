@@ -176,11 +176,17 @@ export async function archiveFeed(directory: string, { request = fetch, now = Da
       const capturedAt = now(), date = response.headers.get("date"), age = response.headers.get("age");
       // A stale CDN response is unavailable evidence, like a transport failure.
       // Do not advance the checkpoint or renew freshness; retry next capture.
-      // v2 has no generatedAt in its body, so fresh HTTP metadata is required.
+      // v2 has no generatedAt in its body, so fresh HTTP metadata is required
+      // for the head page, which sets the archive's freshness. Cursor pages are
+      // older, already-published history that the CDN caches for minutes
+      // (max-age=300, served stale past that); requiring them to be fresh would
+      // stall every multi-page scan. They still need a sane, non-future Date.
       try {
-        checkCaptureTime(date, capturedAt);
-        if (age !== null && (!/^\d+$/.test(age) || Number(age) * 1000 > FEED_MAX_AGE_MS))
-          throw new Error("Payout response cache is stale");
+        if (!pending.pages) {
+          checkCaptureTime(date, capturedAt);
+          if (age !== null && (!/^\d+$/.test(age) || Number(age) * 1000 > FEED_MAX_AGE_MS))
+            throw new Error("Payout response cache is stale");
+        } else if (timestamp(date) > capturedAt + 30_000) throw new Error("Payout page clock is invalid");
       } catch (error) { await response.body?.cancel(); throw error; }
       // Transport/body failures are unavailable evidence, not contradictory
       // evidence. Retry the same cursor without refreshing or poisoning history.

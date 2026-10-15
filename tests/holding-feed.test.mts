@@ -205,6 +205,24 @@ test("missing, stale and future cache timestamps reject cached v2 responses", as
   }
 });
 
+test("CDN-cached cursor pages complete a scan; only the head page sets freshness", async (t) => {
+  // Live StonkFun: head max-age=30, cursor pages max-age=300 and served stale ~13 min old.
+  const twoPages = (cursorHeaders: Record<string, string>, cursorTime: number) => (async (url: string) =>
+    new URL(url).searchParams.get("cursor") === null
+      ? reply(page([row("B")], "older"), start, 200, { age: "20" })
+      : reply(page([row("A")]), cursorTime, 200, cursorHeaders)) as typeof fetch;
+  const dir = await directory(t);
+  const result = await archiveFeed(dir, { now: () => start, request: twoPages({ age: "786" }, start - 787000) });
+  assert.equal(result.records.size, 2);
+  assert.equal((await saved(dir)).fetchedAt, new Date(start).toISOString());
+  await assertFeedFresh(dir, { now: () => start });
+  for (const [headers, time] of [[{ date: "" }, start], [{}, start + 31000]] as const) {
+    const bad = await directory(t);
+    await assert.rejects(archiveFeed(bad, { now: () => start, request: twoPages(headers, time) }));
+    await assert.rejects(stat(join(bad, "payout-feed.json")), { code: "ENOENT" });
+  }
+});
+
 test("migration preserves original v1 bytes, legacy receipts, and a latched gap", async (t) => {
   for (const gap of [null, { detectedAt: new Date(start - 1000).toISOString(), reason: "window_disjoint" }]) {
     const dir = await directory(t); const old = JSON.stringify(legacy(gap));
