@@ -15,7 +15,7 @@ export function SiteHeader() {
           <Link href="/thesis">Thesis</Link>
           <Link href="/#coin">The coin</Link>
           {/* Always reachable: a holder can take a held collection back here even while pledging is closed. */}
-          <Link href="/delegate" className={DELEGATION_OPEN ? "button" : undefined}>
+          <Link href="/delegate#wallet" className={DELEGATION_OPEN ? "button" : undefined}>
             {DELEGATION_OPEN ? "Pledge rewards" : "Your pledge"}
           </Link>
         </nav>
