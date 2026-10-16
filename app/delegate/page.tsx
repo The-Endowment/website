@@ -2,7 +2,6 @@ import type { Metadata } from "next";
 import { CommitmentBar } from "@/components/CommitmentBar";
 import { DelegatePanel } from "@/components/DelegatePanel";
 import { WalletProvider } from "@/components/WalletClient";
-import { DELEGATION_CLOSED_NOTE, DELEGATION_OPEN } from "@/lib/site";
 
 export const metadata: Metadata = {
   title: "Delegate",
@@ -13,19 +12,18 @@ export default function Delegate() {
   return (
     <>
       <section className="wrap">
-        <div className="thesis-head">
-          <h1 className="display h1">Delegate your rent.</h1>
+        <div className="thesis-head delegate-intro">
+          <h1 className="display h1">Put your rewards to work.</h1>
           <p className="lede">
             Pledge the PUMP rewards your $PENIS earns. Your $PENIS stays in your wallet. Every
             collection is held for at least 24 hours, and you can take it back until it&rsquo;s released. Stop at any
-            time. {DELEGATION_OPEN ? "" : DELEGATION_CLOSED_NOTE}
+            time.
           </p>
-          <CommitmentBar />
         </div>
       </section>
 
       <div className="wrap">
-        <section id="wallet" className="row">
+        <section id="wallet" className="row wallet-section">
           <h2 className="row-label">Your wallet</h2>
           <WalletProvider>
             <DelegatePanel />
@@ -102,6 +100,7 @@ export default function Delegate() {
         <section id="counting" className="row">
           <h2 className="row-label">How counting works</h2>
           <div className="row-body">
+            <CommitmentBar />
             <p>
               Once a day the contract counts every landlord&rsquo;s $PENIS. Public participation activates at 30% of supply
               committed and deactivates below 25%. Collection also requires current counts, safety checks and running
