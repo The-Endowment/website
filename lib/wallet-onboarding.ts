@@ -38,3 +38,15 @@ export function wasWalletDeclined(error: unknown): boolean {
   }
   return false;
 }
+
+/** Only the SDK's typed block-height error identifies this expiration case. */
+export function wasTransactionExpired(error: unknown): boolean {
+  const seen = new Set<object>();
+  for (let current = error; current && typeof current === "object" && !seen.has(current);) {
+    seen.add(current);
+    const value = current as { context?: { __code?: unknown }; cause?: unknown };
+    if (value.context?.__code === 1) return true;
+    current = value.cause;
+  }
+  return false;
+}
