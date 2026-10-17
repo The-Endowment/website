@@ -24,13 +24,13 @@ const { HeldCollections } = loadTsxModule<{ HeldCollections: ComponentType<HeldP
   "components/HeldCollections.tsx", { "@/lib/solana": solana },
 );
 
-function renderPanel(connected: boolean) {
+function renderPanel(connected: boolean, canSign = true) {
   const { ConfiguredDelegatePanel } = loadTsxModule<{ ConfiguredDelegatePanel: ComponentType<{ inst: Instance }> }>(
     "components/DelegatePanel.tsx", {
       "@solana/kit-plugin-wallet/react": {
-        useConnectedWallet: () => connected ? { account: { address: fixture.owner } } : null,
+        useConnectedWallet: () => connected ? { account: { address: fixture.owner }, signer: canSign ? {} : null, supportedTransactionVersions: new Set(canSign ? [0] : []) } : null,
         useWallets: () => [{ name: "Test wallet" }],
-        useConnect: () => ({ dispatch: noop, isRunning: false }),
+        useConnect: () => ({ dispatchAsync: async () => [], isRunning: false }),
         useDisconnect: () => ({ dispatch: noop }),
         WalletReadyGate: ({ children }: { children: ReactNode }) => createElement(Fragment, null, children),
       },
@@ -73,8 +73,16 @@ test("closed enrollment with no dashboard data leaves independent Stop and Revok
   assert.match(html, /Independent recovery controls/);
   assert.equal(renderedButton(html, "Stop collection").disabled, false);
   assert.equal(renderedButton(html, "Revoke PUMP approval").disabled, false);
-  assert.equal(renderedButton(html, "Delegate my PUMP rewards").disabled, true);
+  assert.equal(renderedButton(html, "Review in wallet").disabled, true);
   assert.doesNotMatch(html, /No pending contributions found/);
+});
+
+test("a read-only wallet shows its limitation and cannot request enrollment or recovery signatures", () => {
+  const html = renderPanel(true, false);
+  assert.match(html, /cannot sign the required transaction/);
+  for (const label of ["Stop collection", "Revoke PUMP approval", "Review in wallet"]) {
+    assert.equal(renderedButton(html, label).disabled, true);
+  }
 });
 
 test("an unreleased contribution remains reclaimable after its first 24 hours", () => {
