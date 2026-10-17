@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import { createElement, type ComponentType, type ReactNode } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
-import { enrollmentWalletIssue, parseWalletAddress, phantomBrowseUrl, wasWalletDeclined } from "../lib/wallet-onboarding.ts";
+import { enrollmentWalletIssue, parseWalletAddress, phantomBrowseUrl, wasWalletDeclined, wasTransactionExpired } from "../lib/wallet-onboarding.ts";
 import { loadTsxModule } from "./support/tsx-render.mts";
 import fixture from "./fixtures/holding-chain.json" with { type: "json" };
 
@@ -64,4 +64,12 @@ test("connection failure is visible and requesting a connection disables both ma
   assert.match(html, /role="alert"/);
   assert.equal([...html.matchAll(/<button[^>]*disabled=""/g)].length, 2);
   assert.match(html, /Confirm the connection in your wallet/);
+});
+
+test("expiration detection follows typed causes, rejects generic codes and handles cycles", () => {
+  assert.equal(wasTransactionExpired({ context: { __code: 11 }, cause: { context: { __code: 1 } } }), true);
+  assert.equal(wasTransactionExpired({ code: 1 }), false);
+  assert.equal(wasTransactionExpired(new Error("expired")), false);
+  const cycle: { cause?: unknown } = {}; cycle.cause = cycle;
+  assert.equal(wasTransactionExpired(cycle), false);
 });

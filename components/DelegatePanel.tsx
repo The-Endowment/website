@@ -15,7 +15,7 @@ import {
   TOKEN_2022_PROGRAM_ADDRESS,
 } from "@solana-program/token-2022";
 import { useEffect, useState } from "react";
-import { client } from "@/components/WalletClient";
+import { client, WALLET_CAPTURE_ONLY } from "@/components/WalletClient";
 import {
   authorityPda,
   bpsToPercent,
@@ -32,7 +32,22 @@ import { loadDelegationStatus, revokeEndowmentApprovalIx, type DelegationStatus 
 import { flagshipInstance, formatTokens } from "@/lib/solana";
 import { DELEGATION_CLOSED_NOTE, DELEGATION_OPEN, links } from "@/lib/site";
 import { PledgeSteps, WalletOnboarding } from "@/components/WalletOnboarding";
-import { enrollmentWalletIssue, wasWalletDeclined } from "@/lib/wallet-onboarding";
+import { enrollmentWalletIssue, wasWalletDeclined, wasTransactionExpired } from "@/lib/wallet-onboarding";
+
+// Show only error names and numeric codes, never provider URLs or raw payloads.
+function actionDiagnostic(error: unknown): string {
+  const parts: string[] = [];
+  const seen = new Set<unknown>();
+  for (let current = error; current && typeof current === "object" && !seen.has(current) && parts.length < 8;) {
+    seen.add(current);
+    const value = current as { name?: unknown; code?: unknown; context?: { __code?: unknown }; cause?: unknown };
+    const name = typeof value.name === "string" && /^[A-Za-z]{1,60}$/.test(value.name) ? value.name : "Error";
+    const code = value.context?.__code ?? value.code;
+    parts.push(name + (typeof code === "number" && Number.isFinite(code) ? ` (${code})` : ""));
+    current = value.cause;
+  }
+  return parts.join(" → ") || "Error details unavailable";
+}
 
 /**
  * The delegation is unlimited on purpose. The program counts a landlord, and
@@ -93,22 +108,25 @@ function Connected({ inst, owner, expectedOwner, canSign }: { inst: Instance; ow
 
   const perform = async (signal: AbortSignal, build: (signer: TransactionSigner) => Promise<Instruction[]>) => {
     setActionError(null); setLastSignature(null);
-    let submitted = false;
+    let walletFlowStarted = false;
     try {
       if (!canSign) throw new Error("This wallet connection cannot sign the required transaction. Connect a wallet with signing enabled.");
       const signer = client.identity;
       if (signer.address !== owner) throw new Error("Your connected wallet changed. Reconnect and try again.");
       const instructions = await build(signer);
       if (client.identity.address !== owner) throw new Error("Your connected wallet changed. Reconnect and try again.");
-      submitted = true;
+      walletFlowStarted = true;
       const result = await client.sendTransaction(instructions, { abortSignal: signal });
       setLastSignature(result.context.signature);
       setAgreed(false);
       refresh();
       return result.context.signature;
     } catch (e) {
-      setActionError(wasWalletDeclined(e) ? "The wallet request was declined. If your wallet showed a security warning, close the request and review the permission before trying again."
-        : submitted ? "Couldn't confirm the action. Check your wallet activity and refresh before retrying."
+      if (wasTransactionExpired(e)) refresh();
+      setActionError(WALLET_CAPTURE_ONLY ? "Diagnostic mode stopped before signing. If capture succeeded, use Download unsigned request above. No transaction was submitted."
+        : wasTransactionExpired(e) ? "The transaction expired before confirmation. Refreshing your on-chain status; review the updated pledge before requesting a fresh wallet approval. Nothing will retry automatically."
+        : wasWalletDeclined(e) ? "The wallet request was declined. If your wallet showed a security warning, close the request and review the permission before trying again."
+        : walletFlowStarted ? "The wallet or transaction step failed. Submission status is unknown; check wallet activity and refresh before retrying."
         : e instanceof Error ? e.message : "Couldn't prepare the action. Please try again.");
       throw e;
     }
@@ -117,13 +135,24 @@ function Connected({ inst, owner, expectedOwner, canSign }: { inst: Instance; ow
   const optIn = useAction((signal: AbortSignal) => perform(signal, async signer => {
     if (walletIssue) throw new Error(walletIssue);
     if (!status || !holding || !agreed || blocker(status, holding)) throw new Error("Joining is unavailable. Refresh and review the pledge before signing.");
+    const [freshStatus, freshHolding] = await Promise.all([
+      loadDelegationStatus(client.rpc, inst, owner), loadHolding(client.rpc, inst, owner),
+    ]).catch(() => { throw new Error("Could not verify your current enrollment. Refresh before trying again."); });
+    if (signal.aborted) throw new Error("Enrollment request cancelled.");
+    setStatus(freshStatus); setHolding(freshHolding);
+    if (freshStatus.landlord && freshStatus.delegatedToEndowment && freshHolding.consent?.enabled) {
+      setAgreed(false);
+      throw new Error("Your pledge is already registered. No new approval was requested.");
+    }
+    const freshBlocker = blocker(freshStatus, freshHolding);
+    if (freshBlocker) throw new Error(freshBlocker);
     const authority = await authorityPda(inst.program, inst.config);
     const ixs: Instruction[] = [
       getCreateAssociatedTokenIdempotentInstruction({
         payer: signer,
         owner: signer.address,
         mint: inst.dividendMint,
-        ata: status.dividendAccount,
+        ata: freshStatus.dividendAccount,
         tokenProgram: inst.dividendTokenProgram,
       }),
       // Registering needs the coin account to exist, even while it's empty (audit L-12).
@@ -131,26 +160,26 @@ function Connected({ inst, owner, expectedOwner, canSign }: { inst: Instance; ow
         payer: signer,
         owner: signer.address,
         mint: inst.coinMint,
-        ata: status.coinAccount,
+        ata: freshStatus.coinAccount,
         tokenProgram: inst.coinTokenProgram,
       }),
       getApproveCheckedInstruction(
         {
-          source: status.dividendAccount,
+          source: freshStatus.dividendAccount,
           mint: inst.dividendMint,
           delegate: authority,
           owner: signer,
           amount: UNLIMITED,
-          decimals: status.dividendDecimals,
+          decimals: freshStatus.dividendDecimals,
         },
         { programAddress: inst.dividendTokenProgram as typeof TOKEN_2022_PROGRAM_ADDRESS },
       ),
     ];
-    if (status.landlord) {
+    if (freshStatus.landlord) {
       // Coming back: reset the baseline so everything this account holds now stays the landlord's.
-      ixs.push(await resyncBaselineIx(inst, signer, status.dividendAccount));
+      ixs.push(await resyncBaselineIx(inst, signer, freshStatus.dividendAccount));
     } else {
-      ixs.push(await registerLandlordIx(inst, signer, status.dividendAccount, status.coinAccount));
+      ixs.push(await registerLandlordIx(inst, signer, freshStatus.dividendAccount, freshStatus.coinAccount));
     }
     // Joining and rejoining both leave collection switched off; this switches it on,
     // with everything the account holds right now set aside as the landlord's.
@@ -259,7 +288,7 @@ function Connected({ inst, owner, expectedOwner, canSign }: { inst: Instance; ow
           <label className="consent">
             <input type="checkbox" checked={agreed} onChange={(e) => setAgreed(e.target.checked)} disabled={busy || !canSign} />
             <span>
-              I authorize unlimited token approval on my PUMP account for collection of $PENIS rewards. The current
+              {WALLET_CAPTURE_ONLY ? "I want to inspect, without signing, the following proposed permission: unlimited token approval on my PUMP account for collection of $PENIS rewards." : "I authorize unlimited token approval on my PUMP account for collection of $PENIS rewards."} The current
               contract protects my starting balance and limits collection using posted reward totals. Payout checks
               can make mistakes. Each collection waits at least 24 hours; I can reclaim it before release, after which
               this contract cannot refund it. While upgrade authority exists, the code and these protections can
@@ -282,8 +311,8 @@ function Connected({ inst, owner, expectedOwner, canSign }: { inst: Instance; ow
             onClick={() => optIn.dispatch()}
           >
             {optIn.isRunning
-              ? "Confirm in your wallet…"
-              : delegated
+              ? WALLET_CAPTURE_ONLY ? "Preparing unsigned request…" : "Confirm in your wallet…"
+              : WALLET_CAPTURE_ONLY ? "Capture unsigned enrollment" : delegated
                 ? "Switch collection back on"
                 : status?.landlord
                   ? "Rejoin"
@@ -318,6 +347,7 @@ function Connected({ inst, owner, expectedOwner, canSign }: { inst: Instance; ow
       <button type="button" className="link-button" disabled={busy} onClick={refresh}>Refresh wallet</button>
       {loadError && <p role="alert" className="muted small">{loadError}</p>}
       {actionError && <p role="alert" className="muted small">{actionError}</p>}
+      {optIn.isError && <details><summary>Error details</summary><p className="muted small">Enrollment diagnostic: {actionDiagnostic(optIn.error)}</p></details>}
       {lastSignature && (
         <p className="muted small">
           Done. <a href={`https://solscan.io/tx/${lastSignature}`}>View the transaction</a>
