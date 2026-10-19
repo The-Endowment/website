@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { walletPayouts, VERIFICATION_VERSION, type WalletPayout, type WalletPayoutFeed } from "../lib/reporter/payouts.ts";
-import { classify, distributions } from "../lib/reporter/classify.ts";
+import { classify, distributions, readOnlyReference } from "../lib/reporter/classify.ts";
 import { boundary, observe } from "../lib/reporter/ledger.ts";
 import { MissingPayoutEvidence, PAYOUT_EVIDENCE_WAIT_SECONDS, raw, type Distribution, type ParsedTransaction, type SourcePolicy } from "../lib/reporter/types.ts";
 
@@ -36,6 +36,19 @@ function addPayout(transaction: ParsedTransaction, destination = otherAccount, w
   }}});
   return transaction;
 }
+
+test("only an account listed solely as read-only is a no-history reference", () => {
+  const listed = (...flags: (boolean | undefined)[]) => {
+    const t = tx();
+    t.transaction.message.accountKeys = flags.map(writable => ({ pubkey: account, signer: false, writable }));
+    return t;
+  };
+  assert.equal(readOnlyReference(listed(false), account), true);
+  assert.equal(readOnlyReference(listed(true), account), false);
+  assert.equal(readOnlyReference(listed(undefined), account), false); // missing metadata is never skipped
+  assert.equal(readOnlyReference(listed(false, true), account), false);
+  assert.equal(readOnlyReference(listed(false), otherAccount), false);
+});
 
 test("only matching finalized distributor transfers add net credited rewards", () => {
   assert.equal(classify(tx(), account, owner, policy, feed()).amount, "100");

@@ -536,6 +536,39 @@ test("a missing API row for a pre-consent transfer does not hold the wallet", as
 });
 
 
+test("endowment counts and refreshes that only read the PUMP account keep earned eligibility", async t => {
+  const bank = await holdingBank(), directory = await mkdtemp(join(tmpdir(), "hold-readonly-reference-"));
+  t.after(() => rm(directory, {recursive: true, force: true}));
+  t.mock.method(Date, "now", () => bank.time() * 1000);
+  const seen: import("../lib/reporter/types.ts").Observation[] = [];
+  const options: WorkerOptions = {rpc: bank.rpc, rpcUrl: "http://127.0.0.1:1", inst: bank.inst,
+    directory, role: "collector", submit: false, source: bank.source, feed: bank.feed,
+    observe: event => { if (event.kind === "observations") seen.push(...event.observations); }};
+  assert.equal((await walletTick(options, bank.owner, [])).status, "boundary");
+  bank.reference(); bank.move("reward", 40n); bank.reference(); bank.reference();
+  const next = await walletTick(options, bank.owner, []);
+  assert.equal(next.status, "dry_run");
+  assert.equal("amount" in next && next.amount, "40");
+  assert.deepEqual(seen.map(o => o.kind), ["reward"]);
+});
+
+test("a writable listing without token balances still resets eligibility", async t => {
+  const bank = await holdingBank(), directory = await mkdtemp(join(tmpdir(), "hold-writable-reference-"));
+  t.after(() => rm(directory, {recursive: true, force: true}));
+  t.mock.method(Date, "now", () => bank.time() * 1000);
+  const seen: import("../lib/reporter/types.ts").Observation[] = [];
+  const options: WorkerOptions = {rpc: bank.rpc, rpcUrl: "http://127.0.0.1:1", inst: bank.inst,
+    directory, role: "collector", submit: false, source: bank.source, feed: bank.feed,
+    observe: event => { if (event.kind === "observations") seen.push(...event.observations); }};
+  await walletTick(options, bank.owner, []);
+  bank.move("reward", 40n); bank.reference(true);
+  assert.notEqual((await walletTick(options, bank.owner, [])).status, "dry_run");
+  assert.deepEqual(seen.map(o => o.kind), ["reward", "uncertain"]);
+  await withJournal(join(directory, "wallets"), bank.a.dividend_account, async journal => {
+    assert.equal(journal.state!.eligible, "0");
+  });
+});
+
 test("old missing pre-consent payout does not report an attribution expiry", async t => {
   const bank = await holdingBank(), directory = await mkdtemp(join(tmpdir(), "hold-preconsent-expiry-"));
   t.after(() => rm(directory, {recursive: true, force: true}));

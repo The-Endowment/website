@@ -62,6 +62,15 @@ function stableToken(tx: ParsedTransaction, account: string, policy: SourcePolic
   return { pre, post, owner: pre.owner };
 }
 
+/** The runtime cannot change an account a transaction lists only as read-only,
+ * so its balance, owner and authority are unchanged and it carries no history.
+ * Endowment counts and refreshes read every landlord's PUMP account this way.
+ * Missing writability metadata, or any writable listing, is never skipped. */
+export function readOnlyReference(tx: ParsedTransaction, account: string): boolean {
+  const entries = tx.transaction.message.accountKeys.filter((key) => key.pubkey === account);
+  return entries.length > 0 && entries.every((key) => key.writable === false);
+}
+
 /** Finalized chain evidence proves source, owner and net receipt. The API
  * attributes the generating coin; it cannot authorize an API-only amount. */
 export function classify(tx: ParsedTransaction, account: string, owner: string, policy: SourcePolicy, feed: WalletPayoutFeed, now = Math.floor(Date.now() / 1000), batchWaitUntil?: number): Observation {

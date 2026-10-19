@@ -2,7 +2,7 @@ import { type Address } from "@solana/kit";
 import { resolve } from "node:path";
 import { ata, type Instance } from "../endowment.ts";
 import type { WalletPayoutFeed } from "../reporter/payouts.ts";
-import { classify } from "../reporter/classify.ts";
+import { classify, readOnlyReference } from "../reporter/classify.ts";
 import { runWallet } from "../reporter/engine.ts";
 import { withJournal } from "../reporter/journal.ts";
 import { history, latestCursor, type RpcCall } from "../reporter/rpc.ts";
@@ -71,7 +71,7 @@ export async function walletTick(
         // A long pass must see payouts captured while other wallets were read.
         // Load after history retrieval; an absent recent holder row holds the whole batch.
         const feed = o.loadFeed ? await o.loadFeed() : o.feed;
-        const observations = h.transactions.map((tx) => {
+        const observations = h.transactions.filter((tx) => !readOnlyReference(tx, source)).map((tx) => {
           let result: Observation;
           try { result = classify(tx, source, owner, o.source, feed, s.now, state.payoutWaitUntil); }
           catch (error) {

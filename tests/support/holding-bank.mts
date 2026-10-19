@@ -85,6 +85,18 @@ export async function holdingBank() {
     }
     transactions.push(tx); sync(); return tx;
   };
+  // An endowment count or refresh: it lists the PUMP account read-only and records no token balances.
+  const reference = (writable = false) => {
+    slot++; now++;
+    const tx: ParsedTransaction = {
+      slot, blockTime: now, transaction: { signatures: [`reference${slot}`], message: {
+        accountKeys: [{ pubkey: "B6h2yhKn9zpMxiT6Uk63CwRY9i7EbvmAi8Pnv4PJkAEi", signer: true, writable: true },
+          { pubkey: a.dividend_account, signer: false, writable }],
+        instructions: [{ programId: inst.program, accounts: [a.dividend_account], data: "1" }],
+      } }, meta: { err: null, preTokenBalances: [], postTokenBalances: [], innerInstructions: [] },
+    };
+    transactions.push(tx); sync(); return tx;
+  };
   const rpc = (async (method: string, params: unknown[]) => {
     sync();
     if (method === "getAccountInfo") return { value: records[String(params[0])] ?? null };
@@ -99,7 +111,7 @@ export async function holdingBank() {
     throw new Error(`Unexpected RPC ${method}`);
   }) as RpcCall;
   sync();
-  return { inst, owner, a, config, landlord, policy, consent, receipt, receiptKey, source, feed, rpc, wires, move,
+  return { inst, owner, a, config, landlord, policy, consent, receipt, receiptKey, source, feed, rpc, wires, move, reference,
     removePool: () => { delete records[config.pool]; },
     removeLandlord: () => { landlordPresent = false; sync(); },
     time: () => now, advance: (seconds: number) => { now += seconds; slot++; sync(); },
