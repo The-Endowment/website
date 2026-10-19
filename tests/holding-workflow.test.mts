@@ -552,6 +552,21 @@ test("endowment counts and refreshes that only read the PUMP account keep earned
   assert.deepEqual(seen.map(o => o.kind), ["reward"]);
 });
 
+test("the reviewer matches a sweep to its reward when refreshes sit between them", async t => {
+  const bank = await holdingBank(), directory = await mkdtemp(join(tmpdir(), "hold-readonly-reviewer-"));
+  t.after(() => rm(directory, {recursive: true, force: true}));
+  t.mock.method(Date, "now", () => bank.time() * 1000);
+  const options: WorkerOptions = {rpc: bank.rpc, rpcUrl: "http://127.0.0.1:1", inst: bank.inst,
+    directory, role: "reviewer", submit: false, source: bank.source, feed: bank.feed};
+  await walletTick(options, bank.owner, []);
+  bank.reference(); bank.move("reward", 40n); bank.reference(); bank.move("sweep", 40n); bank.reference();
+  const reviewed = await walletTick(options, bank.owner, bank.receipts());
+  assert.equal("outcomes" in reviewed && reviewed.outcomes[0].action, "wait");
+  await withJournal(join(directory, "wallets"), bank.a.dividend_account, async journal => {
+    assert.equal((journal.state as ReviewedLedger).reviews![bank.receiptKey].amount, "40");
+  });
+});
+
 test("a writable listing without token balances still resets eligibility", async t => {
   const bank = await holdingBank(), directory = await mkdtemp(join(tmpdir(), "hold-writable-reference-"));
   t.after(() => rm(directory, {recursive: true, force: true}));

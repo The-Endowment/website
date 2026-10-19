@@ -71,7 +71,9 @@ export async function walletTick(
         // A long pass must see payouts captured while other wallets were read.
         // Load after history retrieval; an absent recent holder row holds the whole batch.
         const feed = o.loadFeed ? await o.loadFeed() : o.feed;
-        const observations = h.transactions.filter((tx) => !readOnlyReference(tx, source)).map((tx) => {
+        // The reviewer pairs transactions with observations by index, so both drop read-only references.
+        const transactions = h.transactions.filter((tx) => !readOnlyReference(tx, source));
+        const observations = transactions.map((tx) => {
           let result: Observation;
           try { result = classify(tx, source, owner, o.source, feed, s.now, state.payoutWaitUntil); }
           catch (error) {
@@ -100,7 +102,7 @@ export async function walletTick(
             : result;
         });
         o.observe?.({ kind: "observations", observations });
-        return { ...h, observations };
+        return { ...h, transactions, observations };
       };
       if (o.role === "collector") {
         let latest: HoldSnapshot;
