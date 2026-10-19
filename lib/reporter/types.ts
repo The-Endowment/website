@@ -10,7 +10,7 @@ export type ParsedInstruction = {
 };
 export type ParsedTransaction = {
   slot: number; blockTime: number | null;
-  transaction: { signatures: string[]; message: { accountKeys: { pubkey: string; signer: boolean }[]; instructions: ParsedInstruction[] } };
+  transaction: { signatures: string[]; message: { accountKeys: { pubkey: string; signer: boolean; writable?: boolean }[]; instructions: ParsedInstruction[] } };
   meta: null | {
     err: unknown; preTokenBalances: TokenBalance[]; postTokenBalances: TokenBalance[];
     innerInstructions: { index: number; instructions: ParsedInstruction[] }[] | null;
