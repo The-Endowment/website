@@ -2,9 +2,11 @@
 # Sets up an always-on Ubuntu host for one side of the collection workers:
 #   --role reviewer   Roy's host: reviewer feed capture, reviewer pass, refresher
 #   --role collector  Brett's host: collector feed capture, collector pass
-# Run as root. Safe to re-run; re-running with a new --commit updates the code.
-# It never overwrites existing keys, settings or data, and never enables
-# --submit: that stays a deliberate edit of /etc/endowment/worker.env.
+# Run as root. Safe to re-run; re-running with a new --commit updates the code,
+# pausing the worker timers while it does. It never overwrites existing keys,
+# settings (worker.env, refresher.env, founders.json) or data, and never enables
+# --submit: that stays a deliberate edit of /etc/endowment/worker.env. The
+# systemd unit files are rewritten on every run; don't hand-edit them.
 #
 #   sudo bash setup-worker-host.sh --role reviewer --commit <sha> [--harden]
 #
@@ -46,7 +48,10 @@ echo "node $(node --version)"
 if [ "$HARDEN" = 1 ]; then
   echo "== Firewall (inbound SSH only) and automatic security updates"
   apt-get install -y -qq ufw unattended-upgrades >/dev/null
-  ufw allow OpenSSH >/dev/null
+  # Allow the port sshd actually listens on, so a non-default SSH port isn't locked out.
+  SSH_PORTS=$(sshd -T 2>/dev/null | awk '$1 == "port" { print $2 }')
+  if [ -n "$SSH_PORTS" ]; then for p in $SSH_PORTS; do ufw allow "$p/tcp" >/dev/null; done
+  else ufw allow OpenSSH >/dev/null; fi
   ufw --force enable >/dev/null
   dpkg-reconfigure -f noninteractive unattended-upgrades
 fi
@@ -55,6 +60,17 @@ echo "== Service user and directories"
 id "$USER_NAME" >/dev/null 2>&1 || useradd --system --home-dir /opt/endowment --create-home --shell /usr/sbin/nologin "$USER_NAME"
 install -d -m 700 -o "$USER_NAME" -g "$USER_NAME" "$ETC" "$ETC/keys" "$DATA" "$DATA/$ROLE"
 [ "$ROLE" = reviewer ] && install -d -m 700 -o "$USER_NAME" -g "$USER_NAME" "$DATA/refresher"
+
+echo "== Pausing worker timers for the update"
+# npm ci replaces node_modules, so no job may start or still be running meanwhile.
+ACTIVE_TIMERS=$(systemctl list-units --type=timer --state=active --plain --no-legend 'endowment-*' | awk '{ print $1 }')
+[ -z "$ACTIVE_TIMERS" ] || systemctl stop $ACTIVE_TIMERS
+for s in endowment-feed endowment-collector endowment-reviewer endowment-refresher endowment-refresher-check; do
+  while case "$(systemctl show -p ActiveState --value "$s.service" 2>/dev/null)" in activating|deactivating|reloading) true ;; *) false ;; esac; do
+    echo "waiting for $s to finish"; sleep 5
+  done
+done
+echo "paused: ${ACTIVE_TIMERS:-none}"
 
 echo "== Code at $COMMIT"
 if [ ! -d "$APP/.git" ]; then
@@ -121,7 +137,11 @@ EOF
 fi
 
 echo "== systemd units"
-unit() { # name, env file, timeout, command
+unit() { # name, env file, timeout, command, lock directory removed after the run (optional)
+  # A timed-out run is killed before it can remove its lock; clear it once the run has stopped.
+  # Only for locks no other unit uses (refresher.lock is shared with the manual check).
+  local cleanup=""
+  [ -z "${5:-}" ] || cleanup="ExecStopPost=-/bin/rm -rf $5"
   cat > "/etc/systemd/system/$1.service" <<EOF
 [Unit]
 Description=Endowment $1
@@ -135,6 +155,7 @@ WorkingDirectory=$APP
 EnvironmentFile=$2
 Environment=HOME=/opt/endowment
 ExecStart=$4
+$cleanup
 TimeoutStartSec=$3
 NoNewPrivileges=yes
 PrivateTmp=yes
@@ -163,9 +184,9 @@ WantedBy=timers.target
 EOF
 }
 NODE=$(command -v node)
-unit endowment-feed "$ETC/worker.env" 50s "$NODE scripts/capture-payout-feed.mts --role=$ROLE"
+unit endowment-feed "$ETC/worker.env" 50s "$NODE scripts/capture-payout-feed.mts --role=$ROLE" "$DATA/$ROLE/feed.lock"
 timer endowment-feed 30s
-unit "endowment-$ROLE" "$ETC/worker.env" 4min "$NODE scripts/held-rewards.mts \$PASS_ARGS"
+unit "endowment-$ROLE" "$ETC/worker.env" 4min "$NODE scripts/held-rewards.mts \$PASS_ARGS" "$DATA/$ROLE/worker.lock"
 timer "endowment-$ROLE" 5min
 if [ "$ROLE" = reviewer ]; then
   unit endowment-refresher "$ETC/refresher.env" 5min "$NODE scripts/refresher.mts --submit"
@@ -176,6 +197,14 @@ fi
 systemctl daemon-reload
 # Feed capture needs no key and should run from the start.
 systemctl enable --now endowment-feed.timer >/dev/null
+# Resume the timers that were running before the update. An empty founders list
+# makes every collector pass fail and quarantine collection, so that one waits.
+for t in $ACTIVE_TIMERS; do
+  if [ "$t" = endowment-collector.timer ] && [ "$(tr -d '[:space:]' < "$ETC/founders.json")" = "[]" ]; then
+    echo "NOT restarting $t: $ETC/founders.json is empty"; continue
+  fi
+  systemctl start "$t"; echo "resumed $t"
+done
 
 echo
 echo "== Done. Addresses (public, safe to share):"
@@ -193,7 +222,7 @@ Next:
   1. Fill in SOLANA_RPC_URL and the heartbeat URLs:  sudo nano $ETC/worker.env
 EOF
 [ "$ROLE" = reviewer ] && echo "     and the refresher's:                            sudo nano $ETC/refresher.env"
-[ "$ROLE" = collector ] && echo "     Put the founder wallet list in $ETC/founders.json"
+[ "$ROLE" = collector ] && echo "     Put the founder wallet list in $ETC/founders.json (before step 3: an empty list stops collection)"
 cat <<EOF
   2. Back up $ETC/keys offline (e.g. scp to your computer, then a USB stick).
   3. After collection setup on deploy day, start the pass:
