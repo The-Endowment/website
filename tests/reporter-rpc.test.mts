@@ -34,6 +34,17 @@ test("history and cursor reads newer than snapshot require retry", async () => {
   await assert.rejects(latestCursor(fake([row("new", 13)]), "source", 12), /advanced/);
 });
 
+test("history reads version 1 transactions instead of failing on them", async () => {
+  const versions: unknown[] = [];
+  const base = fake([row("swap", 11), row("start", 10)], { swap: tx("swap", 11) });
+  const rpc: RpcCall = async <T,>(method: string, params: unknown[]) => {
+    if (method === "getTransaction") versions.push((params[1] as { maxSupportedTransactionVersion: unknown }).maxSupportedTransactionVersion);
+    return base<T>(method, params);
+  };
+  await history(rpc, "source", "start", 10, 12);
+  assert.deepEqual(versions, [1]);
+});
+
 test("initial empty history has no historical reward debt", async () => {
   assert.equal(await latestCursor(fake([]), "source", 12), null);
   assert.deepEqual(await history(fake([]), "source", null, 10, 12), { transactions: [], cursor: null });

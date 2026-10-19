@@ -37,7 +37,9 @@ export async function history(rpc: RpcCall, source: string, cursor: string | nul
   if (!reached) throw new Error("Transaction history gap or page budget exceeded");
   const transactions: ParsedTransaction[] = [];
   for (const row of [...found].reverse()) {
-    const tx = await rpc<ParsedTransaction | null>("getTransaction", [row.signature, { commitment: "finalized", encoding: "jsonParsed", maxSupportedTransactionVersion: 0 }]);
+    // Wallet swaps (e.g. gasless Jupiter routes) arrive as version 1 transactions. Asking for
+    // a lower maximum makes the RPC reject them (-32015), which reads as a history gap.
+    const tx = await rpc<ParsedTransaction | null>("getTransaction", [row.signature, { commitment: "finalized", encoding: "jsonParsed", maxSupportedTransactionVersion: 1 }]);
     if (!tx || tx.slot !== row.slot || tx.transaction.signatures[0] !== row.signature) throw new Error("Missing or inconsistent finalized transaction");
     transactions.push(tx);
   }
