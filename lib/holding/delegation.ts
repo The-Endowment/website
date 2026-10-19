@@ -14,6 +14,7 @@ export type DelegationStatus = {
   dividendBalance: bigint;
   coinBalance: bigint;
   dividendDecimals: number;
+  expectedDelegate: Address;
   delegate: Address | null;
   delegatedToEndowment: boolean;
   delegationTooSmall: boolean;
@@ -42,6 +43,7 @@ export async function loadDelegationStatus(rpc: TokenRpc, inst: Instance, owner:
     dividendBalance: dividend.exists ? dividend.data.amount : 0n,
     coinBalance: coin.exists ? coin.data.amount : 0n,
     dividendDecimals: dividendMint.exists ? dividendMint.data.decimals : 6,
+    expectedDelegate: authority,
     delegate, delegatedToEndowment: ours && delegatedAmount >= MIN_DELEGATION,
     delegationTooSmall: ours && delegatedAmount < MIN_DELEGATION,
     minStake: (supply * BigInt(config.params.minStakeBps) + 9_999n) / 10_000n,

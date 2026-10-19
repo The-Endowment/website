@@ -125,7 +125,7 @@ function Connected({ inst, owner, expectedOwner, canSign }: { inst: Instance; ow
       if (wasTransactionExpired(e)) refresh();
       setActionError(WALLET_CAPTURE_ONLY ? "Diagnostic mode stopped before signing. If capture succeeded, use Download unsigned request above. No transaction was submitted."
         : wasTransactionExpired(e) ? "The transaction expired before confirmation. Refreshing your on-chain status; review the updated pledge before requesting a fresh wallet approval. Nothing will retry automatically."
-        : wasWalletDeclined(e) ? "The wallet request was declined. If your wallet showed a security warning, close the request and review the permission before trying again."
+        : wasWalletDeclined(e) ? "The wallet request was declined. Review the permission and transaction details before deciding whether to try again. Nothing will retry automatically."
         : walletFlowStarted ? "The wallet or transaction step failed. Submission status is unknown; check wallet activity and refresh before retrying."
         : e instanceof Error ? e.message : "Couldn't prepare the action. Please try again.");
       throw e;
@@ -297,7 +297,25 @@ function Connected({ inst, owner, expectedOwner, canSign }: { inst: Instance; ow
           </label>
           <details>
             <summary>What if my wallet shows a warning?</summary>
-            <p className="muted small">This requests ongoing access to your PUMP account. A wallet may warn about that permission. If it blocks the request or the details are unexpected, close it and have the transaction reviewed. This page cannot approve or dismiss wallet warnings for you.</p>
+            <p className="small">Phantom&rsquo;s warning about allowing future PUMP withdrawals is expected for this enrollment. You are granting an unlimited PUMP approval so eligible rewards can be collected without another wallet signature.</p>
+            <p className="muted small">Check that the approval is for PUMP only and uses the endowment delegate below. Enrollment should not transfer PUMP or $PENIS; SOL fees and account deposits are expected.</p>
+            <dl className="facts">
+              <div className="fact">
+                <dt>PUMP token</dt>
+                <dd><a className="address" href={`https://solscan.io/token/${inst.dividendMint}`}>{inst.dividendMint}</a></dd>
+              </div>
+              <div className="fact">
+                <dt>Endowment delegate</dt>
+                <dd><a className="address" href={`https://solscan.io/account/${status.expectedDelegate}`}>{status.expectedDelegate}</a></dd>
+              </div>
+              <div className="fact">
+                <dt>Endowment program</dt>
+                <dd><a className="address" href={`https://solscan.io/account/${inst.program}`}>{inst.program}</a></dd>
+              </div>
+            </dl>
+            <p className="muted small">The current contract protects your starting PUMP balance and caps collection at your remaining posted reward allowance. Payout sources are checked off-chain. The approval itself is unlimited, and program upgrades can change these protections.</p>
+            <p className="muted small">You can revoke future PUMP access here or in Phantom. Any contribution already being held must be reclaimed separately before release.</p>
+            <p className="muted small">Proceed only if you accept this permission and the details match. A different warning, token, delegate or unexpected transfer needs review. This page cannot dismiss wallet warnings or approve for you.</p>
           </details>
         </div>
       )}
