@@ -25,7 +25,7 @@ export default function Delegate() {
       </section>
 
       <div className="wrap">
-        <section className="row">
+        <section id="wallet" className="row">
           <h2 className="row-label">Your wallet</h2>
           <WalletProvider>
             <DelegatePanel />

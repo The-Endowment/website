@@ -138,7 +138,7 @@ function Raising({ c }: { c: Launched }) {
         </div>
 
         <div className="actions">
-          <a className="button button-primary" href="/delegate">
+          <a className="button button-primary" href="/delegate#wallet">
             Become a landlord
           </a>
           <a className="button" href="/delegate#counting">

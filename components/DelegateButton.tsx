@@ -6,7 +6,7 @@ import { DELEGATION_CLOSED_NOTE, DELEGATION_OPEN } from "@/lib/site";
 export function DelegateButton({ label, primary = false }: { label: string; primary?: boolean }) {
   if (!DELEGATION_OPEN) return null;
   return (
-    <Link href="/delegate" className={primary ? "button button-primary" : "button"}>
+    <Link href="/delegate#wallet" className={primary ? "button button-primary" : "button"}>
       {label}
     </Link>
   );
