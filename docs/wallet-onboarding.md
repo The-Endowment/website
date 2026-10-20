@@ -10,6 +10,12 @@ The copy explains that the token approval is unlimited, while the current progra
 
 Reference: [Phantom's domain and transaction warning guidance](https://docs.phantom.com/developer-powertools/domain-and-transaction-warnings).
 
+## Local unsigned transaction capture
+
+`NEXT_PUBLIC_WALLET_CAPTURE_ONLY=true` enables capture only with `NODE_ENV=development` (`next dev`). It is ignored by production builds, including Vercel previews and production deployments, so an accidentally retained flag cannot disable Stop collection, Revoke, Leave or reclaim. Do not configure it on hosting; restart the local development server after changing it. Next.js embeds public environment values at build time.
+
+In development capture mode, every transaction action stops at the signer boundary. The page displays a diagnostic banner and exports only unsigned public transaction data; no wallet signature is requested and nothing is submitted. Use a normal session for actual recovery actions. The capture confirmation is shown only after the diagnostic signer successfully exports the unsigned request. Preparation failures, wallet mismatches, already-registered pledges, rejected requests and other errors retain their own handling.
+
 ## Optional public leaderboard names — planned, not implemented
 
 The current leaderboard displays wallet addresses only. There is no name input, name storage, or name-publishing API. This section records the requirements agreed for the future naming feature; it does not claim that the feature ships in this PR.
