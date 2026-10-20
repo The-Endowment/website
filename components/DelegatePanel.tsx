@@ -33,6 +33,7 @@ import { flagshipInstance, formatTokens } from "@/lib/solana";
 import { DELEGATION_CLOSED_NOTE, DELEGATION_OPEN, links } from "@/lib/site";
 import { PledgeSteps, WalletOnboarding } from "@/components/WalletOnboarding";
 import { enrollmentWalletIssue, wasWalletDeclined, wasTransactionExpired } from "@/lib/wallet-onboarding";
+import { wasWalletCaptureStopped } from "@/lib/wallet-capture";
 
 // Show only error names and numeric codes, never provider URLs or raw payloads.
 function actionDiagnostic(error: unknown): string {
@@ -123,7 +124,7 @@ function Connected({ inst, owner, expectedOwner, canSign }: { inst: Instance; ow
       return result.context.signature;
     } catch (e) {
       if (wasTransactionExpired(e)) refresh();
-      setActionError(WALLET_CAPTURE_ONLY ? "Diagnostic mode stopped before signing. If capture succeeded, use Download unsigned request above. No transaction was submitted."
+      setActionError(WALLET_CAPTURE_ONLY && wasWalletCaptureStopped(e) ? "Unsigned request captured. No wallet signature was requested and no transaction was submitted. Use Download unsigned request above."
         : wasTransactionExpired(e) ? "The transaction expired before confirmation. Refreshing your on-chain status; review the updated pledge before requesting a fresh wallet approval. Nothing will retry automatically."
         : wasWalletDeclined(e) ? "The wallet request was declined. Review the permission and transaction details before deciding whether to try again. Nothing will retry automatically."
         : walletFlowStarted ? "The wallet or transaction step failed. Submission status is unknown; check wallet activity and refresh before retrying."

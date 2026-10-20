@@ -8,7 +8,10 @@ import { useEffect, useState, type ReactNode } from "react";
 import { RPC_URL } from "@/lib/solana";
 import { captureWalletRequests, type WalletCapture } from "@/lib/wallet-capture";
 
-export const WALLET_CAPTURE_ONLY = process.env.NEXT_PUBLIC_WALLET_CAPTURE_ONLY === "true";
+// Capture replaces every action's signer, including recovery. Never enable it
+// in a production build, even if a hosting environment accidentally sets it.
+export const WALLET_CAPTURE_ONLY = process.env.NODE_ENV === "development"
+  && process.env.NEXT_PUBLIC_WALLET_CAPTURE_ONLY === "true";
 const CAPTURE_EVENT = "endowment:unsigned-wallet-capture";
 
 function saveCapture(report: WalletCapture) {

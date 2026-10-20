@@ -1,5 +1,23 @@
 import { extendClient, getBase64Decoder, getTransactionEncoder, type Transaction, type TransactionSigner } from "@solana/kit";
 
+export class WalletCaptureStoppedError extends Error {
+  constructor() {
+    super("WALLET_CAPTURE_ONLY: unsigned request captured; no signature or submission.");
+    this.name = "WalletCaptureStoppedError";
+  }
+}
+
+/** The executor can wrap our deliberate stop; unrelated failures are not captures. */
+export function wasWalletCaptureStopped(error: unknown): boolean {
+  const seen = new Set<object>();
+  for (let current = error; current && typeof current === "object" && !seen.has(current);) {
+    if (current instanceof WalletCaptureStoppedError) return true;
+    seen.add(current);
+    current = (current as { cause?: unknown }).cause;
+  }
+  return false;
+}
+
 export type WalletCapture = {
   version: 1;
   capturedAt: string;
@@ -36,7 +54,7 @@ export function captureWalletRequests(onCapture: (report: WalletCapture) => void
             source: "SDK signing boundary; stopped before the wallet", signer: signer.address,
             signed: false, submitted: false, transactions: encoded });
           // Throwing here prevents both wallet invocation and RPC submission.
-          throw new Error("WALLET_CAPTURE_ONLY: unsigned request captured; no signature or submission.");
+          throw new WalletCaptureStoppedError();
         },
       });
       cache.set(signer.address, replacement);
