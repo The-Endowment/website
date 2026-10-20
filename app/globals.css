@@ -227,6 +227,42 @@ button.button-primary { background: var(--bone); }
 .count-details .table-scroll { margin: 14px 0; }
 .consent { display: flex; gap: 12px; align-items: flex-start; max-width: 40em; padding: 16px; border: 1px solid var(--rule); border-radius: 6px; font-size: 15px; color: var(--body); cursor: pointer; }
 .consent input { margin-top: 4px; accent-color: var(--accent); flex-shrink: 0; }
+
+/* Wallet choice and the shared enrollment review. */
+.thesis-head.delegate-intro { padding-block: 40px 32px; }
+.delegate-intro .h1 { font-size: clamp(42px, 5vw, 64px); }
+.wallet-section.row { padding-block: 40px 56px; scroll-margin-top: 24px; }
+.pledge-steps { display: flex; gap: 28px; flex-wrap: wrap; list-style: none; margin: 0; padding: 0 0 24px; border-bottom: 1px solid var(--rule); }
+.pledge-steps li { display: flex; align-items: center; gap: 8px; color: var(--stone); font-size: 14px; }
+.pledge-steps li > span { display: grid; place-items: center; width: 26px; height: 26px; border: 1px solid var(--rule); border-radius: 50%; font-size: 12px; }
+.pledge-steps li[aria-current="step"] { color: var(--bone); }
+.pledge-steps li[aria-current="step"] > span { border-color: var(--accent); color: var(--accent); }
+.pledge-steps li[data-complete="true"] > span { color: var(--accent); }
+.onboarding-title { font-family: var(--serif); font-size: clamp(28px, 3vw, 36px); font-weight: 400; line-height: 1.15; margin: 0 0 12px; }
+.wallet-choices { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; }
+.wallet-choice { display: flex; gap: 14px; align-items: center; padding: 22px 18px; min-height: 106px; border: 1px solid var(--rule); border-radius: 10px; background: var(--surface); color: var(--bone); text-align: left; cursor: pointer; font: inherit; font-weight: 500; }
+.wallet-choice:hover, .wallet-choice[aria-expanded="true"] { border-color: var(--accent); }
+.wallet-choice:disabled { opacity: .5; cursor: default; }
+.wallet-choice small { display: block; font-size: 13px; color: var(--stone); font-weight: 400; margin-top: 4px; line-height: 1.4; }
+.wallet-choice-mark { display: grid; place-items: center; width: 36px; height: 36px; flex: 0 0 36px; border: 1px solid var(--rule); border-radius: 9px; color: var(--accent); font-family: var(--serif); font-size: 24px; }
+.wallet-choice-arrow { margin-left: auto; color: var(--stone); }
+.onboarding-help, .pledge-review { display: flex; flex-direction: column; align-items: stretch; gap: 18px; padding: 24px; border: 1px solid var(--rule); border-radius: 10px; }
+.onboarding-help h4, .pledge-review h4 { font-size: 18px; font-weight: 500; margin: 0; }
+.onboarding-help p, .onboarding-help details, .pledge-review details { font-size: 15px; }
+.onboarding-help summary, .pledge-review summary, .manual-wallets summary { cursor: pointer; }
+.onboarding-help details p, .pledge-review details p, .manual-wallets > p, .manual-wallets > .actions { margin-top: 16px; }
+.wallet-address-label { font-size: 14px; }
+.wallet-address-input { width: 100%; min-width: 0; border: 1px solid var(--rule); border-radius: 6px; background: var(--vault); color: var(--bone); padding: 13px; font: 14px var(--mono); }
+.wallet-address-input[aria-invalid="true"] { border-color: var(--accent); }
+.manual-wallets { border-top: 1px solid var(--rule); padding-top: 22px; font-size: 15px; }
+.pledge-review .consent { max-width: none; }
+@media (max-width: 700px) {
+  .wallet-choices { grid-template-columns: 1fr; }
+  .wallet-choice { min-height: 90px; }
+  .onboarding-help, .pledge-review { padding: 18px; }
+  .onboarding-help .button { white-space: normal; min-height: 44px; height: auto; text-align: center; padding-block: 10px; }
+  .pledge-steps { gap: 20px; }
+}
 .link-button { font: inherit; color: inherit; background: none; border: 0; padding: 0; cursor: pointer; text-decoration: underline; text-decoration-color: var(--rule); text-underline-offset: 3px; }
 .link-button:hover { color: var(--accent); }
 .buys { display: grid; }

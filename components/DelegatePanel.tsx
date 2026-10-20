@@ -15,7 +15,7 @@ import {
   TOKEN_2022_PROGRAM_ADDRESS,
 } from "@solana-program/token-2022";
 import { useEffect, useState } from "react";
-import { client } from "@/components/WalletClient";
+import { client, WALLET_CAPTURE_ONLY } from "@/components/WalletClient";
 import {
   authorityPda,
   bpsToPercent,
@@ -31,6 +31,23 @@ import { HeldCollections } from "@/components/HeldCollections";
 import { loadDelegationStatus, revokeEndowmentApprovalIx, type DelegationStatus } from "@/lib/holding/delegation";
 import { flagshipInstance, formatTokens } from "@/lib/solana";
 import { DELEGATION_CLOSED_NOTE, DELEGATION_OPEN, links } from "@/lib/site";
+import { PledgeSteps, WalletOnboarding } from "@/components/WalletOnboarding";
+import { enrollmentWalletIssue, wasWalletDeclined, wasTransactionExpired } from "@/lib/wallet-onboarding";
+
+// Show only error names and numeric codes, never provider URLs or raw payloads.
+function actionDiagnostic(error: unknown): string {
+  const parts: string[] = [];
+  const seen = new Set<unknown>();
+  for (let current = error; current && typeof current === "object" && !seen.has(current) && parts.length < 8;) {
+    seen.add(current);
+    const value = current as { name?: unknown; code?: unknown; context?: { __code?: unknown }; cause?: unknown };
+    const name = typeof value.name === "string" && /^[A-Za-z]{1,60}$/.test(value.name) ? value.name : "Error";
+    const code = value.context?.__code ?? value.code;
+    parts.push(name + (typeof code === "number" && Number.isFinite(code) ? ` (${code})` : ""));
+    current = value.cause;
+  }
+  return parts.join(" → ") || "Error details unavailable";
+}
 
 /**
  * The delegation is unlimited on purpose. The program counts a landlord, and
@@ -57,7 +74,7 @@ function blocker(s: DelegationStatus, holding: Holding | null): string | null {
   return null;
 }
 
-function Connected({ inst, owner }: { inst: Instance; owner: Address }) {
+function Connected({ inst, owner, expectedOwner, canSign }: { inst: Instance; owner: Address; expectedOwner: string | null; canSign: boolean }) {
   const { dispatch: disconnect } = useDisconnect(client);
   const [status, setStatus] = useState<DelegationStatus | null>(null);
   const [holding, setHolding] = useState<Holding | null>(null);
@@ -67,7 +84,9 @@ function Connected({ inst, owner }: { inst: Instance; owner: Address }) {
   const [reload, setReload] = useState(0);
   const [lastSignature, setLastSignature] = useState<string | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
+  const walletIssue = enrollmentWalletIssue(owner, expectedOwner);
   const refresh = () => {
+    setAgreed(false);
     setStatus(null); setHolding(null); setLoadError(null); setHoldingError(null);
     setReload(n => n + 1);
   };
@@ -89,34 +108,51 @@ function Connected({ inst, owner }: { inst: Instance; owner: Address }) {
 
   const perform = async (signal: AbortSignal, build: (signer: TransactionSigner) => Promise<Instruction[]>) => {
     setActionError(null); setLastSignature(null);
-    let submitted = false;
+    let walletFlowStarted = false;
     try {
+      if (!canSign) throw new Error("This wallet connection cannot sign the required transaction. Connect a wallet with signing enabled.");
       const signer = client.identity;
       if (signer.address !== owner) throw new Error("Your connected wallet changed. Reconnect and try again.");
       const instructions = await build(signer);
       if (client.identity.address !== owner) throw new Error("Your connected wallet changed. Reconnect and try again.");
-      submitted = true;
+      walletFlowStarted = true;
       const result = await client.sendTransaction(instructions, { abortSignal: signal });
       setLastSignature(result.context.signature);
       setAgreed(false);
       refresh();
       return result.context.signature;
     } catch (e) {
-      setActionError(submitted ? "Couldn't confirm the action. Check your wallet activity and refresh before retrying."
+      if (wasTransactionExpired(e)) refresh();
+      setActionError(WALLET_CAPTURE_ONLY ? "Diagnostic mode stopped before signing. If capture succeeded, use Download unsigned request above. No transaction was submitted."
+        : wasTransactionExpired(e) ? "The transaction expired before confirmation. Refreshing your on-chain status; review the updated pledge before requesting a fresh wallet approval. Nothing will retry automatically."
+        : wasWalletDeclined(e) ? "The wallet request was declined. Review the permission and transaction details before deciding whether to try again. Nothing will retry automatically."
+        : walletFlowStarted ? "The wallet or transaction step failed. Submission status is unknown; check wallet activity and refresh before retrying."
         : e instanceof Error ? e.message : "Couldn't prepare the action. Please try again.");
       throw e;
     }
   };
 
   const optIn = useAction((signal: AbortSignal) => perform(signal, async signer => {
+    if (walletIssue) throw new Error(walletIssue);
     if (!status || !holding || !agreed || blocker(status, holding)) throw new Error("Joining is unavailable. Refresh and review the pledge before signing.");
+    const [freshStatus, freshHolding] = await Promise.all([
+      loadDelegationStatus(client.rpc, inst, owner), loadHolding(client.rpc, inst, owner),
+    ]).catch(() => { throw new Error("Could not verify your current enrollment. Refresh before trying again."); });
+    if (signal.aborted) throw new Error("Enrollment request cancelled.");
+    setStatus(freshStatus); setHolding(freshHolding);
+    if (freshStatus.landlord && freshStatus.delegatedToEndowment && freshHolding.consent?.enabled) {
+      setAgreed(false);
+      throw new Error("Your pledge is already registered. No new approval was requested.");
+    }
+    const freshBlocker = blocker(freshStatus, freshHolding);
+    if (freshBlocker) throw new Error(freshBlocker);
     const authority = await authorityPda(inst.program, inst.config);
     const ixs: Instruction[] = [
       getCreateAssociatedTokenIdempotentInstruction({
         payer: signer,
         owner: signer.address,
         mint: inst.dividendMint,
-        ata: status.dividendAccount,
+        ata: freshStatus.dividendAccount,
         tokenProgram: inst.dividendTokenProgram,
       }),
       // Registering needs the coin account to exist, even while it's empty (audit L-12).
@@ -124,26 +160,26 @@ function Connected({ inst, owner }: { inst: Instance; owner: Address }) {
         payer: signer,
         owner: signer.address,
         mint: inst.coinMint,
-        ata: status.coinAccount,
+        ata: freshStatus.coinAccount,
         tokenProgram: inst.coinTokenProgram,
       }),
       getApproveCheckedInstruction(
         {
-          source: status.dividendAccount,
+          source: freshStatus.dividendAccount,
           mint: inst.dividendMint,
           delegate: authority,
           owner: signer,
           amount: UNLIMITED,
-          decimals: status.dividendDecimals,
+          decimals: freshStatus.dividendDecimals,
         },
         { programAddress: inst.dividendTokenProgram as typeof TOKEN_2022_PROGRAM_ADDRESS },
       ),
     ];
-    if (status.landlord) {
+    if (freshStatus.landlord) {
       // Coming back: reset the baseline so everything this account holds now stays the landlord's.
-      ixs.push(await resyncBaselineIx(inst, signer, status.dividendAccount));
+      ixs.push(await resyncBaselineIx(inst, signer, freshStatus.dividendAccount));
     } else {
-      ixs.push(await registerLandlordIx(inst, signer, status.dividendAccount, status.coinAccount));
+      ixs.push(await registerLandlordIx(inst, signer, freshStatus.dividendAccount, freshStatus.coinAccount));
     }
     // Joining and rejoining both leave collection switched off; this switches it on,
     // with everything the account holds right now set aside as the landlord's.
@@ -182,12 +218,22 @@ function Connected({ inst, owner }: { inst: Instance; owner: Address }) {
 
   return (
     <div className="row-body">
+      <PledgeSteps step={isIn ? 4 : optIn.isRunning ? 3 : 2} />
+      <div className="onboarding-heading" aria-live="polite">
+        <h3 className="onboarding-title">{isIn ? "Your pledge is registered." : optIn.isRunning ? "Review the request in your wallet." : "Review your pledge."}</h3>
+        <p className="muted small">{isIn ? "Collection permission is enabled. Collections still depend on eligibility, current checks and running services."
+          : "We prepare the approval and enrollment together. You review and confirm one transaction in your wallet."}</p>
+      </div>
+      {walletIssue && <p role="alert" className="note">{walletIssue}</p>}
+      {!canSign && <p role="alert" className="note">This connection can view your wallet but cannot sign the required transaction. Reconnect using a wallet with signing enabled.</p>}
+      {expectedOwner && !walletIssue && <p className="small">Connected address matches your Fomo wallet.</p>}
+      {status && status.config.params.activateBps === 0 && status.config.params.deactivateBps === 0 && <p className="note">Founders test. The public participation thresholds are not active.</p>}
       <dl className="facts">
         <div className="fact">
           <dt>Wallet</dt>
           <dd>
             <span className="address">{owner}</span>
-            <button type="button" className="copy" onClick={() => disconnect()}>
+            <button type="button" className="copy" disabled={busy} onClick={() => disconnect()}>
               Disconnect
             </button>
           </dd>
@@ -218,11 +264,11 @@ function Connected({ inst, owner }: { inst: Instance; owner: Address }) {
         )}
       </dl>
 
-      <HeldCollections holding={holding} error={holdingError} busy={busy} onRetry={refresh} onReclaim={r => takeBack.dispatch(r)} />
+      <HeldCollections holding={holding} error={holdingError} busy={busy || !canSign} onRetry={refresh} onReclaim={r => takeBack.dispatch(r)} />
 
       {status && !isIn && (
         <p className="muted small">
-          The $PENIS in this wallet counts toward the 30%. Collection uses a reward allowance and payout checks,
+          Eligible $PENIS in this wallet counts toward participation after the required checks. Collection uses a reward allowance and payout checks,
           with your starting PUMP balance protected by the current contract. Want to pledge part of your holdings? Keep the
           rest in another wallet.
         </p>
@@ -234,17 +280,44 @@ function Connected({ inst, owner }: { inst: Instance; owner: Address }) {
         <p className="muted small">Your approval is smaller than the endowment needs to count you. Rejoin to renew it.</p>
       )}
       {status && !isIn && reason && <p className="small">{reason}</p>}
-      {status && !isIn && !reason && (
-        <label className="consent">
-          <input type="checkbox" checked={agreed} onChange={(e) => setAgreed(e.target.checked)} disabled={busy} />
-          <span>
-            I authorize unlimited token approval on my PUMP account for collection of $PENIS rewards. The current
-            contract protects my starting balance and limits collection using posted reward totals. Payout checks
-            can make mistakes. Each collection waits at least 24 hours; I can reclaim it before release, after which
-            this contract cannot refund it. While upgrade authority exists, the code and these protections can
-            change. I can stop future collection at any time.
-          </span>
-        </label>
+      {status && !isIn && !reason && !walletIssue && (
+        <div className="pledge-review">
+          <h4>What you&rsquo;re approving</h4>
+          <p className="small">An unlimited PUMP token approval, your enrollment and collection permission in one transaction. Your current PUMP balance becomes the protected starting balance under the current contract. No PUMP or $PENIS is transferred by enrollment.</p>
+          <p className="muted small">You pay the network fee and account deposits in SOL. Your wallet shows the transaction before you approve it.</p>
+          <label className="consent">
+            <input type="checkbox" checked={agreed} onChange={(e) => setAgreed(e.target.checked)} disabled={busy || !canSign} />
+            <span>
+              {WALLET_CAPTURE_ONLY ? "I want to inspect, without signing, the following proposed permission: unlimited token approval on my PUMP account for collection of $PENIS rewards." : "I authorize unlimited token approval on my PUMP account for collection of $PENIS rewards."} The current
+              contract protects my starting balance and limits collection using posted reward totals. Payout checks
+              can make mistakes. Each collection waits at least 24 hours; I can reclaim it before release, after which
+              this contract cannot refund it. While upgrade authority exists, the code and these protections can
+              change. I can stop future collection at any time.
+            </span>
+          </label>
+          <details>
+            <summary>What if my wallet shows a warning?</summary>
+            <p className="small">Phantom&rsquo;s warning about allowing future PUMP withdrawals is expected for this enrollment. You are granting an unlimited PUMP approval so eligible rewards can be collected without another wallet signature.</p>
+            <p className="muted small">Check that the approval is for PUMP only and uses the endowment delegate below. Enrollment should not transfer PUMP or $PENIS; SOL fees and account deposits are expected.</p>
+            <dl className="facts">
+              <div className="fact">
+                <dt>PUMP token</dt>
+                <dd><a className="address" href={`https://solscan.io/token/${inst.dividendMint}`}>{inst.dividendMint}</a></dd>
+              </div>
+              <div className="fact">
+                <dt>Endowment delegate</dt>
+                <dd><a className="address" href={`https://solscan.io/account/${status.expectedDelegate}`}>{status.expectedDelegate}</a></dd>
+              </div>
+              <div className="fact">
+                <dt>Endowment program</dt>
+                <dd><a className="address" href={`https://solscan.io/account/${inst.program}`}>{inst.program}</a></dd>
+              </div>
+            </dl>
+            <p className="muted small">The current contract protects your starting PUMP balance and caps collection at your remaining posted reward allowance. Payout sources are checked off-chain. The approval itself is unlimited, and program upgrades can change these protections.</p>
+            <p className="muted small">You can revoke future PUMP access here or in Phantom. Any contribution already being held must be reclaimed separately before release.</p>
+            <p className="muted small">Proceed only if you accept this permission and the details match. A different warning, token, delegate or unexpected transfer needs review. This page cannot dismiss wallet warnings or approve for you.</p>
+          </details>
+        </div>
       )}
 
       <div className="actions">
@@ -252,16 +325,16 @@ function Connected({ inst, owner }: { inst: Instance; owner: Address }) {
           <button
             type="button"
             className="button button-primary"
-            disabled={busy || !status || Boolean(reason) || !agreed}
+            disabled={busy || !canSign || !status || Boolean(reason) || Boolean(walletIssue) || !agreed}
             onClick={() => optIn.dispatch()}
           >
             {optIn.isRunning
-              ? "Confirm in your wallet…"
-              : delegated
+              ? WALLET_CAPTURE_ONLY ? "Preparing unsigned request…" : "Confirm in your wallet…"
+              : WALLET_CAPTURE_ONLY ? "Capture unsigned enrollment" : delegated
                 ? "Switch collection back on"
                 : status?.landlord
                   ? "Rejoin"
-                  : "Delegate my PUMP rewards"}
+                  : "Review in wallet"}
           </button>
         )}
         {isIn && (
@@ -270,7 +343,7 @@ function Connected({ inst, owner }: { inst: Instance; owner: Address }) {
           </button>
         )}
         {status && (status.delegatedToEndowment || status.delegationTooSmall || status.landlord) && (
-          <button type="button" className="button" disabled={busy} onClick={() => leave.dispatch()}>
+          <button type="button" className="button" disabled={busy || !canSign} onClick={() => leave.dispatch()}>
             {leave.isRunning ? "Confirm in your wallet…" : "Leave"}
           </button>
         )}
@@ -284,14 +357,15 @@ function Connected({ inst, owner }: { inst: Instance; owner: Address }) {
           held, which you take back separately. Both work even if the rest of this panel can&rsquo;t load.
         </p>
         <div className="actions">
-          <button type="button" className="button" disabled={busy} onClick={() => stop.dispatch()}>Stop collection</button>
-          <button type="button" className="button" disabled={busy} onClick={() => revoke.dispatch()}>Revoke PUMP approval</button>
+          <button type="button" className="button" disabled={busy || !canSign} onClick={() => stop.dispatch()}>Stop collection</button>
+          <button type="button" className="button" disabled={busy || !canSign} onClick={() => revoke.dispatch()}>Revoke PUMP approval</button>
         </div>
         <p className="muted small">You can also revoke this approval in your wallet&rsquo;s token approval settings.</p>
       </details>
       <button type="button" className="link-button" disabled={busy} onClick={refresh}>Refresh wallet</button>
       {loadError && <p role="alert" className="muted small">{loadError}</p>}
       {actionError && <p role="alert" className="muted small">{actionError}</p>}
+      {optIn.isError && <details><summary>Error details</summary><p className="muted small">Enrollment diagnostic: {actionDiagnostic(optIn.error)}</p></details>}
       {lastSignature && (
         <p className="muted small">
           Done. <a href={`https://solscan.io/tx/${lastSignature}`}>View the transaction</a>
@@ -304,27 +378,32 @@ function Connected({ inst, owner }: { inst: Instance; owner: Address }) {
 function Chooser({ inst }: { inst: Instance }) {
   const wallets = useWallets(client);
   const connected = useConnectedWallet(client);
-  const { dispatch: connect, isRunning } = useConnect(client);
+  const { dispatchAsync: connect, isRunning } = useConnect(client);
+  const [expectedOwner, setExpectedOwner] = useState<string | null>(null);
+  const [connectionError, setConnectionError] = useState<string | null>(null);
+  const phantom = wallets.find(wallet => wallet.name === "Phantom");
+  const connectWallet = async (wallet: (typeof wallets)[number], expected: string | null) => {
+    setExpectedOwner(expected);
+    setConnectionError(null);
+    try {
+      await connect(wallet);
+    } catch {
+      setConnectionError("Connection wasn't completed. Unlock your wallet and try again when you're ready. No pledge was submitted.");
+    }
+  };
 
-  if (connected) return <Connected key={`${inst.config}:${connected.account.address}`} inst={inst} owner={connected.account.address as Address} />;
-  if (wallets.length === 0) {
-    return (
-      <div className="row-body">
-        <p>No Solana wallet found in this browser. Install Phantom, Solflare or Backpack, then reload.</p>
-      </div>
-    );
-  }
+  if (connected) return <Connected key={`${inst.config}:${connected.account.address}`} inst={inst} owner={connected.account.address as Address} expectedOwner={expectedOwner} canSign={Boolean(connected.signer) && connected.supportedTransactionVersions.has(0)} />;
   return (
-    <div className="row-body">
-      <p>Connect your wallet to manage a pledge or reclaim pending contributions.</p>
-      <div className="actions">
+    <WalletOnboarding phantomAvailable={Boolean(phantom)} connecting={isRunning} connectionError={connectionError}
+      onPhantom={expected => { if (phantom) void connectWallet(phantom, expected); }}
+      manualWallets={wallets.length ? <div className="actions">
         {wallets.map((wallet) => (
-          <button key={wallet.name} type="button" className="button" disabled={isRunning} onClick={() => connect(wallet)}>
+          <button key={wallet.name} type="button" className="button" disabled={isRunning} onClick={() => void connectWallet(wallet, null)}>
             {wallet.name}
           </button>
         ))}
-      </div>
-    </div>
+      </div> : <p className="small">No Solana wallet found. Install or unlock a compatible wallet, then reload this page.</p>}
+    />
   );
 }
 
@@ -352,9 +431,11 @@ export function DelegatePanel() {
 /** The enrollment switch affects joining only; configured recovery stays usable. */
 export function ConfiguredDelegatePanel({ inst }: { inst: Instance }) {
   return (
-    <WalletReadyGate client={client} fallback={<div className="row-body muted">Looking for wallets…</div>}>
-      {!DELEGATION_OPEN && <p className="muted small">New pledges and re-enrollment are closed. Existing holders can still stop collection, revoke approval and reclaim pending contributions.</p>}
-      <Chooser inst={inst} />
-    </WalletReadyGate>
+    <div className="row-body">
+      <WalletReadyGate client={client} fallback={<p className="muted">Looking for wallets…</p>}>
+        {!DELEGATION_OPEN && <p className="muted small">New pledges and re-enrollment are closed. Existing holders can still stop collection, revoke approval and reclaim pending contributions.</p>}
+        <Chooser inst={inst} />
+      </WalletReadyGate>
+    </div>
   );
 }
