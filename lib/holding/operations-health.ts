@@ -17,6 +17,7 @@ export class PassHealth {
   private observedOwners = new Set<string>();
   private nonemptyHistoryOwners = new Set<string>();
   private matchedRewardOwners = new Set<string>();
+  private resetOwners = new Set<string>();
   private activeOwners = new Set<string>();
   private latest?: HoldSnapshot;
   ownersDiscovered = 0;
@@ -55,7 +56,7 @@ export class PassHealth {
         if (o.kind === "reward") this.matchedRewardOwners.add(owner);
         // The ledger already resets that wallet. Only unexplained history stops everyone.
         if (o.kind === "uncertain") {
-          if (o.contained) this.notes.add("wallet_history_reset");
+          if (o.contained) { this.notes.add("wallet_history_reset"); this.resetOwners.add(owner); }
           else this.issues.add("uncertain_history");
         }
         if (o.payoutAttribution === "expired") {
@@ -106,6 +107,10 @@ export class PassHealth {
   report() {
     if (this.ownersSelected === 0) this.issues.add("no_wallets_selected");
     if (!this.feedAvailable) this.issues.add("feed_unavailable");
+    // One holder's swap is routine. Many wallets resetting in one pass looks like an
+    // upstream change, so alert (without stopping collection; each wallet already reset).
+    if (this.resetOwners.size >= 3 && this.resetOwners.size * 4 >= this.nonemptyHistoryOwners.size)
+      this.issues.add("wallet_resets_widespread");
     const s = this.latest;
     return {
       version: 1, role: this.role, mode: this.mode ?? "observation", submit: this.submit,

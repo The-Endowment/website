@@ -87,6 +87,9 @@ export function classify(tx: ParsedTransaction, account: string, owner: string, 
   const keys = tx.transaction.message.accountKeys;
   const all = [...tx.transaction.message.instructions, ...(tx.meta.innerInstructions ?? []).flatMap((x) => x.instructions)];
   let incoming = 0n, outgoing = 0n, approvedIncoming = 0n, ownerGross = 0n, alternateAccount = false;
+  // Containment evidence: the payout source stayed out of the transaction, and
+  // only the signing owner moved PUMP out of this account.
+  let payoutInvolved = false, ownerOutflowsOnly = keys.some((key) => key.pubkey === owner && key.signer);
   const protectedAccounts = new Set([account]);
   try {
     for (const ix of all) {
@@ -100,6 +103,8 @@ export function classify(tx: ParsedTransaction, account: string, owner: string, 
           && move.mint !== undefined && (move.mint !== policy.mint || move.decimals !== 6))
         return uncertain("Transfer mint or decimals mismatch");
       let approved = false;
+      if (move.source === policy.source) payoutInvolved = true;
+      if (move.source === account && move.authority !== owner) ownerOutflowsOnly = false;
       if (move.source === policy.source && (move.mint === undefined || move.mint === policy.mint)) {
         protectedAccounts.add(move.source);
         // Inspect every fixed-source PUMP payout, including those to other
@@ -134,9 +139,9 @@ export function classify(tx: ParsedTransaction, account: string, owner: string, 
   const delta = raw(base.after) - raw(base.before);
   if (incoming > 0n && outgoing > 0n) {
     // A holder's swap routed through this account. Every token instruction parsed,
-    // no payout source took part, and the balance reconciles, so the doubt is
-    // confined to this wallet's eligibility.
-    if (approvedIncoming === 0n && delta === incoming - outgoing)
+    // the payout source took no part (to any account), only the signing owner moved
+    // PUMP out, and the balance reconciles, so the doubt is confined to this wallet.
+    if (!payoutInvolved && ownerOutflowsOnly && delta === incoming - outgoing)
       return { ...uncertain("Mixed inflows and outflows"), contained: true };
     return uncertain("Mixed inflows and outflows");
   }
