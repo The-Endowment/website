@@ -53,7 +53,11 @@ export class PassHealth {
       for (const o of event.observations) {
         this.observations[o.kind]++;
         if (o.kind === "reward") this.matchedRewardOwners.add(owner);
-        if (o.kind === "uncertain") this.issues.add("uncertain_history");
+        // The ledger already resets that wallet. Only unexplained history stops everyone.
+        if (o.kind === "uncertain") {
+          if (o.contained) this.notes.add("wallet_history_reset");
+          else this.issues.add("uncertain_history");
+        }
         if (o.payoutAttribution === "expired") {
           this.payoutWait.expiredReceipts++;
           this.issues.add("payout_evidence_expired");
@@ -97,6 +101,8 @@ export class PassHealth {
     if (result.status === "submitted" && result.amount) this.submittedAmount += BigInt(result.amount);
   }
   failure(code = "wallet_failure") { this.failures++; this.issues.add(code); }
+  /** History the worker could not read or explain stops collection for every wallet. */
+  historyStop() { return this.issues.has("history_gap") || this.issues.has("uncertain_history"); }
   report() {
     if (this.ownersSelected === 0) this.issues.add("no_wallets_selected");
     if (!this.feedAvailable) this.issues.add("feed_unavailable");

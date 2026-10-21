@@ -88,8 +88,7 @@ async function main() {
             // Capture can fail during a long wallet pass. Recheck immediately
             // before signing and broadcast, without fetching the public feed.
             await requireFreshFeed();
-            if (health.issues.has("history_gap") || health.issues.has("uncertain_history"))
-              await quarantine(stopFile, "history_evidence_gap");
+            if (health.historyStop()) await quarantine(stopFile, "history_evidence_gap");
             await assertCollectionAllowed(controls, owner, snapshot);
           },
           observe: (event) => health.observe(owner, event),
@@ -97,8 +96,7 @@ async function main() {
             authority: "HuBMeYW3aDn8BH65fo8xxbP4oiexyup8udzKyccgi8Ga", source: "J8vxiGw4gPng3JTN9HoKJs3ioCD5fnjKGDtRHPVGgaGo" },
         }, address(owner), receipts.filter((r) => r.receipt.owner === owner));
         health.outcome(result);
-        if (role === "collector" && (health.issues.has("history_gap") || health.issues.has("uncertain_history")))
-          await quarantine(stopFile, "history_evidence_gap");
+        if (role === "collector" && health.historyStop()) await quarantine(stopFile, "history_evidence_gap");
         console.log(JSON.stringify({ role, owner, status: result.status }));
       } catch {
         health.failure(); process.exitCode = 1;

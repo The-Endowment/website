@@ -132,7 +132,14 @@ export function classify(tx: ParsedTransaction, account: string, owner: string, 
     }
   } catch { return uncertain("Unverifiable payout instruction or destination identity"); }
   const delta = raw(base.after) - raw(base.before);
-  if (incoming > 0n && outgoing > 0n) return uncertain("Mixed inflows and outflows");
+  if (incoming > 0n && outgoing > 0n) {
+    // A holder's swap routed through this account. Every token instruction parsed,
+    // no payout source took part, and the balance reconciles, so the doubt is
+    // confined to this wallet's eligibility.
+    if (approvedIncoming === 0n && delta === incoming - outgoing)
+      return { ...uncertain("Mixed inflows and outflows"), contained: true };
+    return uncertain("Mixed inflows and outflows");
+  }
   if (outgoing > 0n) {
     if (delta !== -outgoing) return uncertain("Outflow does not reconcile to token balances");
     return { ...base, kind: "outflow", amount: outgoing.toString(), reason: "Outgoing PUMP consumes eligible rewards first" };
