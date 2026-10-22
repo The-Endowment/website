@@ -166,6 +166,29 @@ test("empty history reads do not count as observed history or matched reward act
   assert.equal(report.pilot.verdict, "not_assessed");
 });
 
+test("one wallet's contained swap is a healthy note; many in one pass alert without stopping", () => {
+  const swap = (slot: number) => ({ kind: "observations" as const, observations: [{ signature: `swap${slot}`, slot,
+    before: "10", after: "10", amount: "0", kind: "uncertain" as const, reason: "Mixed inflows and outflows", contained: true as const }] });
+  const quiet = (slot: number) => ({ kind: "observations" as const, observations: [{ signature: `buy${slot}`, slot,
+    before: "0", after: "10", amount: "10", kind: "other" as const, reason: "ordinary inflow" }] });
+  const one = new PassHealth("collector", false, "founders");
+  one.feedAvailable = true; one.ownersSelected = one.ownersProcessed = 2;
+  one.observe("a", swap(1)); one.observe("b", quiet(2));
+  const single = one.report();
+  assert.equal(one.historyStop(), false);
+  assert.deepEqual(single.issues, []);
+  assert.deepEqual(single.notes, ["wallet_history_reset"]);
+  assert.equal(completedHealthyPass(single), true);
+  const many = new PassHealth("collector", false, "founders");
+  many.feedAvailable = true; many.ownersSelected = many.ownersProcessed = 12;
+  for (const [i, wallet] of ["a", "b", "c"].entries()) many.observe(wallet, swap(i + 1));
+  for (let i = 0; i < 9; i++) many.observe(`quiet${i}`, quiet(10 + i));
+  const widespread = many.report();
+  assert.deepEqual(widespread.issues, ["wallet_resets_widespread"]);
+  assert.equal(many.historyStop(), false);
+  assert.equal(completedHealthyPass(widespread), false);
+});
+
 test("only complete healthy passes qualify for success heartbeats; idle is not pilot validation", () => {
   const health = new PassHealth("reviewer", false);
   health.feedAvailable = true;

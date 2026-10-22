@@ -96,12 +96,51 @@ test("mixed transactions, authority changes, closed accounts and failed transfer
   const mixed = tx("1000", "1000");
   mixed.transaction.message.instructions.push({ programId: policy.tokenProgram, parsed: { type: "transfer", info: { source: account, destination: owner, authority: owner, amount: "100" } } });
   assert.equal(classify(mixed, account, owner, policy, feed()).kind, "uncertain");
+  assert.equal(classify(mixed, account, owner, policy, feed()).contained, undefined); // a payout took part
   const revoked = tx(); revoked.transaction.message.instructions.push({ programId: policy.tokenProgram, parsed: { type: "revoke", info: { source: account, owner } } });
   assert.equal(classify(revoked, account, owner, policy, feed()).kind, "uncertain");
   const closed = tx(); closed.meta!.postTokenBalances = [];
   assert.equal(classify(closed, account, owner, policy, feed()).kind, "uncertain");
   const failed = tx("1000", "1000"); failed.meta!.err = { InstructionError: [0, "x"] };
   assert.equal(classify(failed, account, owner, policy, feed()).kind, "failed");
+});
+
+test("a swap routed through the account is contained only when fully parsed and reconciled", () => {
+  // Shape of a Jupiter route seen on chain: PUMP out to one pool, back in from another.
+  const routed = (after: string, extra?: ParsedTransaction["transaction"]["message"]["instructions"][number]) => {
+    const t = tx("1000", after);
+    t.transaction.message.accountKeys = [{ pubkey: account, signer: false, writable: true }, { pubkey: owner, signer: true, writable: true }];
+    t.transaction.message.instructions = [{ programId: "JUP6LkbZbjS1jKKwapdHNy74zcZ3tLUZoi5QNyVTaV4", accounts: [], data: "1" }];
+    t.meta!.innerInstructions = [{ index: 0, instructions: [
+      { programId: policy.tokenProgram, parsed: { type: "transferChecked", info: { source: account, destination: otherAccount, authority: owner, mint: policy.mint, tokenAmount: { amount: "300", decimals: 6 } } } },
+      { programId: policy.tokenProgram, parsed: { type: "transferChecked", info: { source: "P".repeat(32), destination: account, authority: "Q".repeat(32), mint: policy.mint, tokenAmount: { amount: "250", decimals: 6 } } } },
+      ...(extra ? [extra] : []),
+    ] }];
+    return classify(t, account, owner, policy, feed());
+  };
+  const swap = routed("950");
+  assert.equal(swap.kind, "uncertain");
+  assert.equal(swap.contained, true);
+  assert.equal(routed("951").contained, undefined); // balances don't reconcile
+  assert.equal(routed("950", { programId: policy.tokenProgram, parsed: { type: "approve", info: { source: account, owner, delegate: otherOwner, amount: "1" } } }).contained, undefined);
+  // The payout source paying a different account in the same transaction.
+  assert.equal(routed("950", { programId: policy.tokenProgram, parsed: { type: "transferChecked", info: { source: policy.source, destination: "R".repeat(32), authority: policy.authority, mint: policy.mint, tokenAmount: { amount: "0", decimals: 6 } } } }).contained, undefined);
+  // PUMP moved out by a delegate rather than the owner.
+  const delegated = tx("1000", "950");
+  delegated.transaction.message.accountKeys = [{ pubkey: account, signer: false, writable: true }, { pubkey: otherOwner, signer: true, writable: false }];
+  delegated.transaction.message.instructions = [
+    { programId: policy.tokenProgram, parsed: { type: "transferChecked", info: { source: account, destination: otherAccount, authority: otherOwner, mint: policy.mint, tokenAmount: { amount: "300", decimals: 6 } } } },
+    { programId: policy.tokenProgram, parsed: { type: "transferChecked", info: { source: "P".repeat(32), destination: account, authority: "Q".repeat(32), mint: policy.mint, tokenAmount: { amount: "250", decimals: 6 } } } },
+  ];
+  assert.equal(classify(delegated, account, owner, policy, feed()).contained, undefined);
+  // The owner named as authority but not actually signing.
+  const unsignedOwner = structuredClone(delegated);
+  unsignedOwner.transaction.message.instructions[0].parsed!.info.authority = owner;
+  assert.equal(classify(unsignedOwner, account, owner, policy, feed()).contained, undefined);
+  unsignedOwner.transaction.message.accountKeys.push({ pubkey: owner, signer: true });
+  assert.equal(classify(unsignedOwner, account, owner, policy, feed()).contained, true);
+  // Contained or not, an uncertain observation still discards this wallet's eligibility.
+  assert.equal(observe(boundary("consent", 10, "start", "1000"), [{ ...swap, slot: 11 }], 11, "950", "swap").ledger.eligible, "0");
 });
 
 test("duplicates, same-slot ambiguity and balance discontinuity discard uncertain eligibility", () => {

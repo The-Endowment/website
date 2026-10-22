@@ -21,6 +21,9 @@ export type Observation = {
   signature: string; slot: number; receivedAt?: number | null; before: string; after: string;
   kind: "reward" | "outflow" | "other" | "failed" | "uncertain";
   amount: string; reason: string;
+  /** Uncertain, but fully parsed and reconciled (a swap routed through the holder's
+   * account): it resets only this wallet and is not evidence of a shared failure. */
+  contained?: true;
   payoutAttribution?: "expired" | "covered_absent";
   payoutEvidence?: {
     version: string; mint: string; wallet: string; signature: string; assetMint: string;

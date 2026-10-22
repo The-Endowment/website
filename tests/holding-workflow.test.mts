@@ -13,6 +13,7 @@ import { holdingBank } from "./support/holding-bank.mts";
 import { walletTick, type WorkerOptions } from "../lib/holding/worker.ts";
 import { withJournal } from "../lib/reporter/journal.ts";
 import type { ReviewedLedger } from "../lib/holding/reconcile.ts";
+import { PassHealth } from "../lib/holding/operations-health.ts";
 
 // Public, deterministic test keys, generated locally; no wallet or network secrets.
 async function testKey(directory: string, name: string, byte: number) {
@@ -582,6 +583,120 @@ test("a writable listing without token balances still resets eligibility", async
   await withJournal(join(directory, "wallets"), bank.a.dividend_account, async journal => {
     assert.equal(journal.state!.eligible, "0");
   });
+});
+
+// Two holders in one collector pass. Each bank is a separate wallet; the health
+// object and stop decision are shared, as in scripts/held-rewards.mts.
+async function collectorPass(t: import("node:test").TestContext, steps: (a: Bank, b: Bank) => void) {
+  const a = await holdingBank(), b = await holdingBank(), root = await mkdtemp(join(tmpdir(), "hold-two-wallets-"));
+  t.after(() => rm(root, {recursive: true, force: true}));
+  t.mock.method(Date, "now", () => a.time() * 1000);
+  const health = new PassHealth("collector", false, "founders");
+  const tick = async (bank: Bank, name: string) => {
+    const result = await walletTick({rpc: bank.rpc, rpcUrl: "http://127.0.0.1:1", inst: bank.inst,
+      directory: join(root, name), role: "collector", submit: false, source: bank.source, feed: bank.feed,
+      observe: event => health.observe(name, event)}, bank.owner, []);
+    health.outcome(result);
+    return result;
+  };
+  await tick(a, "swapper"); await tick(b, "holder");
+  steps(a, b);
+  const swapper = await tick(a, "swapper"), holder = await tick(b, "holder");
+  const eligible = await withJournal(join(root, "swapper", "wallets"), a.a.dividend_account, async j => j.state!.eligible);
+  return {swapper, holder, eligible, health};
+}
+type Bank = Awaited<ReturnType<typeof holdingBank>>;
+
+test("one holder's swap through their PUMP account resets only that holder and stops no one", async t => {
+  const {swapper, holder, eligible, health} = await collectorPass(t, (a, b) => {
+    a.move("reward", 40n); a.swap(30n, 30n);
+    b.move("reward", 25n);
+  });
+  assert.equal(swapper.status, "idle");
+  assert.equal(eligible, "0");
+  assert.equal(holder.status, "dry_run");
+  assert.equal("amount" in holder && holder.amount, "25");
+  assert.equal(health.historyStop(), false);
+  const report = health.report();
+  assert.ok(report.notes.includes("wallet_history_reset"));
+  assert.equal(report.issues.includes("uncertain_history"), false);
+  assert.equal(report.observations.uncertain, 1);
+});
+
+test("a mixed swap that doesn't reconcile, or that includes a payout, still stops every wallet", async t => {
+  for (const steps of [
+    (a: Bank) => { a.move("reward", 40n); a.swap(30n, 30n, 1n); },
+    (a: Bank) => { const tx = a.swap(30n, 30n); const inner = tx.meta!.innerInstructions![0].instructions[1];
+      // The PUMP arriving in the swap comes from the payout source itself.
+      Object.assign(inner.parsed!.info, {source: a.source.source, authority: a.source.authority});
+      tx.transaction.message.accountKeys.push({pubkey: a.source.authority, signer: true}); },
+  ]) {
+    const {swapper, health} = await collectorPass(t, steps);
+    assert.notEqual(swapper.status, "dry_run");
+    assert.equal(health.historyStop(), true);
+    assert.ok(health.report().issues.includes("uncertain_history"));
+  }
+});
+
+test("the reviewer keeps a review made before a swap and refunds a collection made after one", async t => {
+  for (const [order, amount, action] of [["sweep-then-swap", "40", "wait"], ["swap-then-sweep", "0", "refund"]] as const) {
+    const bank = await holdingBank(), directory = await mkdtemp(join(tmpdir(), "hold-swap-reviewer-"));
+    t.after(() => rm(directory, {recursive: true, force: true}));
+    t.mock.method(Date, "now", () => bank.time() * 1000);
+    const health = new PassHealth("reviewer", false);
+    const options: WorkerOptions = {rpc: bank.rpc, rpcUrl: "http://127.0.0.1:1", inst: bank.inst,
+      directory, role: "reviewer", submit: false, source: bank.source, feed: bank.feed,
+      observe: event => health.observe("holder", event)};
+    await walletTick(options, bank.owner, []);
+    bank.move("reward", 40n);
+    if (order === "sweep-then-swap") { bank.move("sweep", 40n); bank.swap(5n, 5n); }
+    else { bank.swap(5n, 5n); bank.move("sweep", 40n); }
+    const reviewed = await walletTick(options, bank.owner, bank.receipts());
+    assert.equal("outcomes" in reviewed && reviewed.outcomes[0].action, action, order);
+    await withJournal(join(directory, "wallets"), bank.a.dividend_account, async journal => {
+      assert.equal((journal.state as ReviewedLedger).reviews![bank.receiptKey].amount, amount, order);
+    });
+    assert.equal(health.historyStop(), false);
+  }
+});
+
+test("a submitted collection still reconciles when a swap lands after it", async t => {
+  const bank = await holdingBank(), directory = await mkdtemp(join(tmpdir(), "hold-swap-pending-"));
+  t.mock.method(Date, "now", () => bank.time() * 1000);
+  const server = createServer(async (req, res) => {
+    let body = ""; for await (const chunk of req) body += chunk;
+    const request = JSON.parse(body);
+    res.setHeader("content-type", "application/json");
+    res.end(JSON.stringify({ jsonrpc: "2.0", id: request.id, result: { context: { slot: 100 }, value: {
+      blockhash: "11111111111111111111111111111111", lastValidBlockHeight: 1000,
+    } } }));
+  });
+  await new Promise<void>(resolve => server.listen(0, "127.0.0.1", resolve));
+  try {
+    const collector = await testKey(directory, "collector", 91);
+    bank.policy.collector = collector.address;
+    const health = new PassHealth("collector", true, "founders");
+    const options: WorkerOptions = {rpc: bank.rpc, rpcUrl: `http://127.0.0.1:${(server.address() as { port: number }).port}`,
+      inst: bank.inst, directory: join(directory, "collector"), role: "collector", submit: true, keyFile: collector.path,
+      source: bank.source, feed: bank.feed, observe: event => health.observe("holder", event)};
+    await walletTick(options, bank.owner, []);
+    bank.move("reward", 40n);
+    const submitted = await walletTick(options, bank.owner, []);
+    assert.equal(submitted.status, "submitted");
+    // The collection executes on chain, then the holder swaps through the account.
+    bank.move("sweep", 40n); bank.swap(5n, 5n);
+    const next = await walletTick(options, bank.owner, []);
+    assert.equal(next.status, "idle");
+    await withJournal(join(directory, "collector", "wallets"), bank.a.dividend_account, async journal => {
+      assert.equal(journal.state!.pending, null);
+      assert.equal(journal.state!.eligible, "0");
+    });
+    assert.equal(bank.wires.length, 1);
+    assert.equal(health.historyStop(), false);
+  } finally {
+    await new Promise<void>((resolve, reject) => server.close(e => e ? reject(e) : resolve()));
+    await rm(directory, { recursive: true });
+  }
 });
 
 test("old missing pre-consent payout does not report an attribution expiry", async t => {

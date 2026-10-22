@@ -97,6 +97,30 @@ export async function holdingBank() {
     };
     transactions.push(tx); sync(); return tx;
   };
+  // A holder's swap routed through the PUMP account: PUMP leaves for one pool and
+  // arrives from another in one owner-signed transaction. `misreport` skews the
+  // recorded post balance so the transfers no longer reconcile.
+  const swap = (spent: bigint, received: bigint, misreport = 0n) => {
+    slot++; now++;
+    const before = balance;
+    balance += received - spent;
+    const tokenBalance = (value: bigint) => ({ accountIndex: 0, mint: inst.dividendMint, owner,
+      programId: inst.dividendTokenProgram, uiTokenAmount: { amount: value.toString(), decimals: 6 } });
+    const transfer = (from: string, to: string, authority: string, amount: bigint) => ({ programId: inst.dividendTokenProgram,
+      parsed: { type: "transferChecked", info: { source: from, destination: to, authority, mint: inst.dividendMint,
+        tokenAmount: { amount: amount.toString(), decimals: 6 } } } });
+    const tx: ParsedTransaction = {
+      slot, blockTime: now, transaction: { signatures: [`swap${slot}`], message: {
+        accountKeys: [{ pubkey: a.dividend_account, signer: false, writable: true }, { pubkey: owner, signer: true, writable: true }],
+        instructions: [{ programId: "DF1ow4tspfHX9JwWJsAb9epbkA8hmpSEAtxXy1V27QBH", accounts: [], data: "1" }],
+      } }, meta: { err: null, preTokenBalances: [tokenBalance(before)], postTokenBalances: [tokenBalance(balance + misreport)],
+        innerInstructions: [{ index: 0, instructions: [
+          transfer(a.dividend_account, "PoolInPump1111111111111111111111111111111111", owner, spent),
+          transfer("PoolOutPump111111111111111111111111111111111", a.dividend_account, "PoolAuthority1111111111111111111111111111111", received),
+        ] }] },
+    };
+    transactions.push(tx); sync(); return tx;
+  };
   const rpc = (async (method: string, params: unknown[]) => {
     sync();
     if (method === "getAccountInfo") return { value: records[String(params[0])] ?? null };
@@ -111,7 +135,7 @@ export async function holdingBank() {
     throw new Error(`Unexpected RPC ${method}`);
   }) as RpcCall;
   sync();
-  return { inst, owner, a, config, landlord, policy, consent, receipt, receiptKey, source, feed, rpc, wires, move, reference,
+  return { inst, owner, a, config, landlord, policy, consent, receipt, receiptKey, source, feed, rpc, wires, move, reference, swap,
     removePool: () => { delete records[config.pool]; },
     removeLandlord: () => { landlordPresent = false; sync(); },
     time: () => now, advance: (seconds: number) => { now += seconds; slot++; sync(); },

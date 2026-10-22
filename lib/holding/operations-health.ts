@@ -17,6 +17,7 @@ export class PassHealth {
   private observedOwners = new Set<string>();
   private nonemptyHistoryOwners = new Set<string>();
   private matchedRewardOwners = new Set<string>();
+  private resetOwners = new Set<string>();
   private activeOwners = new Set<string>();
   private latest?: HoldSnapshot;
   ownersDiscovered = 0;
@@ -53,7 +54,11 @@ export class PassHealth {
       for (const o of event.observations) {
         this.observations[o.kind]++;
         if (o.kind === "reward") this.matchedRewardOwners.add(owner);
-        if (o.kind === "uncertain") this.issues.add("uncertain_history");
+        // The ledger already resets that wallet. Only unexplained history stops everyone.
+        if (o.kind === "uncertain") {
+          if (o.contained) { this.notes.add("wallet_history_reset"); this.resetOwners.add(owner); }
+          else this.issues.add("uncertain_history");
+        }
         if (o.payoutAttribution === "expired") {
           this.payoutWait.expiredReceipts++;
           this.issues.add("payout_evidence_expired");
@@ -97,9 +102,15 @@ export class PassHealth {
     if (result.status === "submitted" && result.amount) this.submittedAmount += BigInt(result.amount);
   }
   failure(code = "wallet_failure") { this.failures++; this.issues.add(code); }
+  /** History the worker could not read or explain stops collection for every wallet. */
+  historyStop() { return this.issues.has("history_gap") || this.issues.has("uncertain_history"); }
   report() {
     if (this.ownersSelected === 0) this.issues.add("no_wallets_selected");
     if (!this.feedAvailable) this.issues.add("feed_unavailable");
+    // One holder's swap is routine. Many wallets resetting in one pass looks like an
+    // upstream change, so alert (without stopping collection; each wallet already reset).
+    if (this.resetOwners.size >= 3 && this.resetOwners.size * 4 >= this.nonemptyHistoryOwners.size)
+      this.issues.add("wallet_resets_widespread");
     const s = this.latest;
     return {
       version: 1, role: this.role, mode: this.mode ?? "observation", submit: this.submit,
