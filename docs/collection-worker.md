@@ -4,6 +4,8 @@ The worker and wallet client target the merged endowment PR #5, including the co
 
 ## Review map
 
+The optional, undeployed [tracked-rewards proposal](tracked-rewards.md) replaces the fixed floor only after holder consent. It adds a reviewer permit before collection; existing modes, journals, recovery and release gates remain unchanged by default.
+
 | Module | Responsibility |
 |---|---|
 | `lib/reporter/classify.ts` | Verify finalized distributor transfers against PENIS-specific holder payouts; distinguish purchases, spending and ambiguous history |
@@ -11,6 +13,7 @@ The worker and wallet client target the merged endowment PR #5, including the co
 | `lib/reporter/journal.ts` | Single-writer, fsynced hash-chain journal; exact signed bytes saved before submission |
 | `lib/holding/snapshot.ts`, `bounds.ts` | Read finalized Config v4 accounts together, mirror the 72-hour allowance and fixed receipt expiry, include roles in the observation boundary |
 | `lib/holding/reconcile.ts` | Independent reviewer replay and per-receipt clearance; unknown evidence refunds |
+| `lib/holding/permit.ts` | Optional independent pre-collection authorization, gated separately and persisted before broadcast |
 | `lib/holding/worker.ts`, `outbox.ts` | Collect, review, release/refund, and recover ambiguous submissions without fresh duplicate authorizations |
 | `lib/holding/schema.json`, `accounts.ts`, `codec.ts` | Checked-in ABI and types generated from the reviewed local Anchor IDL |
 | `lib/holding/operations*.ts` | Explicit launch mode, local persistent collector stop, per-pass health and optional redacted alerts |

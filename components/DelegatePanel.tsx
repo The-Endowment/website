@@ -30,10 +30,11 @@ import { loadHolding, type Holding } from "@/lib/holding/wallet";
 import { HeldCollections } from "@/components/HeldCollections";
 import { loadDelegationStatus, revokeEndowmentApprovalIx, type DelegationStatus } from "@/lib/holding/delegation";
 import { flagshipInstance, formatTokens } from "@/lib/solana";
-import { DELEGATION_CLOSED_NOTE, DELEGATION_OPEN, links } from "@/lib/site";
+import { DELEGATION_CLOSED_NOTE, DELEGATION_OPEN, TRACKED_REWARDS_OPEN, links } from "@/lib/site";
 import { PledgeSteps, WalletOnboarding } from "@/components/WalletOnboarding";
 import { enrollmentWalletIssue, wasWalletDeclined, wasTransactionExpired } from "@/lib/wallet-onboarding";
 import { wasWalletCaptureStopped } from "@/lib/wallet-capture";
+import { enrollmentUsesTracked } from "@/lib/holding/consent-mode";
 
 // Show only error names and numeric codes, never provider URLs or raw payloads.
 function actionDiagnostic(error: unknown): string {
@@ -54,7 +55,7 @@ function actionDiagnostic(error: unknown): string {
  * The delegation is unlimited on purpose. The program counts a landlord, and
  * lets them register, only while at least half of u64::MAX is still approved
  * (`MIN_DELEGATION`), so a bounded approval would silently stop counting once
- * rewards used it up. Collection is constrained by the contract's baseline,
+ * rewards used it up. Collection is constrained by the selected protection mode,
  * allowance and receipt rules, with funds entering refundable holding first.
  * Payout origin is checked off-chain; the approval itself proves no provenance.
  * We use ApproveChecked so the wallet shows the token and decimals being approved.
@@ -82,12 +83,14 @@ function Connected({ inst, owner, expectedOwner, canSign }: { inst: Instance; ow
   const [loadError, setLoadError] = useState<string | null>(null);
   const [holdingError, setHoldingError] = useState<string | null>(null);
   const [agreed, setAgreed] = useState(false);
+  const [modeAgreed, setModeAgreed] = useState(false);
   const [reload, setReload] = useState(0);
   const [lastSignature, setLastSignature] = useState<string | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
   const walletIssue = enrollmentWalletIssue(owner, expectedOwner);
   const refresh = () => {
     setAgreed(false);
+    setModeAgreed(false);
     setStatus(null); setHolding(null); setLoadError(null); setHoldingError(null);
     setReload(n => n + 1);
   };
@@ -136,6 +139,7 @@ function Connected({ inst, owner, expectedOwner, canSign }: { inst: Instance; ow
   const optIn = useAction((signal: AbortSignal) => perform(signal, async signer => {
     if (walletIssue) throw new Error(walletIssue);
     if (!status || !holding || !agreed || blocker(status, holding)) throw new Error("Joining is unavailable. Refresh and review the pledge before signing.");
+    const requestedTracked = enrollmentUsesTracked(status.landlord, TRACKED_REWARDS_OPEN);
     const [freshStatus, freshHolding] = await Promise.all([
       loadDelegationStatus(client.rpc, inst, owner), loadHolding(client.rpc, inst, owner),
     ]).catch(() => { throw new Error("Could not verify your current enrollment. Refresh before trying again."); });
@@ -147,6 +151,8 @@ function Connected({ inst, owner, expectedOwner, canSign }: { inst: Instance; ow
     }
     const freshBlocker = blocker(freshStatus, freshHolding);
     if (freshBlocker) throw new Error(freshBlocker);
+    if (requestedTracked !== enrollmentUsesTracked(freshStatus.landlord, TRACKED_REWARDS_OPEN))
+      throw new Error("Your collection rules changed. Refresh and review before signing.");
     const authority = await authorityPda(inst.program, inst.config);
     const ixs: Instruction[] = [
       getCreateAssociatedTokenIdempotentInstruction({
@@ -184,8 +190,25 @@ function Connected({ inst, owner, expectedOwner, canSign }: { inst: Instance; ow
     }
     // Joining and rejoining both leave collection switched off; this switches it on,
     // with everything the account holds right now set aside as the landlord's.
-    ixs.push(await consentIx(inst, signer, "enable_collection"));
+    ixs.push(await consentIx(inst, signer, requestedTracked
+      ? "enable_tracked_collection" : "enable_collection"));
     return ixs;
+  }));
+
+  const switchMode = useAction((signal: AbortSignal, requestedTracked: boolean) => perform(signal, async signer => {
+    if ((requestedTracked && !TRACKED_REWARDS_OPEN) || !modeAgreed || walletIssue)
+      throw new Error("Review the updated collection permission first.");
+    const [fresh, h] = await Promise.all([loadDelegationStatus(client.rpc, inst, owner), loadHolding(client.rpc, inst, owner)]);
+    if (signal.aborted) throw new Error("Request cancelled.");
+    const why = blocker(fresh, h);
+    if (why) throw new Error(why);
+    if (!fresh.landlord || !fresh.delegatedToEndowment || !h.consent?.enabled
+        || (fresh.landlord.reserved[0] === 1) === requestedTracked)
+      throw new Error("Your enrollment changed. Refresh and review before switching.");
+    // Explicit owner-signed consent change. Existing approval stays as-is; old
+    // receipts become refund-only and current balance is never backfilled.
+    return [await resyncBaselineIx(inst, signer, fresh.dividendAccount),
+      await consentIx(inst, signer, requestedTracked ? "enable_tracked_collection" : "enable_collection")];
   }));
 
   const leave = useAction((signal: AbortSignal) => perform(signal, async signer => {
@@ -207,9 +230,11 @@ function Connected({ inst, owner, expectedOwner, canSign }: { inst: Instance; ow
   // These actions do not depend on a successful dashboard or receipt query.
   const stop = useAction((signal: AbortSignal) => perform(signal, async signer => [await consentIx(inst, signer, "disable_collection")]));
   const revoke = useAction((signal: AbortSignal) => perform(signal, async signer => [await revokeEndowmentApprovalIx(client.rpc, inst, signer)]));
-  const busy = optIn.isRunning || leave.isRunning || takeBack.isRunning || stop.isRunning || revoke.isRunning;
+  const busy = optIn.isRunning || switchMode.isRunning || leave.isRunning || takeBack.isRunning || stop.isRunning || revoke.isRunning;
   const delegated = Boolean(status?.landlord && status.delegatedToEndowment);
   const isIn = delegated && Boolean(holding?.consent?.enabled);
+  const tracked = status?.landlord?.reserved[0] === 1;
+  const enrollingTracked = enrollmentUsesTracked(status?.landlord ?? null, TRACKED_REWARDS_OPEN);
   const reason = status ? blocker(status, holding) : null;
 
   let delegation = "Not delegated";
@@ -259,6 +284,12 @@ function Connected({ inst, owner, expectedOwner, canSign }: { inst: Instance; ow
         )}
         {status?.landlord && (
           <div className="fact">
+            <dt>Collection rules</dt>
+            <dd>{tracked ? "Verified unspent rewards" : "Fixed starting balance"}</dd>
+          </div>
+        )}
+        {status?.landlord && (
+          <div className="fact">
             <dt>Contributed</dt>
             <dd>{formatTokens(status.landlord.totalContributed)} PUMP</dd>
           </div>
@@ -267,10 +298,27 @@ function Connected({ inst, owner, expectedOwner, canSign }: { inst: Instance; ow
 
       <HeldCollections holding={holding} error={holdingError} busy={busy || !canSign} onRetry={refresh} onReclaim={r => takeBack.dispatch(r)} />
 
+      {isIn && tracked && <p className="muted small">The collector and independent reviewer reconcile your PUMP transactions before collection. Spending uses available rewards first; purchases, transfers and refunds do not create new reward eligibility. There is no fixed enrollment balance to refill. Collection still depends on complete history and current checks.</p>}
+      {isIn && (tracked || TRACKED_REWARDS_OPEN) && !reason && !walletIssue && (
+        <div className="pledge-review">
+          <h4>{tracked ? "Return to fixed-balance protection" : "Keep collecting rewards after spending PUMP"}</h4>
+          {tracked
+            ? <p className="small">You can return to a fixed protected starting balance, set to the PUMP you hold when the transaction executes. Future collections cannot take your balance below that floor. Spending below it can prevent new rewards from being collected until the balance recovers or you reset it yourself.</p>
+            : <><p className="small">Your current rules protect a fixed starting balance. Spending below it can prevent new rewards from being collected. You can switch to transaction-history checks by both the collector and independent reviewer.</p>
+              <p className="small">The new rules collect only rewards the services identify as unspent. Purchases, ordinary transfers and refunds are excluded. This replaces the fixed balance floor with checks that depend on both services and can be wrong. A shared error or compromise can expose other PUMP within the on-chain allowance. The reward limit and refundable holding period remain.</p></>}
+          <p className="muted small">Switching transfers no tokens and needs one wallet confirmation. Your current balance starts with zero collection eligibility, existing pending contributions become refund-only, and collection waits for fresh eligibility checks.</p>
+          <label className="consent"><input type="checkbox" checked={modeAgreed} disabled={busy || !canSign}
+            onChange={e => setModeAgreed(e.target.checked)} /><span>{tracked ? "I choose a fixed floor set to my current PUMP balance." : "I accept replacing my fixed starting-balance floor with these transaction-history checks."} My PUMP approval remains unlimited. I can stop, revoke and reclaim before release.</span></label>
+          <button type="button" className="button" disabled={!modeAgreed || busy || !canSign} onClick={() => switchMode.dispatch(!tracked)}>
+            {switchMode.isRunning ? "Confirm in your wallet…" : "Review updated collection rules"}
+          </button>
+        </div>
+      )}
+
       {status && !isIn && (
         <p className="muted small">
           Eligible $PENIS in this wallet counts toward participation after the required checks. Collection uses a reward allowance and payout checks,
-          with your starting PUMP balance protected by the current contract. Want to pledge part of your holdings? Keep the
+          {enrollingTracked ? "with both services reconciling your transaction history before collecting verified unspent rewards." : "with your starting PUMP balance protected by the current contract."} Want to pledge part of your holdings? Keep the
           rest in another wallet.
         </p>
       )}
@@ -284,13 +332,13 @@ function Connected({ inst, owner, expectedOwner, canSign }: { inst: Instance; ow
       {status && !isIn && !reason && !walletIssue && (
         <div className="pledge-review">
           <h4>What you&rsquo;re approving</h4>
-          <p className="small">An unlimited PUMP token approval, your enrollment and collection permission in one transaction. Your current PUMP balance becomes the protected starting balance under the current contract. No PUMP or $PENIS is transferred by enrollment.</p>
+          <p className="small">An unlimited PUMP token approval, your enrollment and collection permission in one transaction. {enrollingTracked ? "Your current balance starts with zero reward eligibility. Later collections use transaction-history checks by both the collector and independent reviewer, without a fixed balance floor. Purchases, ordinary transfers and refunds are excluded." : "Your current PUMP balance becomes the protected starting balance under the current contract."} No PUMP or $PENIS is transferred by enrollment.</p>
+          {enrollingTracked && <p className="small">These checks depend on both services. A shared error or compromise can expose other PUMP within the on-chain reward allowance. The refundable holding period remains.</p>}
           <p className="muted small">You pay the network fee and account deposits in SOL. Your wallet shows the transaction before you approve it.</p>
           <label className="consent">
             <input type="checkbox" checked={agreed} onChange={(e) => setAgreed(e.target.checked)} disabled={busy || !canSign} />
             <span>
-              {WALLET_CAPTURE_ONLY ? "I want to inspect, without signing, the following proposed permission: unlimited token approval on my PUMP account for collection of $PENIS rewards." : "I authorize unlimited token approval on my PUMP account for collection of $PENIS rewards."} The current
-              contract protects my starting balance and limits collection using posted reward totals. Payout checks
+              {WALLET_CAPTURE_ONLY ? "I want to inspect, without signing, the following proposed permission: unlimited token approval on my PUMP account for collection of $PENIS rewards." : "I authorize unlimited token approval on my PUMP account for collection of $PENIS rewards."} {enrollingTracked ? "I rely on both services to identify unspent rewards from transaction history instead of a fixed starting-balance floor." : "The current contract protects my starting balance."} The contract limits collection using posted reward totals. Payout checks
               can make mistakes. Each collection waits at least 24 hours; I can reclaim it before release, after which
               this contract cannot refund it. While upgrade authority exists, the code and these protections can
               change. I can stop future collection at any time.
@@ -314,7 +362,7 @@ function Connected({ inst, owner, expectedOwner, canSign }: { inst: Instance; ow
                 <dd><a className="address" href={`https://solscan.io/account/${inst.program}`}>{inst.program}</a></dd>
               </div>
             </dl>
-            <p className="muted small">The current contract protects your starting PUMP balance and caps collection at your remaining posted reward allowance. Payout sources are checked off-chain. The approval itself is unlimited, and program upgrades can change these protections.</p>
+            <p className="muted small">{enrollingTracked ? "Both services check transaction history and the reviewer must authorize each collection before the collector can submit it. There is no fixed starting-balance floor." : "The current contract protects your starting PUMP balance."} Collection is capped at your remaining posted reward allowance. Payout sources are checked off-chain. The approval itself is unlimited, and program upgrades can change these protections.</p>
             <p className="muted small">You can revoke future PUMP access here or in Phantom. Any contribution already being held must be reclaimed separately before release.</p>
             <p className="muted small">Proceed only if you accept this permission and the details match. A different warning, token, delegate or unexpected transfer needs review. This page cannot dismiss wallet warnings or approve for you.</p>
           </details>

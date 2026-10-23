@@ -6,7 +6,7 @@ import fixture from "../fixtures/holding-chain.json" with { type: "json" };
 import { base64ToBytes, type Instance } from "../../lib/endowment.ts";
 import { common, holdPda } from "../../lib/holding/client.ts";
 import { concat, decodeAccount, encode, schema } from "../../lib/holding/codec.ts";
-import type { Config, Landlord, Policy, Consent, Receipt } from "../../lib/holding/types.ts";
+import type { Config, Landlord, Policy, Consent, Receipt, Permit } from "../../lib/holding/types.ts";
 import type { ParsedTransaction, SourcePolicy } from "../../lib/reporter/types.ts";
 import type { RpcCall } from "../../lib/reporter/rpc.ts";
 export async function holdingBank() {
@@ -29,6 +29,8 @@ export async function holdingBank() {
   const config = read<Config>("Config", inst.config), policy = read<Policy>("CollectionPolicy", a.policy),
     consent = read<Consent>("CollectionConsent", a.consent), landlord = read<Landlord>("Landlord", a.landlord);
   const receiptKey = await holdPda(inst, "receipt", owner, 0n);
+  const permitKey = await holdPda(inst, "permit", owner);
+  let permit: Permit | null = null;
   const receipt = read<Receipt>("PendingCollection", receiptKey);
   let now = 1800000000, slot = 10, balance = 20n, landlordPresent = true;
   const transactions: ParsedTransaction[] = [], wires: string[] = [], feed = walletPayouts([], {mint: inst.coinMint, quoteMint: inst.dividendMint});
@@ -46,6 +48,8 @@ export async function holdingBank() {
   const sync = () => {
     write("Config", inst.config, config); write("CollectionPolicy", a.policy, policy);
     write("CollectionConsent", a.consent, consent);
+    if (permit) write("CollectionPermit", permitKey, permit);
+    else delete records[permitKey];
     if (landlordPresent) write("Landlord", a.landlord, landlord);
     else delete records[a.landlord];
     token(a.dividend_account, balance); token(a.pending_vault, policy.pending);
@@ -82,6 +86,7 @@ export async function holdingBank() {
       Object.assign(receipt, { amount, collected_at: BigInt(now), release_at: BigInt(now + 86400),
         refund_at: BigInt(now + 259200), consent_epoch: consent.epoch, nonce: consent.next_nonce });
       consent.next_nonce++; policy.pending += amount;
+      if (landlord.reserved[0] === 1) landlord.baseline = balance;
     }
     transactions.push(tx); sync(); return tx;
   };
@@ -136,6 +141,15 @@ export async function holdingBank() {
   }) as RpcCall;
   sync();
   return { inst, owner, a, config, landlord, policy, consent, receipt, receiptKey, source, feed, rpc, wires, move, reference, swap,
+    permitKey,
+    authorize: (amount: bigint, overrides: Partial<Permit> = {}) => {
+      permit = { config: inst.config, owner, collector: policy.collector, reviewer: policy.reviewer,
+        consent_epoch: consent.epoch, nonce: consent.next_nonce, expected_balance: balance, amount,
+        valid_until: BigInt(now + 600), count_at: config.last_count_at, refresher_epoch: config.refresher_epoch,
+        pause_started_at: config.pause_started_at, observation_day: BigInt(Math.floor(now / 86400)),
+        evidence_hash: Array(32).fill(7), bump: 0, ...overrides };
+      sync(); return permit;
+    },
     removePool: () => { delete records[config.pool]; },
     removeLandlord: () => { landlordPresent = false; sync(); },
     time: () => now, advance: (seconds: number) => { now += seconds; slot++; sync(); },

@@ -20,7 +20,12 @@ export type Decision = {
   sweepSignature: string;
   collectedAt: string;
 };
-export type ReviewedLedger = Ledger & { reviewer?: string; reviews?: Record<string, Decision> };
+export type ReviewedLedger = Ledger & {
+  reviewer?: string;
+  reviews?: Record<string, Decision>;
+  /** New grants have stricter boundaries than replaying existing receipts. */
+  authorizationBinding?: string;
+};
 const hash = (value: unknown) =>
   createHash("sha256").update(JSON.stringify(value)).digest("hex");
 

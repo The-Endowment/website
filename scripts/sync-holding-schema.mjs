@@ -13,6 +13,8 @@ const names = new Set([
   "resync_baseline",
   "deregister_landlord",
   "enable_collection",
+  "enable_tracked_collection",
+  "authorize_collection",
   "disable_collection",
   "initialize_collection",
   "sweep",
@@ -37,8 +39,10 @@ const roots = [
   "Landlord",
   "CollectionPolicy",
   "CollectionConsent",
+  "CollectionPermit",
   "PendingCollection",
   "CollectionReport",
+  "CollectionObservation",
 ];
 const definitions = Object.fromEntries(idl.types.map((x) => [x.name, x.type])),
   types = {};

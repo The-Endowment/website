@@ -141,6 +141,24 @@ export type CollectionConsent = {
   started_at: bigint;
 };
 
+export type CollectionPermit = {
+  config: Address;
+  owner: Address;
+  collector: Address;
+  reviewer: Address;
+  consent_epoch: bigint;
+  nonce: bigint;
+  expected_balance: bigint;
+  amount: bigint;
+  valid_until: bigint;
+  count_at: bigint;
+  refresher_epoch: number;
+  pause_started_at: bigint;
+  observation_day: bigint;
+  evidence_hash: number[];
+  bump: number;
+};
+
 export type PendingCollection = {
   config: Address;
   owner: Address;
@@ -164,4 +182,13 @@ export type CollectionReport = {
   amount: bigint;
   valid_until: bigint;
   evidence_hash: number[];
+};
+
+export type CollectionObservation = {
+  collector: Address;
+  reviewer: Address;
+  count_at: bigint;
+  refresher_epoch: number;
+  pause_started_at: bigint;
+  observation_day: bigint;
 };

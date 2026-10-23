@@ -3,6 +3,8 @@ export const MAIN_POOL = "AXTq4JHNYHSnooqjoDmtL9WW5eEgnkkMSWq76Kznidnz";
 
 /** Delegation stays closed until the contract is live: set NEXT_PUBLIC_DELEGATION_OPEN=true to open it. */
 export const DELEGATION_OPEN = process.env.NEXT_PUBLIC_DELEGATION_OPEN === "true";
+/** Enable only after the tracked-rewards contract and both workers are reviewed and deployed. */
+export const TRACKED_REWARDS_OPEN = process.env.NEXT_PUBLIC_TRACKED_REWARDS_OPEN === "true";
 export const DELEGATION_CLOSED_NOTE = "Pledging opens once the contract is deployed and checked.";
 
 export const links = {

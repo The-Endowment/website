@@ -4,6 +4,7 @@ import { getTokenDecoder } from "@solana-program/token-2022";
 import {
   base64ToBytes,
   CPMM_PROGRAM,
+  SYSTEM_PROGRAM,
   parsePool,
   type Instance,
   type PoolAccounts,
@@ -12,7 +13,7 @@ import type { RpcCall } from "../reporter/rpc.ts";
 import type { Snapshot } from "../reporter/snapshot.ts";
 import { common, holdPda } from "./client.ts";
 import { decodeAccount, schema } from "./codec.ts";
-import type { Config, Consent, Landlord, Policy, Receipt } from "./types.ts";
+import type { Config, Consent, Landlord, Policy, Receipt, Permit } from "./types.ts";
 import { rewardAllowance } from "./bounds.ts";
 type Account = { owner: string; data: [string, string] };
 export type HoldSnapshot = Snapshot & {
@@ -22,6 +23,8 @@ export type HoldSnapshot = Snapshot & {
   consent: Consent | null;
   landlord: Landlord | null;
   pool: PoolAccounts | null;
+  tracked: boolean;
+  permit: Permit | null;
 };
 const CLOCK = address("SysvarC1ock11111111111111111111111111111111");
 const U64_MAX = (1n << 64n) - 1n;
@@ -57,6 +60,7 @@ export async function holdSnapshot(
     a.coin_vault,
     CLOCK,
     initial.pool,
+    await holdPda(inst, "permit", owner),
   ];
   const bank = await rpc<{
     context: { slot: number };
@@ -71,7 +75,7 @@ export async function holdSnapshot(
     bank.context.slot < minSlot
   )
     throw new Error("Incomplete or stale bank");
-  const [c, p, co, l, s, v, held, coin, clock, pool] = bank.value;
+  const [c, p, co, l, s, v, held, coin, clock, pool, pe] = bank.value;
   const config = decodeAccount<Config>("Config", accountBytes(c, inst.program));
   const policy = decodeAccount<Policy>(
     "CollectionPolicy",
@@ -86,12 +90,17 @@ export async function holdSnapshot(
   const landlord = l
     ? decodeAccount<Landlord>("Landlord", accountBytes(l, inst.program))
     : null;
+  // A transfer can pre-fund this PDA before init_if_needed allocates it. It is
+  // still an absent permit; SOL dust must not quarantine an existing holder.
+  const emptyPermit = pe?.owner === SYSTEM_PROGRAM && pe.data[1] === "base64" && pe.data[0] === "";
+  const permit = pe && !emptyPermit ? decodeAccount<Permit>("CollectionPermit", accountBytes(pe, inst.program)) : null;
   if (
     config.version !== 4 ||
     config.pool !== initial.pool ||
     config.coin_mint !== inst.coinMint ||
     config.dividend_mint !== inst.dividendMint ||
     policy.config !== inst.config ||
+    (permit && (permit.config !== inst.config || permit.owner !== owner)) ||
     (consent && (consent.config !== inst.config || consent.owner !== owner)) ||
     (landlord &&
       (landlord.version !== 3 ||
@@ -171,13 +180,15 @@ export async function holdSnapshot(
   const room =
     (cap < U64_MAX ? cap : U64_MAX) - treasury.amount - policy.pending;
   const balance = source?.amount ?? 0n;
+  const tracked = landlord?.reserved[0] === 1;
   const aboveBaseline =
     balance > (landlord?.baseline ?? balance)
       ? balance - landlord!.baseline
       : 0n;
   const earned = landlord ? rewardAllowance(config, landlord, BigInt(now)) : 0n;
+  const permitted = validPermit(permit, { config, policy, consent, balance, now }) ? permit!.amount : 0n;
   const allowance = [
-    aboveBaseline,
+    tracked ? role === "reviewer" ? balance : permitted : aboveBaseline,
     source?.delegatedAmount ?? 0n,
     earned,
   ].reduce((a, b) => (a < b ? a : b));
@@ -187,6 +198,8 @@ export async function holdSnapshot(
     policy,
     consent,
     landlord,
+    tracked,
+    permit,
     // Refunds do not depend on a healthy trading pool.
     pool: role === "collector" ? parsePool(accountBytes(pool, CPMM_PROGRAM)) : null,
     slot: bank.context.slot,
@@ -201,6 +214,7 @@ export async function holdSnapshot(
     binding: [
       VERIFICATION_VERSION,
       ...(role === "reviewer" ? ["reviewer-v1"] : []),
+      ...(tracked ? ["tracked-rewards-v1"] : []),
       inst.config,
       owner,
       consent?.epoch ?? 0n,
@@ -219,6 +233,27 @@ export async function holdSnapshot(
     reporterEpoch: "0",
     reporter: policy.collector,
   };
+}
+
+/** Receipt evidence survives collector/pause changes; new grants must not.
+ * Match the collector's reset boundaries without skipping receipt history. */
+export function authorizationBinding(s: HoldSnapshot) {
+  return [s.binding, s.policy.collector, s.config.pause_started_at, s.config.paused_until].join(":");
+}
+
+/** A permit never replaces the collector's independent replay. Require enough
+ * lifetime for a fresh 45-second collection request, otherwise wait for renewal. */
+export function validPermit(p: Permit | null, s: {
+  config: Config; policy: Policy; consent: Consent | null; balance: bigint; now: number;
+}, minimumRemainingSeconds = 45) {
+  return Boolean(p && s.consent?.enabled && p.consent_epoch === s.consent.epoch
+    && p.nonce === s.consent.next_nonce && p.expected_balance === s.balance
+    && p.collector === s.policy.collector && p.reviewer === s.policy.reviewer
+    && p.collector !== p.reviewer && p.amount > 0n
+    && p.valid_until >= BigInt(s.now + minimumRemainingSeconds)
+    && p.count_at === s.config.last_count_at && p.refresher_epoch === s.config.refresher_epoch
+    && p.pause_started_at === s.config.pause_started_at
+    && p.observation_day === BigInt(Math.floor(s.now / 86400)) && p.evidence_hash.some(b => b !== 0));
 }
 export async function pendingReceipts(
   rpc: RpcCall,
