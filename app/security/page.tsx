@@ -83,7 +83,7 @@ export default function Security() {
         <section className="row">
           <h2 className="row-label">Results</h2>
           <div className="row-body">
-            <p>The original review, of commit {REVIEWED_COMMIT.slice(0, 7)}:</p>
+            <p>The original review, of commit {REVIEWED_COMMIT.slice(0, 7)}. Review claims apply to the linked revisions; they do not certify later changes.</p>
             <div className="figures">
               <div className="figure">
                 <span className="figure-value">152</span>
@@ -129,10 +129,12 @@ export default function Security() {
                 <span>The current program cannot pay treasury $PENIS or locked liquidity to an operator. It can use $PENIS for the configured permanent liquidity deposits after the goal.</span>
               </li>
               <li>
-                <strong>Landlords keep what they hold</strong>
+                <strong>Owner-approved collection rules</strong>
                 <span>
-                  Collections cannot reduce PUMP below the recorded starting balance and are limited by an allowance
-                  calculated from posted reward totals. The approval covers only that PUMP account.
+                  Fixed-balance protection prevents collections below the recorded starting balance. A separate opt-in to
+                  transaction-history checks replaces that floor with a reviewer authorization and the collector&rsquo;s
+                  independent checks. Both modes retain the posted reward allowance and refundable holding period.
+                  The token approval covers only the selected PUMP account.
                 </span>
               </li>
               <li>
@@ -194,8 +196,9 @@ export default function Security() {
                 <strong>An unlimited approval</strong>
                 <span>
                   Joining approves the endowment on your PUMP account for an unlimited amount, which keeps counting
-                  simple. What it can actually collect is set by the contract&rsquo;s cap and baseline, not by the
-                  approval. Your $PENIS and other tokens aren&rsquo;t included.
+                  simple. Collection is bounded by the contract&rsquo;s allowance and your selected protection rules.
+                  Transaction-history mode depends on both services identifying rewards correctly; a shared error or
+                  compromise can expose other PUMP within those limits. Your $PENIS and other tokens aren&rsquo;t included.
                 </span>
               </li>
               <li>

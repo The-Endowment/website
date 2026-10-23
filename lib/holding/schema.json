@@ -11,6 +11,16 @@
       138,
       218
     ],
+    "CollectionPermit": [
+      2,
+      64,
+      132,
+      37,
+      226,
+      29,
+      122,
+      0
+    ],
     "CollectionPolicy": [
       203,
       231,
@@ -589,6 +599,72 @@
         }
       ]
     },
+    "CollectionPermit": {
+      "kind": "struct",
+      "fields": [
+        {
+          "name": "config",
+          "type": "pubkey"
+        },
+        {
+          "name": "owner",
+          "type": "pubkey"
+        },
+        {
+          "name": "collector",
+          "type": "pubkey"
+        },
+        {
+          "name": "reviewer",
+          "type": "pubkey"
+        },
+        {
+          "name": "consent_epoch",
+          "type": "u64"
+        },
+        {
+          "name": "nonce",
+          "type": "u64"
+        },
+        {
+          "name": "expected_balance",
+          "type": "u64"
+        },
+        {
+          "name": "amount",
+          "type": "u64"
+        },
+        {
+          "name": "valid_until",
+          "type": "i64"
+        },
+        {
+          "name": "count_at",
+          "type": "i64"
+        },
+        {
+          "name": "refresher_epoch",
+          "type": "u32"
+        },
+        {
+          "name": "pause_started_at",
+          "type": "i64"
+        },
+        {
+          "name": "evidence_hash",
+          "type": {
+            "array": [
+              "u8",
+              32
+            ]
+          }
+        },
+        {
+          "name": "bump",
+          "type": "u8"
+        }
+      ]
+    },
     "PendingCollection": {
       "kind": "struct",
       "fields": [
@@ -737,6 +813,68 @@
         }
       ],
       "args": []
+    },
+    "authorize_collection": {
+      "discriminator": [
+        196,
+        213,
+        189,
+        88,
+        241,
+        241,
+        97,
+        61
+      ],
+      "accounts": [
+        {
+          "name": "reviewer",
+          "writable": true,
+          "signer": true
+        },
+        {
+          "name": "owner"
+        },
+        {
+          "name": "config"
+        },
+        {
+          "name": "policy"
+        },
+        {
+          "name": "consent"
+        },
+        {
+          "name": "landlord",
+          "writable": true
+        },
+        {
+          "name": "dividend_account"
+        },
+        {
+          "name": "authority"
+        },
+        {
+          "name": "permit",
+          "writable": true
+        },
+        {
+          "name": "system_program"
+        }
+      ],
+      "args": [
+        {
+          "name": "nonce",
+          "type": "u64"
+        },
+        {
+          "name": "report",
+          "type": {
+            "defined": {
+              "name": "CollectionReport"
+            }
+          }
+        }
+      ]
     },
     "begin_count": {
       "discriminator": [
@@ -984,6 +1122,42 @@
         209,
         124,
         63
+      ],
+      "accounts": [
+        {
+          "name": "owner",
+          "signer": true
+        },
+        {
+          "name": "config"
+        },
+        {
+          "name": "policy"
+        },
+        {
+          "name": "consent",
+          "writable": true
+        },
+        {
+          "name": "landlord",
+          "writable": true
+        },
+        {
+          "name": "dividend_account"
+        }
+      ],
+      "args": []
+    },
+    "enable_tracked_collection": {
+      "discriminator": [
+        91,
+        138,
+        75,
+        173,
+        228,
+        43,
+        87,
+        214
       ],
       "accounts": [
         {

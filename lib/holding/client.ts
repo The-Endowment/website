@@ -25,7 +25,7 @@ const text = (s: string) => new TextEncoder().encode(s);
 export const MEMO_PROGRAM = address("MemoSq4gqABAXKb96qnH8TysNcWxMyWCqXgDLGmfcHr");
 export const holdPda = async (
   inst: Instance,
-  kind: "policy" | "consent" | "receipt",
+  kind: "policy" | "consent" | "receipt" | "permit",
   owner?: Address,
   nonce?: bigint,
 ) => {
@@ -35,6 +35,7 @@ export const holdPda = async (
         policy: "collection_policy",
         consent: "collection_consent",
         receipt: "pending_collection",
+        permit: "collection_permit",
       }[kind],
     ),
     getAddressEncoder().encode(inst.config),
@@ -91,6 +92,7 @@ export async function consentIx(
   name:
     | "register_landlord"
     | "enable_collection"
+    | "enable_tracked_collection"
     | "disable_collection"
     | "deregister_landlord",
 ) {
@@ -169,11 +171,12 @@ export async function collectIx(
     valid_until: bigint;
     evidence_hash: Uint8Array;
   },
+  tracked = false,
 ) {
   const index = poolAccounts.mints.indexOf(inst.dividendMint);
   if (index < 0 || poolAccounts.mints[1 - index] !== inst.coinMint)
     throw new Error("Pool mint mismatch");
-  return instruction(
+  const ix = instruction(
     inst.program,
     "sweep",
     {
@@ -187,4 +190,17 @@ export async function collectIx(
     },
     { nonce, report },
   );
+  return tracked ? { ...ix, accounts: [...ix.accounts!, {
+    address: await holdPda(inst, "permit", owner), role: AccountRole.READONLY,
+  }] } satisfies Instruction : ix;
+}
+
+export async function authorizeCollectionIx(
+  inst: Instance, owner: Address, reviewer: TransactionSigner, nonce: bigint,
+  report: import("./accounts.ts").CollectionReport,
+) {
+  return instruction(inst.program, "authorize_collection", {
+    ...(await common(inst, owner)), owner, reviewer,
+    permit: await holdPda(inst, "permit", owner),
+  }, { nonce, report });
 }

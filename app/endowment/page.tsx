@@ -14,7 +14,7 @@ export const metadata: Metadata = {
 const faqs = [
   {
     q: "What does the endowment collect?",
-    a: "Eligible PUMP rewards from $PENIS. The current contract protects your starting balance and limits collections using posted reward totals; the collector checks payout history first. A reviewer can return mistakes before release, and you can reclaim pending collections yourself. Checks can fail, and released contributions cannot be refunded by this contract. To pledge only part of your $PENIS, keep the rest in another wallet.",
+    a: "Eligible unspent PUMP rewards from $PENIS. Collection follows the protection rules you approve on the wallet page and is capped using posted reward totals. The collector checks payout history; an independent reviewer can return mistakes before release, and you can reclaim pending collections yourself. Checks can fail, and released contributions cannot be refunded by this contract. To pledge only part of your $PENIS, keep the rest in another wallet.",
   },
   {
     q: "Can I donate $PENIS instead?",
@@ -94,7 +94,7 @@ export default function Endowment() {
           <ul className="plain-list">
             <li>
               <strong>A mandatory reward allowance</strong>
-              <span>Collection is limited by posted reward totals and your protected starting balance. Payout checks separately identify eligible rewards.</span>
+              <span>Collection is capped by posted reward totals and the protection rules you approve when enrolling. Payout checks separately identify eligible rewards.</span>
             </li>
             <li>
               <strong>Held for 24 hours</strong>

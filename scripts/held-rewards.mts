@@ -25,7 +25,9 @@ async function main() {
   const role = selectedRole;
   const mode = process.argv.find((a) => a.startsWith("--mode="))?.split("=")[1];
   const submit = process.argv.includes("--submit");
+  const authorizeCollections = process.argv.includes("--authorize");
   if (role !== "collector" && role !== "reviewer") throw new Error("Use --role=collector or --role=reviewer");
+  if (authorizeCollections && role !== "reviewer") throw new Error("Only the reviewer can authorize tracked collections");
   assertHeartbeatMode({ endpoint: heartbeatEndpoint, expectedMode: process.env.HOLD_HEARTBEAT_MODE, submit });
   if (submit && !HOLD_COLLECTION_RELEASED) throw new Error("Draft release hold: submission requires a reviewed rollout");
   const rpcUrl = process.env.SOLANA_RPC_URL, data = process.env.HOLD_DATA_DIR, config = await flagshipConfig();
@@ -38,14 +40,17 @@ async function main() {
   const health = new PassHealth(role, submit, mode);
   try {
     const controls = await launchControls({ role, submit, mode, stopFile, foundersFile: process.env.HOLD_FOUNDERS_FILE });
-    if (role === "collector" && await collectionStopped(stopFile)) health.issues.add("collection_quarantined");
+    const authorizationControls = authorizeCollections ? await launchControls({
+      role: "collector", submit, mode, stopFile, foundersFile: process.env.HOLD_FOUNDERS_FILE,
+    }) : null;
+    if ((role === "collector" || authorizeCollections) && await collectionStopped(stopFile)) health.issues.add("collection_quarantined");
     const rpc = jsonRpc(rpcUrl);
     const inst: Instance = { program: PROGRAM_ID, config, coinMint: PENIS_MINT, dividendMint: PUMP_MINT,
       coinTokenProgram: TOKEN_2022_PROGRAM_ADDRESS, dividendTokenProgram: TOKEN_2022_PROGRAM_ADDRESS };
     const requireFreshFeed = () => assertFeedFresh(directory).catch(async () => {
       health.feedAvailable = false;
       health.issues.add("feed_unavailable");
-      if (role === "collector") await quarantine(stopFile, "feed_unavailable");
+      if (role === "collector" || authorizeCollections) await quarantine(stopFile, "feed_unavailable");
       throw new Error("Payout archive no longer usable");
     });
     const loadFeed = () => readArchivedFeed(directory).then((records) => {
@@ -53,8 +58,8 @@ async function main() {
     }).catch(async () => {
       health.feedAvailable = false;
       health.issues.add("feed_unavailable");
+      if (role === "collector" || authorizeCollections) await quarantine(stopFile, "feed_unavailable");
       if (role === "collector") {
-        await quarantine(stopFile, "feed_unavailable");
         throw new Error("Payout feed unavailable; collection quarantined");
       }
       return walletPayouts([], { mint: PENIS_MINT, quoteMint: PUMP_MINT }); // Missing evidence never blocks reviewer refunds.
@@ -84,6 +89,14 @@ async function main() {
         const result = await walletTick({ rpc, rpcUrl, inst, directory, submit, role, feed, loadFeed,
           keyFile: process.env.HOLD_KEYPAIR_FILE,
           beforeRelease: requireFreshFeed,
+          authorizeCollections: authorizeCollections && authorizationControls !== null
+            && includesOwner(authorizationControls, "collector", owner),
+          beforeAuthorize: async (snapshot) => {
+            await requireFreshFeed();
+            if (health.historyStop() || health.failures > 0) await quarantine(stopFile, "history_evidence_gap");
+            if (!authorizationControls) throw new Error("Reviewer authorization is disabled");
+            await assertCollectionAllowed(authorizationControls, owner, snapshot);
+          },
           beforeCollect: async (snapshot) => {
             // Capture can fail during a long wallet pass. Recheck immediately
             // before signing and broadcast, without fetching the public feed.
@@ -97,20 +110,21 @@ async function main() {
         }, address(owner), receipts.filter((r) => r.receipt.owner === owner));
         health.outcome(result);
         if (role === "collector" && health.historyStop()) await quarantine(stopFile, "history_evidence_gap");
-        console.log(JSON.stringify({ role, owner, status: result.status }));
+        console.log(JSON.stringify({ role, owner, status: result.status,
+          ...("authorization" in result ? { authorization: result.authorization } : {}) }));
       } catch {
         health.failure(); process.exitCode = 1;
-        if (role === "collector") await quarantine(stopFile, "wallet_failure");
+        if (role === "collector" || authorizeCollections) await quarantine(stopFile, "wallet_failure");
         // Raw provider exceptions can include URLs with credentials.
         console.error(JSON.stringify({ role, owner, error: "wallet_failure", detail: "Inspect durable journal and provider status; collection remains stopped when quarantined." }));
       }
     }
   } catch {
     health.failure("pass_failure"); process.exitCode = 1;
-    if (role === "collector") await quarantine(stopFile, "pass_failure");
+    if (role === "collector" || authorizeCollections) await quarantine(stopFile, "pass_failure");
   } finally {
     try {
-      if (role === "collector" && await collectionStopped(stopFile)) health.issues.add("collection_quarantined");
+      if ((role === "collector" || authorizeCollections) && await collectionStopped(stopFile)) health.issues.add("collection_quarantined");
       const report = health.report();
       if (!completedHealthyPass(report)) process.exitCode = 1;
       await saveHealth(directory, report);

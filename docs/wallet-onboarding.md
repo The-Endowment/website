@@ -10,6 +10,10 @@ The copy explains that the token approval is unlimited, while the current progra
 
 Reference: [Phantom's domain and transaction warning guidance](https://docs.phantom.com/developer-powertools/domain-and-transaction-warnings).
 
+## Optional tracked rewards consent
+
+The [tracked-rewards proposal](tracked-rewards.md) adds a separate owner-signed choice, gated by `NEXT_PUBLIC_TRACKED_REWARDS_OPEN=true` after the corresponding contract and worker rollout. Its disclosure replaces the fixed-floor promise with independent transaction-history checks and the remaining allowance/holding protections. Existing holders keep legacy consent until they choose to switch. Unlimited approval and Phantom's warning remain; this change does not hide or dismiss them.
+
 ## Local unsigned transaction capture
 
 `NEXT_PUBLIC_WALLET_CAPTURE_ONLY=true` enables capture only with `NODE_ENV=development` (`next dev`). It is ignored by production builds, including Vercel previews and production deployments, so an accidentally retained flag cannot disable Stop collection, Revoke, Leave or reclaim. Do not configure it on hosting; restart the local development server after changing it. Next.js embeds public environment values at build time.

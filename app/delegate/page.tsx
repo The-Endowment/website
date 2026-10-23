@@ -59,15 +59,16 @@ export default function Delegate() {
                 <strong>A delegation</strong>
                 <span>
                   An unlimited token approval on your PUMP account only, shown in your wallet. The contract decides what
-                  it can collect using a reward allowance and your protected starting balance. Your
+                  it can collect using a reward allowance and the collection rules you approve below. Your
                   $PENIS and other tokens aren&rsquo;t included.
                 </span>
               </li>
               <li>
                 <strong>A landlord record</strong>
                 <span>
-                  It records a protected baseline equal to your PUMP balance when you join and tracks your net contribution. If you
-                  leave and come back later, it resets to your balance at that moment.
+                  It records your collection rules and net contribution. Fixed-balance protection preserves your enrollment
+                  balance as a floor. If you choose transaction-history checks instead, both services identify unspent rewards
+                  without that fixed floor. Rejoining starts with zero reward eligibility for your current balance.
                 </span>
               </li>
               <li>

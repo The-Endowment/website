@@ -18,6 +18,7 @@ import {
 import { keySigner, prepare } from "./sign.ts";
 import { publish, settleOutbox, signatureStatus } from "./outbox.ts";
 import type { Receipt } from "./types.ts";
+import { authorizeRewards } from "./permit.ts";
 
 export type WorkerOptions = {
   rpc: RpcCall;
@@ -32,6 +33,9 @@ export type WorkerOptions = {
   role: "collector" | "reviewer";
   beforeCollect?: (snapshot: HoldSnapshot) => Promise<void>;
   beforeRelease?: () => Promise<void>;
+  /** Separate opt-in: existing reviewer --submit enables recovery, not grants. */
+  authorizeCollections?: boolean;
+  beforeAuthorize?: (snapshot: HoldSnapshot) => Promise<void>;
   observe?: (event:
     | { kind: "snapshot"; snapshot: HoldSnapshot }
     | { kind: "observations"; observations: Observation[] }
@@ -136,6 +140,7 @@ export async function walletTick(
                     Buffer.from(evidenceHash, "hex"),
                   ),
                 },
+                latest.tracked,
               );
               // Engine's nonce denotes the expected post-execution counter.
               return prepare(o.rpcUrl, signer, [ix], s.slot, {
@@ -271,9 +276,10 @@ export async function walletTick(
         });
         outcomes.push({ receipt: entry.address, action, result });
       }
+      const authorization = s.tracked ? await authorizeRewards(o, owner, source, journal, s, snapshot, Boolean(evidenceRetry)) : undefined;
       return evidenceRetry
         ? { status: "awaiting_payout", reason: evidenceRetry.message, retryUntil: evidenceRetry.retryUntil, waitStartedAt, waitSeconds, outcomes }
-        : { status: "reviewed", outcomes };
+        : { status: "reviewed", outcomes, ...(authorization ? { authorization } : {}) };
     },
   );
 }

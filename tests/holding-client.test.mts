@@ -14,10 +14,11 @@ import {
 } from "@solana/kit";
 import { getSetComputeUnitLimitInstruction } from "@solana-program/compute-budget";
 import fixture from "./fixtures/holding-chain.json" with { type: "json" };
+import trackedFixture from "./fixtures/tracked-collection.json" with { type: "json" };
 import { base64ToBytes, parsePool, type Instance } from "../lib/endowment.ts";
-import { collectIx, common, holdPda, settleIx, reviewIx, consentIx } from "../lib/holding/client.ts";
+import { collectIx, common, holdPda, settleIx, reviewIx, consentIx, authorizeCollectionIx } from "../lib/holding/client.ts";
 import { decodeAccount, encode, concat, schema } from "../lib/holding/codec.ts";
-import type { Consent, Receipt, Config } from "../lib/holding/types.ts";
+import type { Consent, Receipt, Config, Permit } from "../lib/holding/types.ts";
 const inst: Instance = {
   program: address(fixture.program),
   config: address(fixture.config),
@@ -31,6 +32,26 @@ const bytes = (key: string) =>
   base64ToBytes(
     (fixture.records as Record<string, { data: string[] }>)[key].data[0],
   );
+
+test("tracked consent and permit match a real Rust execution and derived account", async () => {
+  const f = trackedFixture;
+  const instance: Instance = { program: address(f.program), config: address(f.config),
+    coinMint: address(f.coinMint), dividendMint: address(f.dividendMint),
+    coinTokenProgram: address(f.coinTokenProgram), dividendTokenProgram: address(f.dividendTokenProgram) };
+  const holder = address(f.owner);
+  assert.equal(await holdPda(instance, "permit", holder), f.permitAddress);
+  const permit = decodeAccount<Permit>("CollectionPermit", base64ToBytes(f.permitData));
+  const authorize = await authorizeCollectionIx(instance, holder, createNoopSigner(address(f.reviewer)), permit.nonce, {
+    consent_epoch: permit.consent_epoch, expected_balance: permit.expected_balance,
+    amount: permit.amount, valid_until: permit.valid_until, evidence_hash: permit.evidence_hash,
+  });
+  assert.deepEqual([...authorize.data!], f.authorizeData);
+  assert.deepEqual(authorize.accounts!.map(a => ({ address: a.address,
+    writable: (a.role & 1) !== 0, signer: (a.role & 2) !== 0 })), f.authorizeAccounts);
+  const enable = await consentIx(instance, createNoopSigner(holder), "enable_tracked_collection");
+  assert.deepEqual([...enable.data!], f.enableData);
+  assert.equal(permit.expected_balance, 60n); assert.equal(permit.amount, 20n);
+});
 
 test("holding client matches bytes and privileges produced by Rust/LiteSVM", async () => {
   const consent = decodeAccount<Consent>(
