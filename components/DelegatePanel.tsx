@@ -34,6 +34,8 @@ import { DELEGATION_CLOSED_NOTE, DELEGATION_OPEN, links } from "@/lib/site";
 import { PledgeSteps, WalletOnboarding } from "@/components/WalletOnboarding";
 import { enrollmentWalletIssue, wasWalletDeclined, wasTransactionExpired } from "@/lib/wallet-onboarding";
 import { wasWalletCaptureStopped } from "@/lib/wallet-capture";
+import { BaselineReset } from "@/components/BaselineReset";
+import { baselineResetInstructions } from "@/lib/holding/baseline-reset";
 
 // Show only error names and numeric codes, never provider URLs or raw payloads.
 function actionDiagnostic(error: unknown): string {
@@ -188,6 +190,20 @@ function Connected({ inst, owner, expectedOwner, canSign }: { inst: Instance; ow
     return ixs;
   }));
 
+  const resetBaseline = useAction((signal: AbortSignal) => perform(signal, async signer => {
+    if (walletIssue || !status?.landlord || !holding?.consent || blocker(status, holding))
+      throw new Error("Refresh and review your current pledge before resetting its protected balance.");
+    const preview = { baseline: status.landlord.baseline, balance: status.dividendBalance,
+      consentEpoch: holding.consent.epoch };
+    const [freshStatus, freshHolding] = await Promise.all([
+      loadDelegationStatus(client.rpc, inst, owner), loadHolding(client.rpc, inst, owner),
+    ]);
+    if (signal.aborted) throw new Error("Request cancelled.");
+    const why = blocker(freshStatus, freshHolding);
+    if (why) throw new Error(why);
+    return baselineResetInstructions(inst, signer, freshStatus, freshHolding, preview);
+  }));
+
   const leave = useAction((signal: AbortSignal) => perform(signal, async signer => {
     if (!status) throw new Error("Use the independent recovery controls below while the dashboard is unavailable.");
     const ixs: Instruction[] = [];
@@ -207,7 +223,7 @@ function Connected({ inst, owner, expectedOwner, canSign }: { inst: Instance; ow
   // These actions do not depend on a successful dashboard or receipt query.
   const stop = useAction((signal: AbortSignal) => perform(signal, async signer => [await consentIx(inst, signer, "disable_collection")]));
   const revoke = useAction((signal: AbortSignal) => perform(signal, async signer => [await revokeEndowmentApprovalIx(client.rpc, inst, signer)]));
-  const busy = optIn.isRunning || leave.isRunning || takeBack.isRunning || stop.isRunning || revoke.isRunning;
+  const busy = optIn.isRunning || resetBaseline.isRunning || leave.isRunning || takeBack.isRunning || stop.isRunning || revoke.isRunning;
   const delegated = Boolean(status?.landlord && status.delegatedToEndowment);
   const isIn = delegated && Boolean(holding?.consent?.enabled);
   const reason = status ? blocker(status, holding) : null;
@@ -266,6 +282,12 @@ function Connected({ inst, owner, expectedOwner, canSign }: { inst: Instance; ow
       </dl>
 
       <HeldCollections holding={holding} error={holdingError} busy={busy || !canSign} onRetry={refresh} onReclaim={r => takeBack.dispatch(r)} />
+
+      {isIn && status?.landlord?.reserved[0] === 0 && status.dividendBalance < status.landlord.baseline && !reason && !walletIssue && (
+        <BaselineReset key={`${status.landlord.baseline}:${status.dividendBalance}:${holding?.consent?.epoch}`}
+          baseline={status.landlord.baseline} balance={status.dividendBalance} busy={busy} canSign={canSign}
+          onReset={() => resetBaseline.dispatch()} />
+      )}
 
       {status && !isIn && (
         <p className="muted small">
