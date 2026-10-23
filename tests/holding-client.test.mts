@@ -44,6 +44,10 @@ test("tracked consent and permit match a real Rust execution and derived account
   const authorize = await authorizeCollectionIx(instance, holder, createNoopSigner(address(f.reviewer)), permit.nonce, {
     consent_epoch: permit.consent_epoch, expected_balance: permit.expected_balance,
     amount: permit.amount, valid_until: permit.valid_until, evidence_hash: permit.evidence_hash,
+  }, {
+    collector: permit.collector, reviewer: permit.reviewer, count_at: permit.count_at,
+    refresher_epoch: permit.refresher_epoch, pause_started_at: permit.pause_started_at,
+    observation_day: permit.observation_day,
   });
   assert.deepEqual([...authorize.data!], f.authorizeData);
   assert.deepEqual(authorize.accounts!.map(a => ({ address: a.address,

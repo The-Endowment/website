@@ -146,7 +146,8 @@ export async function holdingBank() {
       permit = { config: inst.config, owner, collector: policy.collector, reviewer: policy.reviewer,
         consent_epoch: consent.epoch, nonce: consent.next_nonce, expected_balance: balance, amount,
         valid_until: BigInt(now + 600), count_at: config.last_count_at, refresher_epoch: config.refresher_epoch,
-        pause_started_at: config.pause_started_at, evidence_hash: Array(32).fill(7), bump: 0, ...overrides };
+        pause_started_at: config.pause_started_at, observation_day: BigInt(Math.floor(now / 86400)),
+        evidence_hash: Array(32).fill(7), bump: 0, ...overrides };
       sync(); return permit;
     },
     removePool: () => { delete records[config.pool]; },

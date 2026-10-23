@@ -77,6 +77,13 @@ test("both workers collect only new unspent rewards after spending below the ini
   assert.equal(data.readBigUInt64LE(8), 0n); // nonce
   assert.equal(data.readBigUInt64LE(24), 13n); // exact observed balance
   assert.equal(data.readBigUInt64LE(32), 6n); // independently eligible amount
+  // These values are inside the signed instruction, not adopted at execution.
+  assert.equal(getAddressDecoder().decode(data.subarray(80, 112)), bank.policy.collector);
+  assert.equal(getAddressDecoder().decode(data.subarray(112, 144)), bank.policy.reviewer);
+  assert.equal(data.readBigInt64LE(144), bank.config.last_count_at);
+  assert.equal(data.readUInt32LE(152), bank.config.refresher_epoch);
+  assert.equal(data.readBigInt64LE(156), bank.config.pause_started_at);
+  assert.equal(data.readBigInt64LE(164), BigInt(Math.floor(bank.time() / 86400)));
   bank.authorize(6n); // Apply modeled result; the Rust suite executes the real instruction.
   bank.reference(); // Authorization reads the PUMP account without moving tokens.
   bank.advance(300); // Five-minute timers can be offset; grant is still usable.
@@ -144,6 +151,7 @@ test("permit validity follows balances, roles, consent, count, pause and expiry"
     { expected_balance: 21n }, { consent_epoch: bank.consent.epoch + 1n }, { nonce: 1n },
     { collector: bank.owner }, { reviewer: bank.owner }, { count_at: 0n },
     { refresher_epoch: bank.config.refresher_epoch + 1 }, { pause_started_at: 1n },
+    { observation_day: BigInt(Math.floor(bank.time() / 86400)) - 1n },
     { valid_until: BigInt(bank.time() + 44) }, { evidence_hash: Array(32).fill(0) },
   ]) {
     bank.authorize(5n, fields);
@@ -219,3 +227,93 @@ test("lost reviewer history and uncertain history cannot authorize old balances"
   await assert.rejects(() => tick("reviewer"));
   assert.equal(bank.wires.length, 0);
 });
+
+for (const changed of ["pause", "collector"] as const) {
+  test(`reviewer discards old grant eligibility after a ${changed} boundary`, async t => {
+    const { bank, options, tick } = await scenario(t);
+    bank.move("reward", 10n);
+    options.reviewer.submit = false;
+    const first = authorization(await tick("reviewer"));
+    assert.equal(first.status, "dry_run");
+    assert.equal("amount" in first && first.amount, "10");
+    assert.equal((await tick("collector")).status, "idle");
+    if (changed === "pause") {
+      bank.config.pause_started_at = BigInt(bank.time());
+      bank.config.paused_until = BigInt(bank.time() + 1);
+    } else bank.policy.collector = bank.owner;
+    bank.advance(2);
+    assert.equal((await tick("collector")).status, "boundary");
+    options.reviewer.submit = true;
+    assert.equal(authorization(await tick("reviewer")).status, "idle");
+    assert.equal(bank.wires.length, 0);
+  });
+
+  test(`a ${changed} change during authorization cannot reuse the prior review`, async t => {
+    const { bank, options, tick, signaturesPrepared } = await scenario(t);
+    bank.move("reward", 10n);
+    options.reviewer.beforeAuthorize = async () => {
+      if (changed === "pause") {
+        bank.config.pause_started_at = BigInt(bank.time());
+        bank.config.paused_until = BigInt(bank.time() + 1);
+      } else bank.policy.collector = bank.owner;
+      bank.advance(2);
+    };
+    await assert.rejects(() => tick("reviewer"), /State or history changed/);
+    assert.equal(signaturesPrepared(), 0);
+    assert.equal(bank.wires.length, 0);
+  });
+}
+
+test("a grant boundary preserves receipt replay and permits only subsequently observed rewards", async t => {
+  const { bank, options, tick, directory } = await scenario(t);
+  options.reviewer.submit = false;
+  bank.move("reward", 10n);
+  assert.equal(authorization(await tick("reviewer")).status, "dry_run");
+  // The earlier collector's receipt has not yet been seen by the reviewer.
+  bank.move("sweep", 4n);
+  bank.policy.collector = bank.owner;
+  const result = await tick("reviewer", bank.receipts());
+  assert.equal(authorization(result).status, "idle");
+  assert.equal("outcomes" in result && result.outcomes[0].action, "wait");
+  await withJournal(join(directory, "reviewer", "wallets"), bank.a.dividend_account, async j => {
+    assert.equal((j.state as ReviewedLedger).reviews![bank.receiptKey].amount, "4");
+    assert.equal(j.state!.eligible, "0");
+  });
+  bank.move("reward", 3n);
+  const next = authorization(await tick("reviewer", bank.receipts()));
+  assert.equal(next.status, "dry_run");
+  assert.equal("amount" in next && next.amount, "3");
+});
+
+for (const changed of ["pause", "collector"] as const) {
+  test(`delayed payout evidence cannot revive rewards across a ${changed} boundary`, async t => {
+    const { bank, options, tick, directory } = await scenario(t);
+    options.reviewer.submit = false;
+    bank.move("reward", 10n);
+    assert.equal(authorization(await tick("reviewer")).status, "dry_run");
+    let previousBoundary: string | undefined;
+    await withJournal(join(directory, "reviewer", "wallets"), bank.a.dividend_account, async j => {
+      previousBoundary = (j.state as ReviewedLedger).authorizationBinding;
+    });
+    bank.move("reward", 5n);
+    const savedFeed = new Map(bank.feed.records);
+    bank.feed.records.clear();
+    if (changed === "pause") {
+      bank.config.pause_started_at = BigInt(bank.time() + 1);
+      bank.config.paused_until = BigInt(bank.time() + 1);
+    } else bank.policy.collector = bank.owner;
+    bank.advance(2);
+    assert.equal((await tick("reviewer")).status, "awaiting_payout");
+    await withJournal(join(directory, "reviewer", "wallets"), bank.a.dividend_account, async j => {
+      assert.equal((j.state as ReviewedLedger).authorizationBinding, previousBoundary);
+    });
+    for (const [key, value] of savedFeed) bank.feed.records.set(key, value);
+    options.reviewer.submit = true;
+    assert.equal(authorization(await tick("reviewer")).status, "idle");
+    assert.equal(bank.wires.length, 0);
+    bank.move("reward", 2n);
+    const fresh = authorization(await tick("reviewer"));
+    assert.equal(fresh.status, "submitted");
+    assert.equal("amount" in fresh && fresh.amount, "2");
+  });
+}

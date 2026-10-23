@@ -42,6 +42,7 @@ const roots = [
   "CollectionPermit",
   "PendingCollection",
   "CollectionReport",
+  "CollectionObservation",
 ];
 const definitions = Object.fromEntries(idl.types.map((x) => [x.name, x.type])),
   types = {};

@@ -5,7 +5,8 @@ import type { Journal } from "../reporter/journal.ts";
 import { withJournal } from "../reporter/journal.ts";
 import { latestCursor } from "../reporter/rpc.ts";
 import { authorizeCollectionIx, holdPda } from "./client.ts";
-import { validPermit, type HoldSnapshot } from "./snapshot.ts";
+import { authorizationBinding, validPermit, type HoldSnapshot } from "./snapshot.ts";
+import type { ReviewedLedger } from "./reconcile.ts";
 import { settleOutbox } from "./outbox.ts";
 import { keySigner, prepare } from "./sign.ts";
 import type { WorkerOptions } from "./worker.ts";
@@ -21,9 +22,10 @@ export async function authorizeRewards(
   const permitKey = await holdPda(o.inst, "permit", owner);
   return withJournal(resolve(o.directory, "permits"), permitKey, async outbox => {
     const fresh = async () => {
-      const s = await snapshot(initial.slot), state = journal.state;
+      const s = await snapshot(initial.slot), state = journal.state as ReviewedLedger | null;
       if (evidencePending || !state || !s.tracked || !s.active || !s.consent
           || s.binding !== state.binding || s.balance !== state.balance
+          || state.authorizationBinding !== authorizationBinding(s)
           || s.nonce !== initial.nonce || await latestCursor(o.rpc, source, s.slot) !== state.cursor)
         return null;
       return s;
@@ -45,6 +47,10 @@ export async function authorizeRewards(
       const ix = await authorizeCollectionIx(o.inst, owner, signer, current.consent!.next_nonce, {
         consent_epoch: current.consent!.epoch, expected_balance: BigInt(current.balance), amount,
         valid_until: BigInt(expiresAt), evidence_hash: [...Buffer.from(evidenceHash, "hex")],
+      }, {
+        collector: current.policy.collector, reviewer: current.policy.reviewer,
+        count_at: current.config.last_count_at, refresher_epoch: current.config.refresher_epoch,
+        pause_started_at: current.config.pause_started_at, observation_day: BigInt(Math.floor(current.now / 86400)),
       });
       return prepare(o.rpcUrl, signer, [ix], current.slot, {
         nonce: current.nonce, amount: amount.toString(), expiresAt, evidenceHash,

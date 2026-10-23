@@ -235,6 +235,12 @@ export async function holdSnapshot(
   };
 }
 
+/** Receipt evidence survives collector/pause changes; new grants must not.
+ * Match the collector's reset boundaries without skipping receipt history. */
+export function authorizationBinding(s: HoldSnapshot) {
+  return [s.binding, s.policy.collector, s.config.pause_started_at, s.config.paused_until].join(":");
+}
+
 /** A permit never replaces the collector's independent replay. Require enough
  * lifetime for a fresh 45-second collection request, otherwise wait for renewal. */
 export function validPermit(p: Permit | null, s: {
@@ -246,7 +252,8 @@ export function validPermit(p: Permit | null, s: {
     && p.collector !== p.reviewer && p.amount > 0n
     && p.valid_until >= BigInt(s.now + 45)
     && p.count_at === s.config.last_count_at && p.refresher_epoch === s.config.refresher_epoch
-    && p.pause_started_at === s.config.pause_started_at && p.evidence_hash.some(b => b !== 0));
+    && p.pause_started_at === s.config.pause_started_at
+    && p.observation_day === BigInt(Math.floor(s.now / 86400)) && p.evidence_hash.some(b => b !== 0));
 }
 export async function pendingReceipts(
   rpc: RpcCall,

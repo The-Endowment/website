@@ -651,6 +651,10 @@
           "type": "i64"
         },
         {
+          "name": "observation_day",
+          "type": "i64"
+        },
+        {
           "name": "evidence_hash",
           "type": {
             "array": [
@@ -765,6 +769,35 @@
           }
         }
       ]
+    },
+    "CollectionObservation": {
+      "kind": "struct",
+      "fields": [
+        {
+          "name": "collector",
+          "type": "pubkey"
+        },
+        {
+          "name": "reviewer",
+          "type": "pubkey"
+        },
+        {
+          "name": "count_at",
+          "type": "i64"
+        },
+        {
+          "name": "refresher_epoch",
+          "type": "u32"
+        },
+        {
+          "name": "pause_started_at",
+          "type": "i64"
+        },
+        {
+          "name": "observation_day",
+          "type": "i64"
+        }
+      ]
     }
   },
   "instructions": {
@@ -871,6 +904,14 @@
           "type": {
             "defined": {
               "name": "CollectionReport"
+            }
+          }
+        },
+        {
+          "name": "observation",
+          "type": {
+            "defined": {
+              "name": "CollectionObservation"
             }
           }
         }

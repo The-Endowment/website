@@ -154,6 +154,7 @@ export type CollectionPermit = {
   count_at: bigint;
   refresher_epoch: number;
   pause_started_at: bigint;
+  observation_day: bigint;
   evidence_hash: number[];
   bump: number;
 };
@@ -181,4 +182,13 @@ export type CollectionReport = {
   amount: bigint;
   valid_until: bigint;
   evidence_hash: number[];
+};
+
+export type CollectionObservation = {
+  collector: Address;
+  reviewer: Address;
+  count_at: bigint;
+  refresher_epoch: number;
+  pause_started_at: bigint;
+  observation_day: bigint;
 };

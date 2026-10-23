@@ -8,7 +8,7 @@ import { withJournal } from "../reporter/journal.ts";
 import { history, latestCursor, type RpcCall } from "../reporter/rpc.ts";
 import { MissingPayoutEvidence, type Observation, type SourcePolicy } from "../reporter/types.ts";
 import { collectIx, reviewIx, settleIx } from "./client.ts";
-import { holdSnapshot, type HoldSnapshot } from "./snapshot.ts";
+import { authorizationBinding, holdSnapshot, type HoldSnapshot } from "./snapshot.ts";
 import {
   reconcileHistory,
   resetReviewer,
@@ -201,6 +201,20 @@ export async function walletTick(
             await resetReviewer(journal, s, await latestCursor(o.rpc, source, s.slot));
             throw error; // no signing in a tick with a history failure
           }
+        }
+      }
+      // First replay any outstanding receipts under the existing journal, then
+      // discard unswept eligibility at a grant boundary. Resetting the whole
+      // journal first would skip the history needed to review those receipts.
+      // An attribution wait retains the old cursor. Do not accept a new grant
+      // boundary until that whole batch is replayed, or a later retry could
+      // turn pre-boundary rewards back into eligible funds.
+      if (s.tracked && !evidenceRetry) {
+        const state = journal.state as ReviewedLedger;
+        const binding = authorizationBinding(s);
+        if (state.authorizationBinding !== binding) {
+          await journal.save({ ...state, eligible: "0", authorizationBinding: binding } as ReviewedLedger,
+            "Reviewer authorization boundary; receipt evidence retained, unswept eligibility discarded");
         }
       }
       const outcomes = [];

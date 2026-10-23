@@ -198,9 +198,10 @@ export async function collectIx(
 export async function authorizeCollectionIx(
   inst: Instance, owner: Address, reviewer: TransactionSigner, nonce: bigint,
   report: import("./accounts.ts").CollectionReport,
+  observation: import("./accounts.ts").CollectionObservation,
 ) {
   return instruction(inst.program, "authorize_collection", {
     ...(await common(inst, owner)), owner, reviewer,
     permit: await holdPda(inst, "permit", owner),
-  }, { nonce, report });
+  }, { nonce, report, observation });
 }

@@ -67,7 +67,7 @@ async function main() {
     const feed = await loadFeed();
     const receipts = await pendingReceipts(rpc, inst);
     health.receipts(receipts);
-    if (role === "collector" && health.issues.has("pending_over_30h"))
+    if ((role === "collector" || authorizeCollections) && health.issues.has("pending_over_30h"))
       await quarantine(stopFile, "pending_over_30h");
     const rows = await rpc<{ account: { owner: string; data: [string, string] } }[]>("getProgramAccounts", [
       inst.program, { encoding: "base64", commitment: "finalized", filters: [
@@ -109,7 +109,9 @@ async function main() {
             authority: "HuBMeYW3aDn8BH65fo8xxbP4oiexyup8udzKyccgi8Ga", source: "J8vxiGw4gPng3JTN9HoKJs3ioCD5fnjKGDtRHPVGgaGo" },
         }, address(owner), receipts.filter((r) => r.receipt.owner === owner));
         health.outcome(result);
-        if (role === "collector" && health.historyStop()) await quarantine(stopFile, "history_evidence_gap");
+        // Persist even when eligibility is zero and beforeAuthorize never ran.
+        // A later clean pass cannot silently reopen grants after an incident.
+        if ((role === "collector" || authorizeCollections) && health.historyStop()) await quarantine(stopFile, "history_evidence_gap");
         console.log(JSON.stringify({ role, owner, status: result.status,
           ...("authorization" in result ? { authorization: result.authorization } : {}) }));
       } catch {
