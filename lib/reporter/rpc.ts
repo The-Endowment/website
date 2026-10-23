@@ -1,6 +1,10 @@
 import type { ParsedTransaction } from "./types.ts";
 export type RpcCall = <T>(method: string, params: unknown[]) => Promise<T>;
 export type SignatureRow = { signature: string; slot: number; err: unknown; confirmationStatus: string };
+/** A normal concurrent transaction, not a missing or unreadable history page. */
+export class HistoryAdvancedError extends Error {
+  constructor() { super("Account history advanced after the snapshot; retry"); }
+}
 export function jsonRpc(url: string): RpcCall {
   const endpoint = new URL(url);
   if (endpoint.protocol !== "https:" && !(endpoint.protocol === "http:" && ["localhost", "127.0.0.1"].includes(endpoint.hostname))) throw new Error("RPC must use HTTPS");
@@ -16,7 +20,7 @@ export function jsonRpc(url: string): RpcCall {
 export async function latestCursor(rpc: RpcCall, source: string, slot: number): Promise<string | null> {
   const rows = await rpc<SignatureRow[]>("getSignaturesForAddress", [source, { commitment: "finalized", limit: 1, minContextSlot: slot }]);
   // A newer transaction arrived after the snapshot. Retry with a newer snapshot.
-  if (rows[0] && rows[0].slot > slot) throw new Error("Account history advanced after the snapshot; retry");
+  if (rows[0] && rows[0].slot > slot) throw new HistoryAdvancedError();
   return rows[0]?.signature ?? null;
 }
 export async function history(rpc: RpcCall, source: string, cursor: string | null, fromSlot: number, toSlot: number): Promise<{ transactions: ParsedTransaction[]; cursor: string | null }> {

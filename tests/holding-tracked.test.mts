@@ -131,6 +131,40 @@ test("a stale grant cannot override the collector's more recent spend/rebuy hist
   assert.equal(bank.wires.length, 1); // only the authorization, no token collection
 });
 
+for (const spent of [4n, 10n]) {
+  test(`reviewer replaces a stale permit after spending ${spent} and buying back the same amount`, async t => {
+    const { bank, tick } = await scenario(t);
+    bank.move("reward", 10n);
+    await tick("reviewer"); bank.authorize(10n);
+    await tick("reviewer"); // Resolve the earlier authorization's durable outbox.
+    bank.move("spend", spent); bank.move("buy", spent);
+    const grant = authorization(await tick("reviewer"));
+    assert.equal(grant.status, "submitted");
+    assert.equal("amount" in grant && grant.amount, (10n - spent).toString());
+    const { data } = instructionData(bank.wires.at(-1)!, "authorize_collection", bank.inst.program);
+    assert.equal(data.readBigUInt64LE(32), 10n - spent);
+    bank.authorize(10n - spent);
+    await tick("reviewer");
+    const unchanged = authorization(await tick("reviewer"));
+    assert.equal(unchanged.status, spent === 10n ? "idle" : "authorized");
+    assert.equal(bank.wires.length, 2); // No repeated revokes or unchanged grants.
+  });
+}
+
+test("reviewer revokes a short-lived grant even before a spent balance is restored", async t => {
+  const { bank, tick } = await scenario(t);
+  bank.move("reward", 10n); await tick("reviewer");
+  bank.authorize(10n, { valid_until: BigInt(bank.time() + 20) });
+  await tick("reviewer"); // Reconcile the prior send without creating a new grant.
+  bank.move("spend", 10n);
+  const result = authorization(await tick("reviewer"));
+  assert.equal(result.status, "submitted");
+  assert.equal("amount" in result && result.amount, "0");
+  const { data } = instructionData(bank.wires.at(-1)!, "authorize_collection", bank.inst.program);
+  assert.equal(data.readBigUInt64LE(24), 20n);
+  assert.equal(data.readBigUInt64LE(32), 0n);
+});
+
 test("reviewer still refunds a spend/rebuy race after a tracked collection was signed", async t => {
   const { bank, tick, directory } = await scenario(t);
   bank.move("reward", 10n); await tick("reviewer"); bank.authorize(10n);
@@ -198,11 +232,50 @@ test("a changing cursor or an unavailable feed blocks new authorization", async 
   const { bank, options, tick, signaturesPrepared } = await scenario(t);
   bank.move("reward", 10n);
   options.reviewer.beforeAuthorize = async () => { bank.move("spend", 1n); bank.move("buy", 1n); };
-  await assert.rejects(() => tick("reviewer"), /history changed/);
+  assert.equal(authorization(await tick("reviewer")).status, "retry");
   assert.equal(signaturesPrepared(), 0);
   options.reviewer.beforeAuthorize = async () => { throw new Error("Feed unavailable"); };
   await assert.rejects(() => tick("reviewer"), /Feed unavailable/);
   assert.equal(signaturesPrepared(), 0); assert.equal(bank.wires.length, 0);
+});
+
+test("history advancing past the fresh snapshot is retried without masking RPC errors", async t => {
+  const { bank, options, tick, signaturesPrepared } = await scenario(t);
+  bank.move("reward", 10n);
+  let duringAuthorization = false;
+  options.reviewer.beforeAuthorize = async () => { duringAuthorization = true; };
+  options.reviewer.rpc = (async (method, params) => {
+    if (duringAuthorization && method === "getSignaturesForAddress")
+      return [{ signature: "newer", slot: Number.MAX_SAFE_INTEGER, err: null, confirmationStatus: "finalized" }];
+    return bank.rpc(method, params);
+  }) as RpcCall;
+  assert.equal(authorization(await tick("reviewer")).status, "retry");
+  assert.equal(signaturesPrepared(), 0);
+  assert.equal(bank.wires.length, 0);
+});
+
+test("a change immediately before broadcast retries with the signed outbox retained", async t => {
+  const { bank, options, tick, directory, signaturesPrepared } = await scenario(t);
+  bank.move("reward", 10n);
+  let gates = 0, height = 99;
+  options.reviewer.beforeAuthorize = async () => {
+    if (++gates === 2) { bank.move("spend", 1n); bank.move("buy", 1n); }
+  };
+  options.reviewer.rpc = (async (method, params) => {
+    if (method === "getSignatureStatuses") return { value: [null] };
+    if (method === "getBlockHeight") return height;
+    return bank.rpc(method, params);
+  }) as RpcCall;
+  assert.equal(authorization(await tick("reviewer")).status, "retry");
+  assert.equal(signaturesPrepared(), 1);
+  assert.equal(bank.wires.length, 0);
+  const pending = await withJournal(join(directory, "reviewer", "permits"), bank.permitKey, async j => j.state!.pending);
+  assert.ok(pending);
+  assert.equal(authorization(await tick("reviewer")).status, "pending");
+  assert.equal(signaturesPrepared(), 1);
+  height = 1001;
+  assert.equal(authorization(await tick("reviewer")).status, "reconciled");
+  assert.equal(signaturesPrepared(), 1);
 });
 
 test("reviewer submission alone does not opt into signing collection permits", async t => {
@@ -258,7 +331,7 @@ for (const changed of ["pause", "collector"] as const) {
       } else bank.policy.collector = bank.owner;
       bank.advance(2);
     };
-    await assert.rejects(() => tick("reviewer"), /State or history changed/);
+    assert.equal(authorization(await tick("reviewer")).status, "retry");
     assert.equal(signaturesPrepared(), 0);
     assert.equal(bank.wires.length, 0);
   });

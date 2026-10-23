@@ -245,12 +245,12 @@ export function authorizationBinding(s: HoldSnapshot) {
  * lifetime for a fresh 45-second collection request, otherwise wait for renewal. */
 export function validPermit(p: Permit | null, s: {
   config: Config; policy: Policy; consent: Consent | null; balance: bigint; now: number;
-}) {
+}, minimumRemainingSeconds = 45) {
   return Boolean(p && s.consent?.enabled && p.consent_epoch === s.consent.epoch
     && p.nonce === s.consent.next_nonce && p.expected_balance === s.balance
     && p.collector === s.policy.collector && p.reviewer === s.policy.reviewer
     && p.collector !== p.reviewer && p.amount > 0n
-    && p.valid_until >= BigInt(s.now + 45)
+    && p.valid_until >= BigInt(s.now + minimumRemainingSeconds)
     && p.count_at === s.config.last_count_at && p.refresher_epoch === s.config.refresher_epoch
     && p.pause_started_at === s.config.pause_started_at
     && p.observation_day === BigInt(Math.floor(s.now / 86400)) && p.evidence_hash.some(b => b !== 0));

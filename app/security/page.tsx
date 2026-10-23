@@ -197,8 +197,8 @@ export default function Security() {
                 <span>
                   Joining approves the endowment on your PUMP account for an unlimited amount, which keeps counting
                   simple. Collection is bounded by the contract&rsquo;s allowance and your selected protection rules.
-                  Transaction-history mode depends on both services identifying rewards correctly; a shared error or
-                  compromise can expose other PUMP within those limits. Your $PENIS and other tokens aren&rsquo;t included.
+                  Review the permissions and risks of your selected mode on the <a href="/delegate#wallet">consent screen</a>.
+                  Your $PENIS and other tokens aren&rsquo;t included.
                 </span>
               </li>
               <li>

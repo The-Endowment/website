@@ -12,7 +12,7 @@ import { pendingReceipts } from "../lib/holding/snapshot.ts";
 import { walletTick } from "../lib/holding/worker.ts";
 import type { Consent } from "../lib/holding/types.ts";
 import { HOLD_COLLECTION_RELEASED } from "../lib/holding/release.ts";
-import { assertCollectionAllowed, collectionStopped, includesOwner, launchControls, quarantine } from "../lib/holding/operations.ts";
+import { assertCollectionAllowed, collectionStopped, includesOwner, launchControls, quarantine, type LaunchControls } from "../lib/holding/operations.ts";
 import { assertHeartbeatMode, completedHealthyPass, PassHealth, saveHealth } from "../lib/holding/operations-health.ts";
 import { deliverAlert } from "../lib/holding/operations-alerts.ts";
 import { deliverHeartbeat } from "../lib/operations-heartbeat.ts";
@@ -39,10 +39,19 @@ async function main() {
   await mkdir(lock);
   const health = new PassHealth(role, submit, mode);
   try {
-    const controls = await launchControls({ role, submit, mode, stopFile, foundersFile: process.env.HOLD_FOUNDERS_FILE });
-    const authorizationControls = authorizeCollections ? await launchControls({
-      role: "collector", submit, mode, stopFile, foundersFile: process.env.HOLD_FOUNDERS_FILE,
-    }) : null;
+    // Grant configuration must not disable the reviewer's recovery pass.
+    const controls = await launchControls({ role, submit, mode: role === "collector" ? mode : undefined,
+      stopFile, foundersFile: process.env.HOLD_FOUNDERS_FILE });
+    let authorizationControls: LaunchControls | null = null;
+    if (authorizeCollections) {
+      try {
+        authorizationControls = await launchControls({ role: "collector", submit, mode,
+          stopFile, foundersFile: process.env.HOLD_FOUNDERS_FILE });
+      } catch {
+        health.failure("authorization_configuration"); process.exitCode = 1;
+        await quarantine(stopFile, "authorization_configuration");
+      }
+    }
     if ((role === "collector" || authorizeCollections) && await collectionStopped(stopFile)) health.issues.add("collection_quarantined");
     const rpc = jsonRpc(rpcUrl);
     const inst: Instance = { program: PROGRAM_ID, config, coinMint: PENIS_MINT, dividendMint: PUMP_MINT,
