@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { createElement, type ComponentType } from "react";
+import * as React from "react";
+import { createElement, type ComponentType, type ReactNode } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { address, createNoopSigner } from "@solana/kit";
 import { baselineResetInstructions } from "../lib/holding/baseline-reset.ts";
@@ -12,6 +13,7 @@ import { common } from "../lib/holding/client.ts";
 import { decodeAccount, schema } from "../lib/holding/codec.ts";
 import fixture from "./fixtures/holding-chain.json" with { type: "json" };
 import { loadTsxModule } from "./support/tsx-render.mts";
+import * as endowment from "../lib/endowment.ts";
 
 const inst: Instance = { program: address(fixture.program), config: address(fixture.config),
   coinMint: address(fixture.coinMint), dividendMint: address(fixture.dividendMint),
@@ -94,4 +96,82 @@ test("reset explains cleared eligibility and refund-only receipts and requires u
   assert.match(html, /when the transaction executes/);
   assert.doesNotMatch(html, /checked=""/);
   assert.match(html, /<button[^>]*disabled=""[^>]*>Review balance reset in wallet/);
+});
+
+function closedPanel(initial: ReturnType<typeof state>, fresh = initial, canSign = true) {
+  // Seed the loaded dashboard, keeping real React rendering and the real action
+  // callbacks. Only wallet transport and RPC reads are replaced; nothing signs.
+  const loaded: unknown[] = [null, null, initial.status, initial.holding, null, null, false, 0, null, null];
+  const actions: ((signal: AbortSignal) => Promise<unknown>)[] = [];
+  const requests: unknown[] = [];
+  const { ConfiguredDelegatePanel } = loadTsxModule<{ ConfiguredDelegatePanel: ComponentType<{ inst: Instance }> }>(
+    "components/DelegatePanel.tsx", {
+      react: { ...React, useState: (value: unknown) => React.useState(loaded.length ? loaded.shift() : value) },
+      "@solana/kit-plugin-wallet/react": {
+        useConnectedWallet: () => ({ account: { address: owner.address }, signer: canSign ? owner : null,
+          supportedTransactionVersions: new Set(canSign ? [0] : []) }),
+        useWallets: () => [], useConnect: () => ({ isRunning: false }),
+        useDisconnect: () => ({ dispatch: () => {} }),
+        WalletReadyGate: ({ children }: { children: ReactNode }) => createElement(React.Fragment, null, children),
+      },
+      "@solana/react": { useAction: (action: (signal: AbortSignal) => Promise<unknown>) => {
+        actions.push(action); return { isRunning: false, dispatch: action };
+      } },
+      "@/components/WalletClient": { client: { identity: owner, rpc: {}, sendTransaction: async (ixs: unknown) => {
+        requests.push(ixs); return { context: { signature: "test-only-no-broadcast" } };
+      } } },
+      "@/lib/endowment": endowment,
+      "@/lib/holding/delegation": { loadDelegationStatus: async () => fresh.status },
+      "@/lib/holding/wallet": { loadHolding: async () => fresh.holding },
+      "@/lib/solana": { formatTokens: (value: bigint) => value.toString() },
+      "@/lib/site": { DELEGATION_OPEN: false, links: {} },
+    },
+  );
+  const html = renderToStaticMarkup(createElement(ConfiguredDelegatePanel, { inst }));
+  return { html, requests, enroll: () => actions[0](new AbortController().signal),
+    reset: () => actions[1](new AbortController().signal) };
+}
+
+test("closed public enrollment still exposes an existing holder's reset and prepares only the reviewed instructions", async () => {
+  const value = state();
+  const panel = closedPanel(value);
+  assert.match(panel.html, /Restart rewards after spending PUMP/);
+  assert.match(panel.html, /<button[^>]*disabled=""[^>]*>Review balance reset in wallet/);
+  assert.doesNotMatch(panel.html, /checked=""/);
+  await panel.reset();
+  assert.deepEqual(panel.requests, [await baselineResetInstructions(inst, owner, value.status, value.holding, preview)]);
+  await assert.rejects(panel.enroll(), /Joining is unavailable/);
+  assert.equal(panel.requests.length, 1);
+});
+
+test("closed enrollment resets cannot enroll, re-enable stopped consent, bypass chain checks or skip fresh review", async () => {
+  const invalid = [
+    (value: ReturnType<typeof state>) => { value.status.landlord = null; },
+    (value: ReturnType<typeof state>) => { value.holding.consent!.enabled = false; },
+    (value: ReturnType<typeof state>) => { value.status.delegatedToEndowment = false; },
+    (value: ReturnType<typeof state>) => { value.status.landlord!.reserved[0] = 1; },
+    (value: ReturnType<typeof state>) => { value.status.config.pausedUntil = BigInt(value.status.now + 1); },
+    (value: ReturnType<typeof state>) => { value.status.config.retired = true; },
+    (value: ReturnType<typeof state>) => { value.status.config.milestoneReached = true; },
+    (value: ReturnType<typeof state>) => { value.holding.ready = false; },
+    (value: ReturnType<typeof state>) => { value.status.minStake = value.status.coinBalance + 1n; },
+  ];
+  for (const change of invalid) {
+    const value = state(); change(value);
+    const panel = closedPanel(value);
+    assert.doesNotMatch(panel.html, /Restart rewards after spending PUMP/);
+    await assert.rejects(panel.reset());
+    await assert.rejects(panel.enroll());
+    assert.equal(panel.requests.length, 0);
+    const raced = closedPanel(state(), value);
+    await assert.rejects(raced.reset());
+    assert.equal(raced.requests.length, 0);
+  }
+  const changed = state(); changed.status.dividendBalance++;
+  const raced = closedPanel(state(), changed);
+  await assert.rejects(raced.reset(), /changed/);
+  assert.equal(raced.requests.length, 0);
+  const readOnly = closedPanel(state(), undefined, false);
+  await assert.rejects(readOnly.reset(), /cannot sign/);
+  assert.equal(readOnly.requests.length, 0);
 });
