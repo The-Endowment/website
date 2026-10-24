@@ -34,8 +34,9 @@ export type Prepared = {
   wire: string; signature: string; nonce: string; amount: string;
   lastValidBlockHeight: string; expiresAt: number; evidenceHash: string;
 };
+export type PayoutBoundary = { scope: string; at: number };
 export type Ledger = {
-  version: 1; binding: string; slot: number; cursor: string | null;
+  version: 1 | 2; binding: string; slot: number; cursor: string | null;
   balance: string; eligible: string; pending: Prepared | null;
   // A known submission was cleared durably, but its source history still needs
   // replay. Recovery must not read a bank older than the settled submission.
@@ -44,6 +45,15 @@ export type Ledger = {
   payoutWaitUntil?: number;
   // Operational alert age starts when this worker actually begins waiting.
   payoutWaitStartedAt?: number;
+  // Only day/count changes share a scope. Consent, roles and incident changes do not.
+  payoutBoundary?: PayoutBoundary;
+  // Exact finalized receipts whose attribution blocked this uncommitted batch.
+  payoutWaitSignatures?: string[];
+  // After a day/count rollover, exclude older rewards except those waiting receipts.
+  payoutCarryAfter?: number;
+  // A reviewer can keep receipt evidence through an incident, but it cannot
+  // later carry unused rewards just because the previous settings return.
+  payoutCarryBlocked?: true;
 };
 export function raw(value: unknown): bigint {
   if (typeof value !== "string" || !/^(0|[1-9]\d*)$/.test(value)) throw new Error("Invalid base-unit amount");
@@ -58,10 +68,12 @@ export const PAYOUT_EVIDENCE_WAIT_SECONDS = 6 * 60 * 60;
 export class MissingPayoutEvidence extends Error {
   readonly observation: Observation;
   readonly retryUntil: number;
-  constructor(observation: Observation, retryUntil: number) {
+  readonly observations: Observation[];
+  constructor(observation: Observation, retryUntil: number, observations = [observation]) {
     super("Waiting for holder payout evidence");
     this.name = "MissingPayoutEvidence";
     this.observation = observation;
     this.retryUntil = retryUntil;
+    this.observations = observations;
   }
 }

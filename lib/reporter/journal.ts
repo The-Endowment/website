@@ -8,13 +8,26 @@ const digest = (value: string) => createHash("sha256").update(value).digest("hex
 export type Journal = { state: Ledger | null; hash: string; save: (state: Ledger, reason: string, evidence?: unknown) => Promise<void> };
 
 function validate(state: Ledger) {
-  if (state.version !== 1 || typeof state.binding !== "string" || !Number.isSafeInteger(state.slot)
+  if ((state.version !== 1 && state.version !== 2) || typeof state.binding !== "string" || !Number.isSafeInteger(state.slot)
       || state.slot < 0 || (state.cursor !== null && typeof state.cursor !== "string")) throw new Error("Invalid journal state");
   if (state.payoutWaitUntil !== undefined && (!Number.isSafeInteger(state.payoutWaitUntil) || state.payoutWaitUntil < 0))
     throw new Error("Invalid payout evidence deadline");
   if (state.payoutWaitStartedAt !== undefined && (!Number.isSafeInteger(state.payoutWaitStartedAt)
       || state.payoutWaitStartedAt < 0 || state.payoutWaitUntil === undefined
       || state.payoutWaitStartedAt > state.payoutWaitUntil)) throw new Error("Invalid payout wait start");
+  if (state.payoutBoundary && (typeof state.payoutBoundary.scope !== "string" || !state.payoutBoundary.scope
+      || !Number.isSafeInteger(state.payoutBoundary.at) || state.payoutBoundary.at < 0))
+    throw new Error("Invalid payout boundary");
+  if (state.payoutWaitSignatures !== undefined && (state.payoutWaitUntil === undefined
+      || !Array.isArray(state.payoutWaitSignatures) || state.payoutWaitSignatures.length > 10_000
+      || state.payoutWaitSignatures.some(s => typeof s !== "string" || !s || s.length > 128)
+      || new Set(state.payoutWaitSignatures).size !== state.payoutWaitSignatures.length))
+    throw new Error("Invalid waiting payout identities");
+  if (state.payoutCarryAfter !== undefined && (state.version !== 2 || !Number.isSafeInteger(state.payoutCarryAfter)
+      || state.payoutCarryAfter < 0 || !state.payoutBoundary || !state.payoutWaitSignatures
+      || state.payoutWaitUntil === undefined)) throw new Error("Invalid payout carry boundary");
+  if (state.payoutCarryBlocked !== undefined && (state.payoutCarryBlocked !== true
+      || state.payoutWaitUntil === undefined)) throw new Error("Invalid payout carry stop");
   if (raw(state.eligible) > raw(state.balance)) throw new Error("Invalid journal eligibility");
   if (state.settled) {
     if (state.pending || !Number.isSafeInteger(state.settled.slot) || state.settled.slot < state.slot) throw new Error("Invalid settled submission checkpoint");

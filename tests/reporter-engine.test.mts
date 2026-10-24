@@ -252,12 +252,12 @@ test("typed payout retry preserves the entire cursor and later spending until at
   network.prepare = async (...args) => { prepares++; return prepare(...args); };
   network.observations = async () => { throw pending; };
   assert.equal((await runWallet(journal, network, true)).status, "awaiting_payout");
-  assert.deepEqual(journal.state, {...original, payoutWaitUntil: pending.retryUntil, payoutWaitStartedAt: snapshot.now}); assert.equal(prepares, 0);
+  assert.deepEqual(journal.state, {...original, payoutWaitSignatures: [reward.signature], payoutWaitUntil: pending.retryUntil, payoutWaitStartedAt: snapshot.now}); assert.equal(prepares, 0);
   const spend: Observation = {...reward, signature: "later-spend", slot: 12, before: "1100", after: "1060", kind: "outflow", amount: "40"};
   network.snapshot = async () => ({...snapshot, slot: 12, balance: "1060"});
   network.cursor = async () => spend.signature;
   assert.equal((await runWallet(journal, network, true)).status, "awaiting_payout");
-  assert.deepEqual(journal.state, {...original, payoutWaitUntil: pending.retryUntil, payoutWaitStartedAt: snapshot.now}); assert.equal(prepares, 0);
+  assert.deepEqual(journal.state, {...original, payoutWaitSignatures: [reward.signature], payoutWaitUntil: pending.retryUntil, payoutWaitStartedAt: snapshot.now}); assert.equal(prepares, 0);
   network.observations = async (ledger) => {
     assert.equal(ledger.cursor, "start"); return {observations: [reward, spend], cursor: spend.signature};
   };

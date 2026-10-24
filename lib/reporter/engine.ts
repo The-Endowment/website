@@ -3,6 +3,7 @@ import { boundary, observe } from "./ledger.ts";
 import { MissingPayoutEvidence, raw, type Ledger, type Observation, type Prepared } from "./types.ts";
 import type { Journal } from "./journal.ts";
 import type { Snapshot } from "./snapshot.ts";
+import { atPayoutBoundary, carryPayoutWait, DAILY_RESET_REASON, payoutReplay, rememberPayoutWait, resetReason } from "./payout-wait.ts";
 
 export type ReporterIO = {
   snapshot: (minSlot: number) => Promise<Snapshot>;
@@ -20,7 +21,7 @@ export async function runWallet(journal: Journal, io: ReporterIO, submit = false
   let ledger = journal.state;
   let snapshot = await io.snapshot(Math.max(ledger?.slot ?? 0, ledger?.settled?.slot ?? 0));
   const reset = async (reason: string) => {
-    const next = boundary(snapshot.binding, snapshot.slot, await io.cursor(snapshot), snapshot.balance);
+    const next = atPayoutBoundary(boundary(snapshot.binding, snapshot.slot, await io.cursor(snapshot), snapshot.balance), snapshot);
     await journal.save(next, reason);
     return { status: "boundary", reason };
   };
@@ -35,28 +36,38 @@ export async function runWallet(journal: Journal, io: ReporterIO, submit = false
     // The status query may have finalized after our first snapshot. Require a
     // bank that includes the consumed nonce before forgetting a successful send.
     snapshot = await io.snapshot(snapshot.slot);
-    if (ledger.binding !== snapshot.binding || !snapshot.active) return reset(snapshot.reason);
+    if (ledger.binding !== snapshot.binding || !snapshot.active) return reset(resetReason(ledger, snapshot, snapshot.reason));
     const minimumNonce = raw(pending.nonce) - (status === "failed" ? 1n : 0n);
     if (raw(snapshot.nonce) < minimumNonce) return { status: "pending", signature: pending.signature };
     ledger = { ...ledger, pending: null, settled: { slot: snapshot.slot, nonce: snapshot.nonce } };
     await journal.save(ledger, `Prepared transaction reconciled: ${status}; replay source history`, { signature: pending.signature, status });
   }
-  if (!ledger || ledger.binding !== snapshot.binding || !snapshot.active) return reset(snapshot.reason);
+  if (ledger && ledger.binding !== snapshot.binding) {
+    const carried = carryPayoutWait(ledger, snapshot);
+    if (carried) {
+      await journal.save(carried, DAILY_RESET_REASON + "; pending payout evidence retained");
+      ledger = carried;
+    }
+  }
+  if (!ledger || ledger.binding !== snapshot.binding || !snapshot.active)
+    return reset(resetReason(ledger, snapshot, snapshot.reason));
   if (ledger.settled && (snapshot.slot < ledger.settled.slot || raw(snapshot.nonce) < raw(ledger.settled.nonce))) {
     return { status: "retry", reason: "Finalized snapshot predates the settled submission" };
   }
   try {
     const batch = await io.observations(ledger, snapshot);
-    const observed = observe(ledger, batch.observations, snapshot.slot, snapshot.balance, batch.cursor);
-    await journal.save(observed.ledger, observed.reason, batch.observations);
-    ledger = observed.ledger;
+    const observations = payoutReplay(ledger, batch.observations);
+    const observed = observe(ledger, observations, snapshot.slot, snapshot.balance, batch.cursor);
+    const next = atPayoutBoundary(observed.ledger, snapshot);
+    await journal.save(next, observed.reason, observations);
+    ledger = next;
   } catch (error) {
     if (error instanceof MissingPayoutEvidence) {
-      const retryUntil = Math.min(ledger.payoutWaitUntil ?? Infinity, error.retryUntil);
-      const waitStartedAt = ledger.payoutWaitStartedAt ?? snapshot.now;
-      if (ledger.payoutWaitUntil !== retryUntil || ledger.payoutWaitStartedAt === undefined)
-        await journal.save({...ledger, payoutWaitUntil: retryUntil, payoutWaitStartedAt: waitStartedAt},
-          "Awaiting payout attribution; history cursor retained", {signature: error.observation.signature, retryUntil, waitStartedAt});
+      const waiting = rememberPayoutWait(ledger, snapshot, error);
+      const retryUntil = waiting.payoutWaitUntil!, waitStartedAt = waiting.payoutWaitStartedAt!;
+      if (JSON.stringify(waiting) !== JSON.stringify(ledger))
+        await journal.save(waiting, "Awaiting payout attribution; history cursor retained",
+          {signatures: waiting.payoutWaitSignatures, retryUntil, waitStartedAt});
       return { status: "awaiting_payout", reason: error.message, retryUntil, waitStartedAt,
         waitSeconds: Math.max(0, snapshot.now - waitStartedAt) };
     }

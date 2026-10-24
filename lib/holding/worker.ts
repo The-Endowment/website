@@ -7,6 +7,7 @@ import { runWallet } from "../reporter/engine.ts";
 import { withJournal } from "../reporter/journal.ts";
 import { history, latestCursor, type RpcCall } from "../reporter/rpc.ts";
 import { MissingPayoutEvidence, type Observation, type SourcePolicy } from "../reporter/types.ts";
+import { carryPayoutWait, DAILY_RESET_REASON, rememberPayoutWait } from "../reporter/payout-wait.ts";
 import { collectIx, reviewIx, settleIx } from "./client.ts";
 import { holdSnapshot, type HoldSnapshot } from "./snapshot.ts";
 import {
@@ -73,12 +74,16 @@ export async function walletTick(
         const feed = o.loadFeed ? await o.loadFeed() : o.feed;
         // The reviewer pairs transactions with observations by index, so both drop read-only references.
         const transactions = h.transactions.filter((tx) => !readOnlyReference(tx, source));
+        const missing: MissingPayoutEvidence[] = [];
         const observations = transactions.map((tx) => {
           let result: Observation;
           try { result = classify(tx, source, owner, o.source, feed, s.now, state.payoutWaitUntil); }
           catch (error) {
-            if (!(error instanceof MissingPayoutEvidence) || tx.blockTime === null
-                || BigInt(tx.blockTime) >= (s.consent?.started_at ?? 0n)) throw error;
+            if (!(error instanceof MissingPayoutEvidence) || tx.blockTime === null) throw error;
+            if (BigInt(tx.blockTime) >= (s.consent?.started_at ?? 0n)) {
+              missing.push(error);
+              return error.observation;
+            }
             // A payout before consent cannot become eligible when the API catches up.
             return { ...error.observation, kind: "uncertain" as const,
               reason: "Payout predates consent" };
@@ -101,6 +106,8 @@ export async function walletTick(
               }
             : result;
         });
+        if (missing.length) throw new MissingPayoutEvidence(missing[0].observation,
+          Math.min(...missing.map(error => error.retryUntil)), missing.map(error => error.observation));
         o.observe?.({ kind: "observations", observations });
         return { ...h, transactions, observations };
       };
@@ -164,6 +171,10 @@ export async function walletTick(
       let evidenceRetry: MissingPayoutEvidence | undefined;
       let waitStartedAt: number | undefined;
       let waitSeconds: number | undefined;
+      if (journal.state && journal.state.binding !== s.binding) {
+        const carried = carryPayoutWait(journal.state, s);
+        if (carried) await journal.save(carried, DAILY_RESET_REASON + "; pending payout evidence retained");
+      }
       if (!journal.state || journal.state.binding !== s.binding) {
         await resetReviewer(
           journal,
@@ -184,13 +195,14 @@ export async function walletTick(
         } catch (error) {
           if (error instanceof MissingPayoutEvidence) {
             evidenceRetry = error;
-            const retryUntil = Math.min(journal.state!.payoutWaitUntil ?? Infinity, error.retryUntil);
-            waitStartedAt = journal.state!.payoutWaitStartedAt ?? s.now;
+            const waiting = rememberPayoutWait(journal.state!, s, error);
+            const retryUntil = waiting.payoutWaitUntil!;
+            waitStartedAt = waiting.payoutWaitStartedAt!;
             waitSeconds = Math.max(0, s.now - waitStartedAt);
-            if (journal.state!.payoutWaitUntil !== retryUntil || journal.state!.payoutWaitStartedAt === undefined)
-              await journal.save({...journal.state!, payoutWaitUntil: retryUntil, payoutWaitStartedAt: waitStartedAt},
+            if (JSON.stringify(waiting) !== JSON.stringify(journal.state))
+              await journal.save(waiting,
                 "Awaiting payout attribution; reviewer history retained",
-                {signature: error.observation.signature, retryUntil, waitStartedAt});
+                {signatures: waiting.payoutWaitSignatures, retryUntil, waitStartedAt});
           }
           else {
             await resetReviewer(journal, s, await latestCursor(o.rpc, source, s.slot));
