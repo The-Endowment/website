@@ -13,6 +13,7 @@ import { schema } from "./codec.ts";
 import type { Receipt } from "./types.ts";
 import type { HoldSnapshot } from "./snapshot.ts";
 import { refundDeadline } from "./bounds.ts";
+import { atPayoutBoundary, payoutReplay, resetReason } from "../reporter/payout-wait.ts";
 export type Decision = {
   verificationVersion?: string;
   amount: string;
@@ -38,6 +39,7 @@ export async function reconcileHistory(
   if (!state)
     throw new Error("Reviewer must establish an observation boundary first");
   const reviews = { ...state.reviews };
+  observations = payoutReplay(state, observations);
   const ambiguous =
     new Set(observations.map((o) => o.slot)).size !== observations.length;
   const receiptIndex = schema.instructions.sweep.accounts.findIndex(
@@ -124,7 +126,7 @@ export async function reconcileHistory(
   // decisions above, but do not carry unused rewards across an incident.
   if (!snapshot.active) finished.ledger.eligible = "0";
   await journal.save(
-    { ...finished.ledger, reviews, reviewer: snapshot.policy.reviewer } as ReviewedLedger,
+    atPayoutBoundary({ ...finished.ledger, reviews, reviewer: snapshot.policy.reviewer } as ReviewedLedger, snapshot),
     "Independent wallet reconciliation",
     { observations, reviews },
   );
@@ -187,11 +189,11 @@ export async function resetReviewer(
   ) : {};
   // A restarted/missing history never reuses the collector's claimed amount.
   await journal.save(
-    {
+    atPayoutBoundary({
       ...boundary(snapshot.binding, snapshot.slot, cursor, snapshot.balance),
       reviewer: snapshot.policy.reviewer,
       reviews,
-    } as ReviewedLedger,
-    "Reviewer boundary; current-verifier decisions retained, legacy decisions zeroed, unswept eligibility discarded",
+    } as ReviewedLedger, snapshot),
+    resetReason(previous, snapshot, "Reviewer boundary; current-verifier decisions retained, legacy decisions zeroed, unswept eligibility discarded"),
   );
 }

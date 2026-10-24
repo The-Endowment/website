@@ -195,6 +195,15 @@ export async function holdSnapshot(
     reason: active
       ? "Active refundable consent"
       : "Inactive: discard collection eligibility",
+    // A pending receipt may survive only a day/count change. Include incident
+    // and collector identity for BOTH roles even though reviewer receipt replay
+    // otherwise intentionally spans those events.
+    payoutBoundary: {
+      scope: [VERIFICATION_VERSION, role, inst.config, owner, consent?.epoch ?? 0n,
+        config.refresher_epoch, config.paused_until, config.pause_started_at,
+        policy.collector, policy.reviewer].join(":"),
+      at: Math.max(Math.floor(now / 86400) * 86400, Number(config.last_count_at)),
+    },
     // Collectors discard eligibility across pause/collector changes. Reviewers
     // must still replay collections which landed just before an incident, so
     // those two changes cannot hide their outstanding receipt evidence.

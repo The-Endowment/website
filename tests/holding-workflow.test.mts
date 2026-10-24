@@ -416,9 +416,9 @@ for (const role of ["collector", "reviewer"] as const) {
       async journal => structuredClone(journal.state));
     await tick(); const original = await state();
     bank.move("reward", 40n); const rows = new Map(bank.feed.records); bank.feed.records.clear();
-    assert.equal((await tick()).status, "awaiting_payout"); assert.deepEqual(await state(), {...original, payoutWaitUntil: Number(bank.consent.started_at) + 1 + 6 * 3600, payoutWaitStartedAt: Number(bank.consent.started_at) + 1});
+    assert.equal((await tick()).status, "awaiting_payout"); assert.deepEqual(await state(), {...original, payoutWaitSignatures: [...rows.values()].map(row => row.signature), payoutWaitUntil: Number(bank.consent.started_at) + 1 + 6 * 3600, payoutWaitStartedAt: Number(bank.consent.started_at) + 1});
     bank.move("spend", 25n); bank.move("buy", 25n);
-    assert.equal((await tick()).status, "awaiting_payout"); assert.deepEqual(await state(), {...original, payoutWaitUntil: Number(bank.consent.started_at) + 1 + 6 * 3600, payoutWaitStartedAt: Number(bank.consent.started_at) + 1});
+    assert.equal((await tick()).status, "awaiting_payout"); assert.deepEqual(await state(), {...original, payoutWaitSignatures: [...rows.values()].map(row => row.signature), payoutWaitUntil: Number(bank.consent.started_at) + 1 + 6 * 3600, payoutWaitStartedAt: Number(bank.consent.started_at) + 1});
     for (const [key, row] of rows) bank.feed.records.set(key, row);
     const recovered = await tick();
     assert.equal(recovered.status, role === "collector" ? "dry_run" : "reviewed");
@@ -454,7 +454,7 @@ test("reviewer missing-row wait reconciles pending settlements and leaves refund
   const options: WorkerOptions = {rpc, rpcUrl: "http://127.0.0.1:1", inst: bank.inst, directory,
     role: "reviewer", submit: true, source: bank.source, feed: bank.feed}; // No signing key on purpose.
   await walletTick(options, bank.owner, []);
-  bank.move("reward", 40n); bank.move("sweep", 40n); bank.feed.records.clear();
+  const waitingReward = bank.move("reward", 40n); bank.move("sweep", 40n); bank.feed.records.clear();
   const original = await withJournal(join(directory, "wallets"), bank.a.dividend_account, async j => structuredClone(j.state));
   await withJournal(join(directory, "settlements"), bank.receiptKey, async journal => {
     await journal.save({...boundary(bank.receiptKey, 0, null, "0"), pending: {
@@ -470,7 +470,7 @@ test("reviewer missing-row wait reconciles pending settlements and leaves refund
   assert.equal("outcomes" in reconciled && reconciled.outcomes[0].result, "reconciled");
   const stillWaiting = await walletTick(options, bank.owner, bank.receipts());
   assert.equal("outcomes" in stillWaiting && stillWaiting.outcomes[0].result, "waiting_for_payout");
-  await withJournal(join(directory, "wallets"), bank.a.dividend_account, async j => assert.deepEqual(j.state, {...original, payoutWaitUntil: Number(bank.consent.started_at) + 1 + 6 * 3600, payoutWaitStartedAt: Number(bank.consent.started_at) + 2}));
+  await withJournal(join(directory, "wallets"), bank.a.dividend_account, async j => assert.deepEqual(j.state, {...original, payoutWaitSignatures: [waitingReward.transaction.signatures[0]], payoutWaitUntil: Number(bank.consent.started_at) + 1 + 6 * 3600, payoutWaitStartedAt: Number(bank.consent.started_at) + 2}));
   bank.consent.enabled = false; options.submit = false;
   const refund = await walletTick(options, bank.owner, bank.receipts());
   assert.equal(refund.status, "awaiting_payout");
