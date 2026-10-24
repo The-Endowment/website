@@ -1,16 +1,53 @@
 import type { ParsedTransaction } from "./types.ts";
 export type RpcCall = <T>(method: string, params: unknown[]) => Promise<T>;
 export type SignatureRow = { signature: string; slot: number; err: unknown; confirmationStatus: string };
-export function jsonRpc(url: string): RpcCall {
+// Never retry publication: a timeout may mean the transaction was accepted.
+const READ_METHODS = new Set(["getAccountInfo", "getMultipleAccounts", "getProgramAccounts",
+  "getSignaturesForAddress", "getTransaction", "getSignatureStatuses", "getBlockHeight",
+  "getLatestBlockhash", "getSlot", "getBalance"]);
+const TRANSIENT_HTTP = new Set([408, 429, 500, 502, 503, 504]);
+const TRANSIENT_RPC = new Set([-32005, -32016, -32603]); // unhealthy node, context lag, internal error
+const TRANSIENT_NETWORK = new Set(["ECONNRESET", "ECONNREFUSED", "ETIMEDOUT", "EAI_AGAIN",
+  "UND_ERR_CONNECT_TIMEOUT", "UND_ERR_HEADERS_TIMEOUT", "UND_ERR_BODY_TIMEOUT", "UND_ERR_SOCKET"]);
+class RpcFailure extends Error {
+  readonly transient: boolean;
+  constructor(message: string, transient: boolean) { super(message); this.transient = transient; }
+}
+function transientTransport(error: unknown) {
+  if (!(error instanceof Error)) return false;
+  if (error.name === "TimeoutError") return true;
+  const cause = error.cause as { code?: string } | undefined;
+  return error instanceof TypeError && !!cause?.code && TRANSIENT_NETWORK.has(cause.code);
+}
+export function jsonRpc(url: string, dependencies: {
+  fetch?: typeof fetch; sleep?: (milliseconds: number) => Promise<void>;
+} = {}): RpcCall {
   const endpoint = new URL(url);
   if (endpoint.protocol !== "https:" && !(endpoint.protocol === "http:" && ["localhost", "127.0.0.1"].includes(endpoint.hostname))) throw new Error("RPC must use HTTPS");
+  const request = dependencies.fetch ?? fetch;
+  const sleep = dependencies.sleep ?? (ms => new Promise(resolve => setTimeout(resolve, ms)));
   return async <T>(method: string, params: unknown[]) => {
-    const response = await fetch(endpoint, { method: "POST", headers: { "content-type": "application/json" },
-      body: JSON.stringify({ jsonrpc: "2.0", id: 1, method, params }), redirect: "error", signal: AbortSignal.timeout(20_000) });
-    if (!response.ok) throw new Error(`RPC ${method} returned HTTP ${response.status}`);
-    const result = await response.json() as { error?: { code: number }; result?: T };
-    if (result.error || result.result === undefined) throw new Error(`RPC ${method} failed (${result.error?.code ?? "missing result"})`);
-    return result.result;
+    const body = JSON.stringify({ jsonrpc: "2.0", id: 1, method, params });
+    const attempts = READ_METHODS.has(method) ? 3 : 1;
+    for (let attempt = 0; ; attempt++) {
+      try {
+        const response = await request(endpoint, { method: "POST", headers: { "content-type": "application/json" },
+          body, redirect: "error", signal: AbortSignal.timeout(20_000) });
+        if (!response.ok) {
+          await response.body?.cancel();
+          throw new RpcFailure(`RPC ${method} returned HTTP ${response.status}`, TRANSIENT_HTTP.has(response.status));
+        }
+        const result = await response.json() as { error?: { code: number }; result?: T };
+        if (result?.error || result?.result === undefined)
+          throw new RpcFailure(`RPC ${method} failed (${result?.error?.code ?? "missing result"})`,
+            TRANSIENT_RPC.has(result?.error?.code ?? 0));
+        return result.result;
+      } catch (error) {
+        const transient = error instanceof RpcFailure ? error.transient : transientTransport(error);
+        if (!transient || attempt + 1 >= attempts) throw error;
+        await sleep([250, 750][attempt]);
+      }
+    }
   };
 }
 export async function latestCursor(rpc: RpcCall, source: string, slot: number): Promise<string | null> {
