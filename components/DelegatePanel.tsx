@@ -66,6 +66,12 @@ const UNLIMITED = BigInt("18446744073709551615");
 /** Why opting in isn't possible right now, in plain words; null if it is. */
 function blocker(s: DelegationStatus, holding: Holding | null): string | null {
   if (!DELEGATION_OPEN) return "New pledges and re-enrollment are currently closed. You can still leave or reclaim pending contributions.";
+  return collectionBlocker(s, holding);
+}
+
+/** Existing active pledges can reset their floor while public joining is closed.
+ * The reset builder separately requires unchanged, enabled legacy consent. */
+function collectionBlocker(s: DelegationStatus, holding: Holding | null): string | null {
   if (s.config.retired || s.config.milestoneReached) return "The endowment has closed to new landlords.";
   if (!holding?.ready) return "Joining opens as soon as collection is switched on.";
   if (s.now < Number(s.config.pausedUntil)) {
@@ -191,7 +197,7 @@ function Connected({ inst, owner, expectedOwner, canSign }: { inst: Instance; ow
   }));
 
   const resetBaseline = useAction((signal: AbortSignal) => perform(signal, async signer => {
-    if (walletIssue || !status?.landlord || !holding?.consent || blocker(status, holding))
+    if (walletIssue || !status?.landlord || !holding?.consent || collectionBlocker(status, holding))
       throw new Error("Refresh and review your current pledge before resetting its protected balance.");
     const preview = { baseline: status.landlord.baseline, balance: status.dividendBalance,
       consentEpoch: holding.consent.epoch };
@@ -199,7 +205,7 @@ function Connected({ inst, owner, expectedOwner, canSign }: { inst: Instance; ow
       loadDelegationStatus(client.rpc, inst, owner), loadHolding(client.rpc, inst, owner),
     ]);
     if (signal.aborted) throw new Error("Request cancelled.");
-    const why = blocker(freshStatus, freshHolding);
+    const why = collectionBlocker(freshStatus, freshHolding);
     if (why) throw new Error(why);
     return baselineResetInstructions(inst, signer, freshStatus, freshHolding, preview);
   }));
@@ -283,7 +289,7 @@ function Connected({ inst, owner, expectedOwner, canSign }: { inst: Instance; ow
 
       <HeldCollections holding={holding} error={holdingError} busy={busy || !canSign} onRetry={refresh} onReclaim={r => takeBack.dispatch(r)} />
 
-      {isIn && status?.landlord?.reserved[0] === 0 && status.dividendBalance < status.landlord.baseline && !reason && !walletIssue && (
+      {isIn && status?.landlord?.reserved[0] === 0 && status.dividendBalance < status.landlord.baseline && !collectionBlocker(status, holding) && !walletIssue && (
         <BaselineReset key={`${status.landlord.baseline}:${status.dividendBalance}:${holding?.consent?.epoch}`}
           baseline={status.landlord.baseline} balance={status.dividendBalance} busy={busy} canSign={canSign}
           onReset={() => resetBaseline.dispatch()} />
@@ -451,12 +457,12 @@ export function DelegatePanel() {
   return <ConfiguredDelegatePanel inst={inst} />;
 }
 
-/** The enrollment switch affects joining only; configured recovery stays usable. */
+/** The enrollment switch affects joining only; existing pledge management stays usable. */
 export function ConfiguredDelegatePanel({ inst }: { inst: Instance }) {
   return (
     <div className="row-body">
       <WalletReadyGate client={client} fallback={<p className="muted">Looking for wallets…</p>}>
-        {!DELEGATION_OPEN && <p className="muted small">New pledges and re-enrollment are closed. Existing holders can still stop collection, revoke approval and reclaim pending contributions.</p>}
+        {!DELEGATION_OPEN && <p className="muted small">New pledges and re-enrollment are closed. Existing holders can still stop collection, revoke approval and reclaim pending contributions. Eligible active pledges can also reset their protected balance.</p>}
         <Chooser inst={inst} />
       </WalletReadyGate>
     </div>
