@@ -1,6 +1,6 @@
-# Refundable collection worker (draft)
+# Refundable collection worker
 
-The worker and wallet client target the merged endowment PR #5, including the corrections from [PR #6](https://github.com/The-Endowment/endowment/pull/6). The source tree deliberately leaves `HOLD_COLLECTION_RELEASED = false`; `--submit` is refused by the CLI. Placeholder flagship configuration is also refused. This is not a live deployment.
+The worker and wallet client target the reviewed Config v4 contract, including the prelaunch safeguards in endowment PR #8. This branch stages `HOLD_COLLECTION_RELEASED = true` for the [capped founder test](funded-founder-test.md), which remains blocked pending the approval and partial-refund procedure. Do not merge or deploy this release candidate before those checks pass. The flag permits explicitly requested CLI submission and updates keeper release status; it does not start a service or open public enrollment. Placeholder flagship configuration is still refused. This is not a live deployment.
 
 ## Review map
 
