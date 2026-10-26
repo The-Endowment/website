@@ -1,6 +1,6 @@
 # Collection pilot and incident runbook
 
-This branch stages `HOLD_COLLECTION_RELEASED = true` for the [capped founder test](funded-founder-test.md). That plan has unresolved blockers: do not merge or deploy this release candidate until its readiness checks pass. The flag removes the worker CLI's source hold and updates the keeper's release-status fields; it does not deploy, start services, add `--submit`, or open public enrollment. Submission still needs matching deployed v4 program/ABI and the correct role key. The program's immutable public-launch flag must be set on chain before `--mode=public` will submit.
+This branch stages `HOLD_COLLECTION_RELEASED = true` for the [founder test with software limits](funded-founder-test.md). Both operators must review the change and agree the test before deployment or submission. The flag removes the worker CLI's source hold and updates the keeper's release-status fields; it does not deploy, start services, add `--submit`, or open public enrollment. Submission still needs matching deployed v4 program/ABI and the correct role key. The program's immutable public-launch flag must be set on chain before `--mode=public` will submit.
 
 ## Service setup
 
