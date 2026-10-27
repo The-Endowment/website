@@ -16,17 +16,16 @@ import { assertCollectionAllowed, collectionStopped, includesOwner, launchContro
 import { assertHeartbeatMode, completedHealthyPass, PassHealth, saveHealth } from "../lib/holding/operations-health.ts";
 import { deliverAlert } from "../lib/holding/operations-alerts.ts";
 import { deliverHeartbeat } from "../lib/operations-heartbeat.ts";
+import { pilotLimit, workerArgs } from "../lib/holding/pilot.ts";
 
-const selectedRole = process.argv.find((a) => a.startsWith("--role="))?.split("=")[1];
-const heartbeatEndpoint = selectedRole === "collector"
+let selectedRole = process.argv.find((a) => a.startsWith("--role="))?.split("=")[1];
+const heartbeatEndpoint = () => selectedRole === "collector"
   ? process.env.HOLD_COLLECTOR_HEARTBEAT_URL : process.env.HOLD_REVIEWER_HEARTBEAT_URL;
 
 async function main() {
-  const role = selectedRole;
-  const mode = process.argv.find((a) => a.startsWith("--mode="))?.split("=")[1];
-  const submit = process.argv.includes("--submit");
-  if (role !== "collector" && role !== "reviewer") throw new Error("Use --role=collector or --role=reviewer");
-  assertHeartbeatMode({ endpoint: heartbeatEndpoint, expectedMode: process.env.HOLD_HEARTBEAT_MODE, submit });
+  const { role, mode, submit, pilot: request } = workerArgs(process.argv.slice(2));
+  selectedRole = role;
+  assertHeartbeatMode({ endpoint: heartbeatEndpoint(), expectedMode: process.env.HOLD_HEARTBEAT_MODE, submit });
   if (submit && !HOLD_COLLECTION_RELEASED) throw new Error("Draft release hold: submission requires a reviewed rollout");
   const rpcUrl = process.env.SOLANA_RPC_URL, data = process.env.HOLD_DATA_DIR, config = await flagshipConfig();
   if (!rpcUrl || !data || !PROGRAM_ID || !config)
@@ -42,6 +41,8 @@ async function main() {
     const rpc = jsonRpc(rpcUrl);
     const inst: Instance = { program: PROGRAM_ID, config, coinMint: PENIS_MINT, dividendMint: PUMP_MINT,
       coinTokenProgram: TOKEN_2022_PROGRAM_ADDRESS, dividendTokenProgram: TOKEN_2022_PROGRAM_ADDRESS };
+    const pilot = await pilotLimit({ directory, role, inst, request, submit, controls });
+    if (pilot) console.log(JSON.stringify({ pilot, submission: submit }));
     const requireFreshFeed = () => assertFeedFresh(directory).catch(async () => {
       health.feedAvailable = false;
       health.issues.add("feed_unavailable");
@@ -81,7 +82,7 @@ async function main() {
     health.ownersDiscovered = owners.size; health.ownersSelected = selected.length;
     for (const owner of selected) {
       try {
-        const result = await walletTick({ rpc, rpcUrl, inst, directory, submit, role, feed, loadFeed,
+        const result = await walletTick({ rpc, rpcUrl, inst, directory, submit, role, feed, loadFeed, pilot,
           keyFile: process.env.HOLD_KEYPAIR_FILE,
           beforeRelease: requireFreshFeed,
           beforeCollect: async (snapshot) => {
@@ -97,7 +98,8 @@ async function main() {
         }, address(owner), receipts.filter((r) => r.receipt.owner === owner));
         health.outcome(result);
         if (role === "collector" && health.historyStop()) await quarantine(stopFile, "history_evidence_gap");
-        console.log(JSON.stringify({ role, owner, status: result.status }));
+        console.log(JSON.stringify({ role, owner, status: result.status,
+          ...("outcomes" in result ? { settlements: result.outcomes } : {}) }));
       } catch {
         health.failure(); process.exitCode = 1;
         if (role === "collector") await quarantine(stopFile, "wallet_failure");
@@ -131,7 +133,7 @@ async function run() {
   // failures must not leave a successful heartbeat behind. A killed/hung worker
   // cannot send either ping; its independent check must alert on a missed deadline.
   if (selectedRole === "collector" || selectedRole === "reviewer") {
-    const heartbeat = await deliverHeartbeat({ endpoint: heartbeatEndpoint, role: selectedRole,
+    const heartbeat = await deliverHeartbeat({ endpoint: heartbeatEndpoint(), role: selectedRole,
       success: !process.exitCode });
     if (heartbeat === "failed") {
       console.error("Heartbeat delivery failed; the completed pass was not repeated. Check the independent monitor.");

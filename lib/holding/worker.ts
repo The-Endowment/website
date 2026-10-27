@@ -19,6 +19,7 @@ import {
 import { keySigner, prepare } from "./sign.ts";
 import { publish, settleOutbox, signatureStatus } from "./outbox.ts";
 import type { Receipt } from "./types.ts";
+import { assertPilotIdentity, cappedCollection, cappedSettlement, type PilotLimit } from "./pilot.ts";
 
 export type WorkerOptions = {
   rpc: RpcCall;
@@ -31,6 +32,7 @@ export type WorkerOptions = {
   loadFeed?: () => Promise<WalletPayoutFeed>;
   source: SourcePolicy;
   role: "collector" | "reviewer";
+  pilot?: PilotLimit;
   beforeCollect?: (snapshot: HoldSnapshot) => Promise<void>;
   beforeRelease?: () => Promise<void>;
   observe?: (event:
@@ -44,6 +46,7 @@ export async function walletTick(
   owner: Address,
   receipts: { address: Address; receipt: Receipt }[],
 ) {
+  if (o.pilot) assertPilotIdentity(o.pilot, o.role, o.inst);
   const source = await ata(
     owner,
     o.inst.dividendMint,
@@ -54,7 +57,8 @@ export async function walletTick(
     source,
     async (journal) => {
       const snapshot = async (min: number) => {
-        const value = await holdSnapshot(o.rpc, o.inst, owner, min, o.role);
+        const current = await holdSnapshot(o.rpc, o.inst, owner, min, o.role);
+        const value = o.role === "collector" ? cappedCollection(o.pilot, owner, current) : current;
         o.observe?.({ kind: "snapshot", snapshot: value });
         return value;
       };
@@ -210,7 +214,10 @@ export async function walletTick(
           }
         }
       }
-      const outcomes = [];
+      const outcomes: {
+        receipt: Address; action: "wait" | "refund" | "clear";
+        plannedApprovalRaw?: string; plannedRefundRaw?: string; result?: string;
+      }[] = [];
       for (const entry of receipts) {
         const decision = (journal.state as ReviewedLedger)?.reviews?.[
           entry.address
@@ -221,12 +228,18 @@ export async function walletTick(
           kind: "review", receipt: entry.address,
           collected: entry.receipt.amount.toString(), eligible: decision.amount,
         });
-        const planned = settlementPlan(entry.receipt, s, decision);
+        const planned = cappedSettlement(o.pilot, entry.address, entry.receipt,
+          settlementPlan(entry.receipt, s, decision), decision?.amount);
         // Missing attribution never permits new clearance, but chain-driven
         // refunds and reconciliation of already signed settlements must continue.
-        const action = evidenceRetry && planned === "clear" ? "wait" : planned;
+        const action = evidenceRetry && planned.action === "clear" ? "wait" : planned.action;
+        const approved = action === "clear"
+          ? (entry.receipt.reviewed ? entry.receipt.approved_amount : BigInt(planned.approvedAmount!)) : 0n;
+        const outcome = { receipt: entry.address, action, ...(action === "wait" ? {} : {
+          plannedApprovalRaw: approved.toString(), plannedRefundRaw: (entry.receipt.amount - approved).toString(),
+        }) };
         if ((action === "wait" && !evidenceRetry) || !o.submit) {
-          outcomes.push({ receipt: entry.address, action });
+          outcomes.push(outcome);
           continue;
         }
         let releaseBlocked = false;
@@ -255,7 +268,7 @@ export async function walletTick(
                     o.inst,
                     entry.receipt,
                     signer,
-                    BigInt(decision!.amount),
+                    BigInt(planned.approvedAmount!),
                     Uint8Array.from(Buffer.from(decision!.evidenceHash, "hex")),
                   ),
                 );
@@ -281,7 +294,7 @@ export async function walletTick(
           // remain durable if the feed failed just before broadcast.
           return "blocked";
         });
-        outcomes.push({ receipt: entry.address, action, result });
+        outcomes.push({ ...outcome, result });
       }
       return evidenceRetry
         ? { status: "awaiting_payout", reason: evidenceRetry.message, retryUntil: evidenceRetry.retryUntil, waitStartedAt, waitSeconds, outcomes }

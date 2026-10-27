@@ -1,6 +1,6 @@
-# Refundable collection worker (draft)
+# Refundable collection worker
 
-The worker and wallet client target the merged endowment PR #5, including the corrections from [PR #6](https://github.com/The-Endowment/endowment/pull/6). The source tree deliberately leaves `HOLD_COLLECTION_RELEASED = false`; `--submit` is refused by the CLI. Placeholder flagship configuration is also refused. This is not a live deployment.
+The worker and wallet client target the reviewed Config v4 contract, including the prelaunch safeguards in endowment PR #8. This branch stages `HOLD_COLLECTION_RELEASED = true` for the [founder test with software limits](funded-founder-test.md), subject to both operators' review and agreement before deployment or submission. The flag permits explicitly requested CLI submission and updates keeper release status; it does not start a service or open public enrollment. Placeholder flagship configuration is still refused. This is not a live deployment.
 
 ## Review map
 
@@ -59,6 +59,8 @@ npm run holding:once -- --role=reviewer
 ```
 
 Submission additionally requires an explicit collector `--mode=founders` with `HOLD_FOUNDERS_FILE`, or `--mode=public` with locked on-chain production thresholds. Reviewer recovery is never founders-filtered. `HOLD_STOP_FILE` is a persistent operator-cleared collector quarantine; `HOLD_ALERT_WEBHOOK` optionally delivers redacted operational alerts. See the [pilot runbook](launch-pilot-runbook.md) for exact behavior and remaining infrastructure.
+
+For the single-wallet funded test, `--collection-cap-raw` must be supplied with `--pilot-owner`, `--pilot-consent-epoch` and `--pilot-nonce`, in founders mode with exactly that owner allowlisted. `--approval-cap-raw` must be supplied with `--pilot-receipt` on the reviewer. See the [exact commands and restart behavior](funded-founder-test.md). These are **software-only limits**, persisted separately in each role's `founder-test.json` on the first submitting pass; omitting flags on restart does not remove them. A reviewer pilot blocks other positive releases, but never filters their refunds. Neither option changes independent payout decisions or token approval.
 
 Environment: `SOLANA_RPC_URL`, `HOLD_DATA_DIR` (different persistent directory per role), and the reviewed `NEXT_PUBLIC_ENDOWMENT_PROGRAM_ID` / `NEXT_PUBLIC_ENDOWMENT_CREATOR`. `HOLD_KEYPAIR_FILE` is needed only for submission and must match that role's on-chain address. Do not put keys, journals or provider credentials in git. No secrets are needed for tests. The wallet CLI only reads its role's archive; it does not fetch the public feed. Capture owns a separate `feed.lock`, so sequential wallet processing under `worker.lock` cannot delay it. Each wallet reloads archived evidence after fetching its history; collection rechecks archive health before signing and broadcast. Both services need durable storage, not a stateless web invocation.
 
