@@ -1,0 +1,73 @@
+{
+  "testedAt": "2026-10-30T03:42:19.232387+00:00",
+  "installedCommit": "281c69e29d6765e043cc916588b087c353b8be08",
+  "scope": "Roy cloud host only; existing Healthchecks checks and email integration",
+  "outages": [
+    {
+      "role": "reviewer",
+      "lastCompletedAt": "2026-10-30T03:01:01.856Z",
+      "stoppedAt": "2026-10-30T03:04:50.540931+00:00",
+      "expectedMissingPassSeconds": 600,
+      "externalMonitorObservedDown": true,
+      "providerReportedEmailDelivered": true,
+      "restoredAt": "2026-10-30T03:14:04.386922+00:00"
+    },
+    {
+      "role": "refresher",
+      "lastCompletedAt": "2026-10-30T03:03:54.781Z",
+      "stoppedAt": "2026-10-30T03:14:04.386922+00:00",
+      "expectedMissingPassSeconds": 1500,
+      "externalMonitorObservedDown": true,
+      "providerReportedEmailDelivered": true,
+      "restoredAt": "2026-10-30T03:31:07.821017+00:00"
+    },
+    {
+      "role": "reviewer-feed",
+      "lastCompletedAt": "2026-10-30T03:30:19.000Z",
+      "stoppedAt": "2026-10-30T03:31:07.821017+00:00",
+      "expectedMissingPassSeconds": 120,
+      "externalMonitorObservedDown": true,
+      "providerReportedEmailDelivered": true,
+      "restoredAt": "2026-10-30T03:35:43.641557+00:00"
+    }
+  ],
+  "feedFailureHealth": {
+    "checkedAt": "2026-10-30T03:35:37.005430+00:00",
+    "exitCode": 1,
+    "finishedAt": "2026-10-30T03:35:38.865Z",
+    "issues": [
+      "feed_unavailable"
+    ],
+    "submit": false,
+    "chain": {
+      "slot": 463135416,
+      "countBps": 1043,
+      "pending": "0",
+      "released": "0",
+      "refunded": "0",
+      "grossCollected": "0"
+    }
+  },
+  "finalHealth": {
+    "reviewerIssues": [],
+    "refresherOk": true,
+    "stopFilePresent": false,
+    "pilotControlPresent": false,
+    "sweepEnabled": false,
+    "settlementEnabled": false,
+    "allTimersActive": true,
+    "journalHashChainsVerified": true,
+    "feedGap": null,
+    "pending": "0",
+    "released": "0",
+    "refunded": "0",
+    "grossCollected": "0"
+  },
+  "acceptanceStillOpen": {
+    "recipientsConfigured": "Existing owner email only",
+    "recipientInboxReceiptConfirmed": false,
+    "bothFounderDeliveryVerified": false,
+    "brettCollectorAndFeedOutageTested": false
+  },
+  "credentialsOrHeartbeatURLsPublished": false
+}

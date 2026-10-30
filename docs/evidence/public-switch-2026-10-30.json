@@ -1,0 +1,184 @@
+{
+  "rehearsedAt": "2026-10-30T03:44:58.818Z",
+  "sourceSlot": 463133499,
+  "sourceCapturedAt": "2026-10-30T03:28:45.082Z",
+  "environment": "Offline LiteSVM account-state fork of finalized mainnet data",
+  "scope": {
+    "mainnetProgramELF": true,
+    "mainnetSquadsELF": true,
+    "mainnetAccountSnapshot": true,
+    "productionKeysRead": false,
+    "networkWrites": false,
+    "signatureVerificationDisabledOnlyInLocalVM": true,
+    "nativeFeatureSet": "LiteSVM 0.10.0 defaults; not a complete validator feature-set clone",
+    "localExtraFixtures": "Three synthetic accounts for a below-minimum registration check"
+  },
+  "programs": [
+    {
+      "address": "HhJJRPcwABobT6jCEusieGuZxv6XvSKKvU32XyXASVF6",
+      "programData": "9pYiQtLxYLpertqpcb1VhMbqvq5v6qLERFECMonhRzkR",
+      "programDataSha256": "d7685feaad0cfdf001ed8345b5f6c337db1cc5cf71bee9d72dd0d6af7606605c",
+      "elfSha256": "1fb52049f70cf6fa95970ce21389a4defe38c3acb80a6c6ab98f58d3b14a210e",
+      "deployedAtSlot": "456669160",
+      "elfFile": "endowment-mainnet.so"
+    },
+    {
+      "address": "SQDS4ep65T869zMMBKyuUq6aD6EgTu8psMjkvj52pCf",
+      "programData": "Fy3YMJCvwbAXUgUM5b91ucUVA3jYzwWLHL3MwBqKsh8n",
+      "programDataSha256": "e1c596fdcf397686dfa67cc568c8c2e4696a1ef6949de4c2d251527913af7f1e",
+      "elfSha256": "dec8d3e0fae58c7c8f2416e5f67c25e673f047afd6dd2bba4a47e0b29a01d34c",
+      "deployedAtSlot": "302582236",
+      "elfFile": "squads-mainnet.so"
+    }
+  ],
+  "pendingEffectiveAt": 1793462181,
+  "runtimeChecks": [
+    {
+      "check": "Admin apply one second before 72 hours is rejected",
+      "passed": true,
+      "error": "InstructionError(0, Custom(6024))",
+      "clockUnix": 1793462180
+    },
+    {
+      "check": "Ordinary caller cannot apply during admin-only window",
+      "passed": true,
+      "error": "InstructionError(0, Custom(6042))",
+      "clockUnix": 1793462181
+    },
+    {
+      "check": "Create public apply transaction and proposal on the fork",
+      "passed": true,
+      "error": null,
+      "clockUnix": 1793330924
+    },
+    {
+      "check": "First admin approves the fork apply proposal",
+      "passed": true,
+      "error": null,
+      "clockUnix": 1793330924
+    },
+    {
+      "check": "One approval cannot execute the 2-of-2 apply proposal",
+      "passed": true,
+      "error": "InstructionError(0, Custom(6008))",
+      "clockUnix": 1793462181
+    },
+    {
+      "check": "Second admin approves the fork apply proposal",
+      "passed": true,
+      "error": null,
+      "clockUnix": 1793462181
+    },
+    {
+      "check": "Two approvals execute apply through the actual Squads vault",
+      "passed": true,
+      "error": null,
+      "clockUnix": 1793462181
+    },
+    {
+      "check": "An executed Squads apply transaction cannot be replayed",
+      "passed": true,
+      "error": "InstructionError(0, Custom(6008))",
+      "clockUnix": 1793462181
+    },
+    {
+      "check": "Backstop cannot undo an already applied public transition",
+      "passed": true,
+      "error": "InstructionError(0, Custom(6023))",
+      "clockUnix": 1793462181
+    },
+    {
+      "check": "Public lock rejects a proposal to restore founder thresholds",
+      "passed": true,
+      "error": "InstructionError(0, Custom(6064))",
+      "clockUnix": 1793462181
+    },
+    {
+      "check": "Fresh refresher attestation under public rules",
+      "passed": true,
+      "error": null,
+      "clockUnix": 1793462181
+    },
+    {
+      "check": "Fresh refresher attestation under public rules",
+      "passed": true,
+      "error": null,
+      "clockUnix": 1793463981
+    },
+    {
+      "check": "Fresh refresher attestation under public rules",
+      "passed": true,
+      "error": null,
+      "clockUnix": 1793465781
+    },
+    {
+      "check": "Recount the two existing founders under public rules",
+      "passed": true,
+      "error": null,
+      "clockUnix": 1793465781
+    },
+    {
+      "check": "A new holder below the 10 bps minimum cannot register",
+      "passed": true,
+      "error": "InstructionError(0, Custom(6032))",
+      "clockUnix": 1793465781
+    },
+    {
+      "check": "cancelRoy independently executes the approved cancellation backstop",
+      "passed": true,
+      "error": null,
+      "clockUnix": 1793462121
+    },
+    {
+      "check": "Cancelled parameters cannot subsequently be applied",
+      "passed": true,
+      "error": "InstructionError(0, Custom(6023))",
+      "clockUnix": 1793462181
+    },
+    {
+      "check": "cancelBrett independently executes the approved cancellation backstop",
+      "passed": true,
+      "error": null,
+      "clockUnix": 1793462121
+    },
+    {
+      "check": "Cancelled parameters cannot subsequently be applied",
+      "passed": true,
+      "error": "InstructionError(0, Custom(6023))",
+      "clockUnix": 1793462181
+    },
+    {
+      "check": "Ordinary caller remains blocked one second before 96 hours",
+      "passed": true,
+      "error": "InstructionError(0, Custom(6042))",
+      "clockUnix": 1793548580
+    },
+    {
+      "check": "Ordinary caller may apply exactly at 96 hours",
+      "passed": true,
+      "error": null,
+      "clockUnix": 1793548581
+    },
+    {
+      "check": "Expired pending parameters cannot be applied",
+      "passed": true,
+      "error": "InstructionError(0, Custom(6041))",
+      "clockUnix": 1794066982
+    }
+  ],
+  "stateChecks": {
+    "runtimeChecks": 22,
+    "publicThresholdsExact": true,
+    "minimumHoldingEnforced": true,
+    "publicLockIrreversible": true,
+    "publicCollectionInactiveBelow30Percent": true,
+    "freshFounderCountRequired": true,
+    "pendingParamsCleared": true,
+    "oldRewardCreditDiscarded": true,
+    "refresherEpochAdvanced": true,
+    "cancelLeavesLiveParamsUnchanged": true,
+    "pumpTokenAccountsUnchanged": true,
+    "adminAndOrdinaryApplyHaveIdenticalResult": true,
+    "expectedErrorCodesChecked": true
+  }
+}
