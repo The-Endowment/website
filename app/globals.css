@@ -256,6 +256,16 @@ button.button-primary { background: var(--bone); }
 .wallet-address-input[aria-invalid="true"] { border-color: var(--accent); }
 .manual-wallets { border-top: 1px solid var(--rule); padding-top: 22px; font-size: 15px; }
 .pledge-review .consent { max-width: none; }
+.reset-review { border-color: var(--accent); }
+.reset-eyebrow { margin: 0 0 8px; color: var(--accent); font-size: 13px; }
+.reset-balances .fact { grid-template-columns: minmax(0, 1fr) auto; gap: 12px; }
+.reset-balances dd { font-variant-numeric: tabular-nums; text-align: right; }
+.reset-effects { margin: 0; padding-left: 20px; display: grid; gap: 10px; }
+.reset-confirmation { display: grid; gap: 12px; }
+.reset-confirmation .button { width: 100%; min-height: 48px; white-space: normal; }
+.pledge-result { padding: 20px; border: 1px solid var(--accent); border-radius: 10px; }
+.pledge-result h4 { margin: 0 0 10px; font-size: 18px; font-weight: 500; }
+.pledge-result p { margin-bottom: 12px; }
 @media (max-width: 700px) {
   .wallet-choices { grid-template-columns: 1fr; }
   .wallet-choice { min-height: 90px; }

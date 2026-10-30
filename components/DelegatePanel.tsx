@@ -91,7 +91,7 @@ function Connected({ inst, owner, expectedOwner, canSign }: { inst: Instance; ow
   const [holdingError, setHoldingError] = useState<string | null>(null);
   const [agreed, setAgreed] = useState(false);
   const [reload, setReload] = useState(0);
-  const [lastSignature, setLastSignature] = useState<string | null>(null);
+  const [lastTransaction, setLastTransaction] = useState<{ signature: string; action: "reset" | "update" } | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
   const walletIssue = enrollmentWalletIssue(owner, expectedOwner);
   const refresh = () => {
@@ -115,8 +115,8 @@ function Connected({ inst, owner, expectedOwner, canSign }: { inst: Instance; ow
     return () => { current = false; };
   }, [inst, owner, reload]);
 
-  const perform = async (signal: AbortSignal, build: (signer: TransactionSigner) => Promise<Instruction[]>) => {
-    setActionError(null); setLastSignature(null);
+  const perform = async (signal: AbortSignal, build: (signer: TransactionSigner) => Promise<Instruction[]>, action: "reset" | "update" = "update") => {
+    setActionError(null); setLastTransaction(null);
     let walletFlowStarted = false;
     try {
       if (!canSign) throw new Error("This wallet connection cannot sign the required transaction. Connect a wallet with signing enabled.");
@@ -126,7 +126,7 @@ function Connected({ inst, owner, expectedOwner, canSign }: { inst: Instance; ow
       if (client.identity.address !== owner) throw new Error("Your connected wallet changed. Reconnect and try again.");
       walletFlowStarted = true;
       const result = await client.sendTransaction(instructions, { abortSignal: signal });
-      setLastSignature(result.context.signature);
+      setLastTransaction({ signature: result.context.signature, action });
       setAgreed(false);
       refresh();
       return result.context.signature;
@@ -205,10 +205,11 @@ function Connected({ inst, owner, expectedOwner, canSign }: { inst: Instance; ow
       loadDelegationStatus(client.rpc, inst, owner), loadHolding(client.rpc, inst, owner),
     ]);
     if (signal.aborted) throw new Error("Request cancelled.");
+    setStatus(freshStatus); setHolding(freshHolding);
     const why = collectionBlocker(freshStatus, freshHolding);
     if (why) throw new Error(why);
     return baselineResetInstructions(inst, signer, freshStatus, freshHolding, preview);
-  }));
+  }, "reset"));
 
   const leave = useAction((signal: AbortSignal) => perform(signal, async signer => {
     if (!status) throw new Error("Use the independent recovery controls below while the dashboard is unavailable.");
@@ -233,6 +234,8 @@ function Connected({ inst, owner, expectedOwner, canSign }: { inst: Instance; ow
   const delegated = Boolean(status?.landlord && status.delegatedToEndowment);
   const isIn = delegated && Boolean(holding?.consent?.enabled);
   const reason = status ? blocker(status, holding) : null;
+  const needsReset = isIn && status?.landlord?.reserved[0] === 0 && status.dividendBalance < status.landlord.baseline
+    && !collectionBlocker(status, holding) && !walletIssue;
 
   let delegation = "Not delegated";
   if (status?.delegatedToEndowment) delegation = "Delegated to the endowment";
@@ -241,12 +244,26 @@ function Connected({ inst, owner, expectedOwner, canSign }: { inst: Instance; ow
 
   return (
     <div className="row-body">
-      <PledgeSteps step={isIn ? 4 : optIn.isRunning ? 3 : 2} />
+      {!isIn && <PledgeSteps step={optIn.isRunning ? 3 : 2} />}
       <div className="onboarding-heading" aria-live="polite">
-        <h3 className="onboarding-title">{isIn ? "Your pledge is registered." : optIn.isRunning ? "Review the request in your wallet." : "Review your pledge."}</h3>
-        <p className="muted small">{isIn ? "Collection permission is enabled. Collections still depend on eligibility, current checks and running services."
+        <h3 className="onboarding-title">{isIn ? "Manage your pledge" : optIn.isRunning ? "Review the request in your wallet." : "Review your pledge."}</h3>
+        <p className="muted small">{needsReset ? "Your pledge is registered. Review the balance reset below to restart future reward collection."
+          : isIn ? "Your pledge is registered and collection permission is enabled. Collections still depend on eligibility, current checks and running services."
           : "We prepare the approval and enrollment together. You review and confirm one transaction in your wallet."}</p>
       </div>
+      {lastTransaction && (
+        <div className="pledge-result" role="status">
+          <h4>{lastTransaction.action === "reset" ? "Balance reset confirmed" : "Transaction confirmed"}</h4>
+          {lastTransaction.action === "reset" && <p className="small">Your PUMP stayed in your wallet. Collection waits for fresh eligibility checks and new rewards; your $PENIS counts again when a new count round includes your wallet.</p>}
+          <a className="small" href={`https://solscan.io/tx/${lastTransaction.signature}`}>View the transaction</a>
+        </div>
+      )}
+      {actionError && <p role="alert" className="note">{actionError}</p>}
+      {needsReset && status?.landlord && (
+        <BaselineReset key={`${status.landlord.baseline}:${status.dividendBalance}:${holding?.consent?.epoch}`}
+          baseline={status.landlord.baseline} balance={status.dividendBalance} busy={busy} resetting={resetBaseline.isRunning} canSign={canSign}
+          onReset={() => resetBaseline.dispatch()} />
+      )}
       {walletIssue && <p role="alert" className="note">{walletIssue}</p>}
       {!canSign && <p role="alert" className="note">This connection can view your wallet but cannot sign the required transaction. Reconnect using a wallet with signing enabled.</p>}
       {expectedOwner && !walletIssue && <p className="small">Connected address matches your Fomo wallet.</p>}
@@ -288,12 +305,6 @@ function Connected({ inst, owner, expectedOwner, canSign }: { inst: Instance; ow
       </dl>
 
       <HeldCollections holding={holding} error={holdingError} busy={busy || !canSign} onRetry={refresh} onReclaim={r => takeBack.dispatch(r)} />
-
-      {isIn && status?.landlord?.reserved[0] === 0 && status.dividendBalance < status.landlord.baseline && !collectionBlocker(status, holding) && !walletIssue && (
-        <BaselineReset key={`${status.landlord.baseline}:${status.dividendBalance}:${holding?.consent?.epoch}`}
-          baseline={status.landlord.baseline} balance={status.dividendBalance} busy={busy} canSign={canSign}
-          onReset={() => resetBaseline.dispatch()} />
-      )}
 
       {status && !isIn && (
         <p className="muted small">
@@ -349,8 +360,7 @@ function Connected({ inst, owner, expectedOwner, canSign }: { inst: Instance; ow
         </div>
       )}
 
-      <div className="actions">
-        {!isIn && (
+      {!isIn && <div className="actions">
           <button
             type="button"
             className="button button-primary"
@@ -365,18 +375,7 @@ function Connected({ inst, owner, expectedOwner, canSign }: { inst: Instance; ow
                   ? "Rejoin"
                   : "Review in wallet"}
           </button>
-        )}
-        {isIn && (
-          <button type="button" className="button button-primary" disabled>
-            You&rsquo;re a landlord
-          </button>
-        )}
-        {status && (status.delegatedToEndowment || status.delegationTooSmall || status.landlord) && (
-          <button type="button" className="button" disabled={busy || !canSign} onClick={() => leave.dispatch()}>
-            {leave.isRunning ? "Confirm in your wallet…" : "Leave"}
-          </button>
-        )}
-      </div>
+      </div>}
 
       <details open={Boolean(loadError) || !DELEGATION_OPEN}>
         <summary>Independent recovery controls</summary>
@@ -388,18 +387,18 @@ function Connected({ inst, owner, expectedOwner, canSign }: { inst: Instance; ow
         <div className="actions">
           <button type="button" className="button" disabled={busy || !canSign} onClick={() => stop.dispatch()}>Stop collection</button>
           <button type="button" className="button" disabled={busy || !canSign} onClick={() => revoke.dispatch()}>Revoke PUMP approval</button>
+          {status && (status.delegatedToEndowment || status.delegationTooSmall || status.landlord) && (
+            <button type="button" className="button" disabled={busy || !canSign} onClick={() => leave.dispatch()}>
+              {leave.isRunning ? "Confirm in your wallet…" : "Leave the pledge"}
+            </button>
+          )}
         </div>
+        <p className="muted small">Leaving removes your pledge registration and PUMP approval. Pending contributions must be reclaimed separately.</p>
         <p className="muted small">You can also revoke this approval in your wallet&rsquo;s token approval settings.</p>
       </details>
       <button type="button" className="link-button" disabled={busy} onClick={refresh}>Refresh wallet</button>
       {loadError && <p role="alert" className="muted small">{loadError}</p>}
-      {actionError && <p role="alert" className="muted small">{actionError}</p>}
       {optIn.isError && <details><summary>Error details</summary><p className="muted small">Enrollment diagnostic: {actionDiagnostic(optIn.error)}</p></details>}
-      {lastSignature && (
-        <p className="muted small">
-          Done. <a href={`https://solscan.io/tx/${lastSignature}`}>View the transaction</a>
-        </p>
-      )}
     </div>
   );
 }

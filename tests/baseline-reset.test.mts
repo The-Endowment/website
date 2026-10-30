@@ -81,7 +81,7 @@ test("reset never re-enables stopped, revoked, foreign, closed or paused enrollm
   }
 });
 
-type ResetProps = { baseline: bigint; balance: bigint; busy: boolean; canSign: boolean; onReset: () => void };
+type ResetProps = { baseline: bigint; balance: bigint; busy: boolean; resetting?: boolean; canSign: boolean; onReset: () => void };
 const { BaselineReset } = loadTsxModule<{ BaselineReset: ComponentType<ResetProps> }>("components/BaselineReset.tsx", {
   "@/lib/solana": { formatTokens: (value: bigint) => value.toString() },
 });
@@ -94,14 +94,17 @@ test("reset explains cleared eligibility and refund-only receipts and requires u
   assert.match(html, /uncollected eligibility is cleared/);
   assert.match(html, /pending contributions become refund-only/);
   assert.match(html, /when the transaction executes/);
+  assert.match(html, /temporarily stops counting/);
+  assert.match(html, /SOL network fee/);
   assert.doesNotMatch(html, /checked=""/);
   assert.match(html, /<button[^>]*disabled=""[^>]*>Review balance reset in wallet/);
 });
 
-function closedPanel(initial: ReturnType<typeof state>, fresh = initial, canSign = true) {
+function closedPanel(initial: ReturnType<typeof state>, fresh = initial, canSign = true,
+  options: { lastTransaction?: { signature: string; action: "reset" | "update" }; resetRunning?: boolean } = {}) {
   // Seed the loaded dashboard, keeping real React rendering and the real action
   // callbacks. Only wallet transport and RPC reads are replaced; nothing signs.
-  const loaded: unknown[] = [null, null, initial.status, initial.holding, null, null, false, 0, null, null];
+  const loaded: unknown[] = [null, null, initial.status, initial.holding, null, null, false, 0, options.lastTransaction ?? null, null];
   const actions: ((signal: AbortSignal) => Promise<unknown>)[] = [];
   const requests: unknown[] = [];
   const { ConfiguredDelegatePanel } = loadTsxModule<{ ConfiguredDelegatePanel: ComponentType<{ inst: Instance }> }>(
@@ -115,7 +118,7 @@ function closedPanel(initial: ReturnType<typeof state>, fresh = initial, canSign
         WalletReadyGate: ({ children }: { children: ReactNode }) => createElement(React.Fragment, null, children),
       },
       "@solana/react": { useAction: (action: (signal: AbortSignal) => Promise<unknown>) => {
-        actions.push(action); return { isRunning: false, dispatch: action };
+        actions.push(action); return { isRunning: actions.length === 2 && Boolean(options.resetRunning), dispatch: action };
       } },
       "@/components/WalletClient": { client: { identity: owner, rpc: {}, sendTransaction: async (ixs: unknown) => {
         requests.push(ixs); return { context: { signature: "test-only-no-broadcast" } };
@@ -135,9 +138,12 @@ function closedPanel(initial: ReturnType<typeof state>, fresh = initial, canSign
 test("closed public enrollment still exposes an existing holder's reset and prepares only the reviewed instructions", async () => {
   const value = state();
   const panel = closedPanel(value);
-  assert.match(panel.html, /Restart rewards after spending PUMP/);
+  assert.match(panel.html, /Reset your protected PUMP balance/);
   assert.match(panel.html, /<button[^>]*disabled=""[^>]*>Review balance reset in wallet/);
   assert.doesNotMatch(panel.html, /checked=""/);
+  assert.doesNotMatch(panel.html, /You(?:’|&rsquo;|&#x27;)re a landlord/);
+  assert.doesNotMatch(panel.html, /aria-label="Pledge setup"/);
+  assert.ok(panel.html.indexOf("Reset your protected PUMP balance") < panel.html.indexOf("<dt>Wallet</dt>"), "Reset is the primary task before the balance dashboard");
   await panel.reset();
   assert.deepEqual(panel.requests, [await baselineResetInstructions(inst, owner, value.status, value.holding, preview)]);
   await assert.rejects(panel.enroll(), /Joining is unavailable/);
@@ -159,7 +165,7 @@ test("closed enrollment resets cannot enroll, re-enable stopped consent, bypass 
   for (const change of invalid) {
     const value = state(); change(value);
     const panel = closedPanel(value);
-    assert.doesNotMatch(panel.html, /Restart rewards after spending PUMP/);
+    assert.doesNotMatch(panel.html, /Reset your protected PUMP balance/);
     await assert.rejects(panel.reset());
     await assert.rejects(panel.enroll());
     assert.equal(panel.requests.length, 0);
@@ -174,4 +180,25 @@ test("closed enrollment resets cannot enroll, re-enable stopped consent, bypass 
   const readOnly = closedPanel(state(), undefined, false);
   await assert.rejects(readOnly.reset(), /cannot sign/);
   assert.equal(readOnly.requests.length, 0);
+});
+
+test("reset progress prevents duplicate clicks and explains that the page will refresh after confirmation", () => {
+  const value = state();
+  const panel = closedPanel(value, value, true, { resetRunning: true });
+  assert.match(panel.html, /aria-busy="true"/);
+  assert.match(panel.html, /<button[^>]*disabled=""[^>]*>Confirming balance reset/);
+  assert.match(panel.html, /refresh your pledge when the transaction confirms/);
+  assert.equal(panel.requests.length, 0);
+});
+
+test("confirmed reset shows its own result without asking the holder to reset again or complete setup", () => {
+  const value = state(); value.status.landlord!.baseline = value.status.dividendBalance;
+  const panel = closedPanel(value, value, true, { lastTransaction: { signature: "reset-result", action: "reset" } });
+  assert.match(panel.html, /role="status"><h4>Balance reset confirmed/);
+  assert.match(panel.html, /Collection waits for fresh eligibility checks and new rewards/);
+  assert.match(panel.html, /https:\/\/solscan.io\/tx\/reset-result/);
+  assert.doesNotMatch(panel.html, /Review balance reset in wallet/);
+  assert.doesNotMatch(panel.html, /aria-label="Pledge setup"/);
+  assert.match(panel.html, />Stop collection<|>Revoke PUMP approval</);
+  assert.equal(panel.requests.length, 0);
 });
