@@ -1,0 +1,7 @@
+{
+  "name": "endowment-public-mode-rehearsal",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "dependencies": { "@sqds/multisig": "2.1.4" }
+}
