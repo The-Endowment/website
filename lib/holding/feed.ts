@@ -100,6 +100,20 @@ async function responseBody(response: Response): Promise<unknown> {
   return JSON.parse(Buffer.concat(chunks).toString("utf8"));
 }
 
+/** The provider now canonicalizes www to its apex host. Keep the archive's
+ * source identity, path, cursor and query unchanged; no other redirect is
+ * trusted, and the canonical request cannot follow a second redirect. */
+async function requestPage(request: typeof fetch, url: URL, signal: AbortSignal): Promise<Response> {
+  const response = await request(url.toString(), { redirect: "manual", cache: "no-store", signal });
+  if (response.status !== 301 && response.status !== 308) return response;
+  const location = response.headers.get("location");
+  await response.body?.cancel();
+  const canonical = new URL(url);
+  canonical.hostname = "stonkfun.xyz";
+  if (!location || new URL(location, url).href !== canonical.href) throw new Error("Unexpected payout redirect");
+  return request(canonical.toString(), { redirect: "error", cache: "no-store", signal });
+}
+
 /** v2 gives holder rows and opaque cursors. Fetch from the newest page until
  * all prior head rows have been re-observed (or the end on the first scan).
  * Partial scans persist separately, never becoming signing evidence. */
@@ -168,7 +182,7 @@ export async function archiveFeed(directory: string, { request = fetch, now = Da
       const url = new URL(PAYOUT_URL);
       url.searchParams.set("limit", "100"); url.searchParams.set("order", "desc");
       if (pending.cursor !== null) url.searchParams.set("cursor", pending.cursor);
-      const response = await request(url.toString(), { redirect: "error", cache: "no-store", signal });
+      const response = await requestPage(request, url, signal);
       if (!response.ok) {
         await response.body?.cancel();
         throw new Error(`Payout feed HTTP ${response.status}`);
