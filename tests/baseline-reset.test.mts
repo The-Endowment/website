@@ -101,7 +101,7 @@ test("reset explains cleared eligibility and refund-only receipts and requires u
 });
 
 function closedPanel(initial: ReturnType<typeof state>, fresh = initial, canSign = true,
-  options: { lastTransaction?: { signature: string; action: "reset" | "update" }; resetRunning?: boolean } = {}) {
+  options: { lastTransaction?: { signature: string; action: "reset" | "update" }; resetRunning?: boolean; enrollmentOpen?: boolean } = {}) {
   // Seed the loaded dashboard, keeping real React rendering and the real action
   // callbacks. Only wallet transport and RPC reads are replaced; nothing signs.
   const loaded: unknown[] = [null, null, initial.status, initial.holding, null, null, false, 0, options.lastTransaction ?? null, null];
@@ -127,7 +127,7 @@ function closedPanel(initial: ReturnType<typeof state>, fresh = initial, canSign
       "@/lib/holding/delegation": { loadDelegationStatus: async () => fresh.status },
       "@/lib/holding/wallet": { loadHolding: async () => fresh.holding },
       "@/lib/solana": { formatTokens: (value: bigint) => value.toString() },
-      "@/lib/site": { DELEGATION_OPEN: false, links: {} },
+      "@/lib/site": { DELEGATION_OPEN: Boolean(options.enrollmentOpen), links: {} },
     },
   );
   const html = renderToStaticMarkup(createElement(ConfiguredDelegatePanel, { inst }));
@@ -201,4 +201,32 @@ test("confirmed reset shows its own result without asking the holder to reset ag
   assert.doesNotMatch(panel.html, /aria-label="Pledge setup"/);
   assert.match(panel.html, />Stop collection<|>Revoke PUMP approval</);
   assert.equal(panel.requests.length, 0);
+});
+
+test("existing holders can find Leave without expanding recovery when public enrollment opens", () => {
+  for (const change of [
+    () => {},
+    (value: ReturnType<typeof state>) => { value.holding.consent!.enabled = false; },
+    (value: ReturnType<typeof state>) => { value.status.landlord = null; },
+  ]) {
+    const value = state(); change(value);
+    const panel = closedPanel(value, value, true, { enrollmentOpen: true });
+    assert.match(panel.html, /<details open=""><summary>Independent recovery controls<\/summary>/);
+    assert.match(panel.html, />Leave the pledge<\/button>/);
+    assert.match(panel.html, /Leaving removes your pledge registration and PUMP approval/);
+    assert.equal(panel.requests.length, 0);
+  }
+});
+
+test("a wallet without an endowment pledge or approval sees neither Leave nor its explanation", () => {
+  const value = state();
+  value.status.landlord = null;
+  value.status.delegate = null;
+  value.status.delegatedToEndowment = false;
+  value.holding.consent = null;
+  for (const enrollmentOpen of [false, true]) {
+    const panel = closedPanel(value, value, true, { enrollmentOpen });
+    assert.doesNotMatch(panel.html, /Leave the pledge|Leaving removes/);
+    assert.equal(panel.requests.length, 0);
+  }
 });
