@@ -1,0 +1,28 @@
+{
+  "checkedAt": "2026-10-31T09:50:10.034115+00:00",
+  "incident": {
+    "lastCompletedCapture": "2026-10-31T02:42:26.000Z",
+    "originalHost": "www.stonkfun.xyz",
+    "observedStatus": 301,
+    "canonicalHost": "stonkfun.xyz",
+    "canonicalStatus": 200,
+    "canonicalResponse": "Valid v2 payout JSON with fresh HTTP Date and Age 0",
+    "reviewerIssue": "feed_unavailable"
+  },
+  "rehearsal": {
+    "scope": "Candidate archiver ran against an isolated copy of the production archive. Production services, journals and archive were unchanged. No signing keys or blockchain submissions were used.",
+    "completed": true,
+    "sourceIdentityPreserved": true,
+    "baselinePreserved": true,
+    "historyFloorPreserved": true,
+    "allPriorRowsPreserved": true,
+    "priorRows": 1887,
+    "resultRows": 1887,
+    "priorFetchedAt": "2026-10-31T02:42:26.000Z",
+    "fetchedAt": "2026-10-31T09:50:05.000Z",
+    "gap": null,
+    "newestPayoutAt": "2026-10-27T19:55:15.206Z",
+    "productionArchiveSha256Before": "2c79585de6fdb4e46033aa0c266b485b029ae48cdb79df47f0af76ec4a6d1074",
+    "productionArchiveSha256After": "2c79585de6fdb4e46033aa0c266b485b029ae48cdb79df47f0af76ec4a6d1074"
+  }
+}
