@@ -233,6 +233,7 @@ function Connected({ inst, owner, expectedOwner, canSign }: { inst: Instance; ow
   const busy = optIn.isRunning || resetBaseline.isRunning || leave.isRunning || takeBack.isRunning || stop.isRunning || revoke.isRunning;
   const delegated = Boolean(status?.landlord && status.delegatedToEndowment);
   const isIn = delegated && Boolean(holding?.consent?.enabled);
+  const canLeave = Boolean(status && (status.delegatedToEndowment || status.delegationTooSmall || status.landlord));
   const reason = status ? blocker(status, holding) : null;
   const needsReset = isIn && status?.landlord?.reserved[0] === 0 && status.dividendBalance < status.landlord.baseline
     && !collectionBlocker(status, holding) && !walletIssue;
@@ -377,7 +378,7 @@ function Connected({ inst, owner, expectedOwner, canSign }: { inst: Instance; ow
           </button>
       </div>}
 
-      <details open={Boolean(loadError) || !DELEGATION_OPEN}>
+      <details open={canLeave || Boolean(loadError) || !DELEGATION_OPEN}>
         <summary>Independent recovery controls</summary>
         <p className="muted small">
           Stop collection switches your pledge off, and anything being held can then be returned to you. Revoke
@@ -387,13 +388,13 @@ function Connected({ inst, owner, expectedOwner, canSign }: { inst: Instance; ow
         <div className="actions">
           <button type="button" className="button" disabled={busy || !canSign} onClick={() => stop.dispatch()}>Stop collection</button>
           <button type="button" className="button" disabled={busy || !canSign} onClick={() => revoke.dispatch()}>Revoke PUMP approval</button>
-          {status && (status.delegatedToEndowment || status.delegationTooSmall || status.landlord) && (
+          {canLeave && (
             <button type="button" className="button" disabled={busy || !canSign} onClick={() => leave.dispatch()}>
               {leave.isRunning ? "Confirm in your wallet…" : "Leave the pledge"}
             </button>
           )}
         </div>
-        <p className="muted small">Leaving removes your pledge registration and PUMP approval. Pending contributions must be reclaimed separately.</p>
+        {canLeave && <p className="muted small">Leaving removes your pledge registration and PUMP approval. Pending contributions must be reclaimed separately.</p>}
         <p className="muted small">You can also revoke this approval in your wallet&rsquo;s token approval settings.</p>
       </details>
       <button type="button" className="link-button" disabled={busy} onClick={refresh}>Refresh wallet</button>
