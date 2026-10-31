@@ -24,7 +24,7 @@ function responses(bodies: unknown[], time = start): typeof fetch {
   let i = 0;
   return (async (url: string | URL | Request, options?: RequestInit) => {
     assert.ok(String(url).startsWith(PAYOUT_URL + "?limit=100&order=desc"));
-    assert.equal(options?.redirect, "error"); assert.equal(options?.cache, "no-store");
+    assert.equal(options?.redirect, "manual"); assert.equal(options?.cache, "no-store");
     assert.ok(options?.signal instanceof AbortSignal);
     assert.ok(i < bodies.length, "unexpected extra request");
     return reply(bodies[i++], time);
@@ -38,6 +38,78 @@ async function saved(dir: string): Promise<HistoryArchive> {
   return JSON.parse(await readFile(join(dir, "payout-feed.json"), "utf8"));
 }
 const capture = (dir: string, rows: unknown[], now = start) => archiveFeed(dir, { request: responses([page(rows)], now), now: () => now });
+
+test("the exact www-to-apex redirect catches up without changing archive identity, history or wallet files", async t => {
+  const dir = await directory(t), floor = new Date(start - 60000).toISOString();
+  await archiveFeed(dir, { request: responses([page([row("A")])]), now: () => start, historyFloor: floor });
+  const before = await saved(dir);
+  await writeFile(join(dir, "collection.stop"), "keep stopped");
+  await writeFile(join(dir, "wallet-journal.test"), "unchanged journal bytes");
+  let calls = 0, signal: AbortSignal | null | undefined;
+  const request = (async (input: string | URL | Request, options?: RequestInit) => {
+    const url = new URL(String(input)); calls++;
+    assert.equal(options?.cache, "no-store"); assert.ok(options?.signal instanceof AbortSignal);
+    signal ??= options.signal; assert.equal(options.signal, signal, "All pages and redirects share one network budget");
+    const cursor = url.searchParams.get("cursor");
+    if (url.hostname === "www.stonkfun.xyz") {
+      assert.equal(options.redirect, "manual");
+      url.hostname = "stonkfun.xyz";
+      return new Response(null, { status: cursor ? 308 : 301, headers: { location: url.toString() } });
+    }
+    assert.equal(url.hostname, "stonkfun.xyz"); assert.equal(options.redirect, "error");
+    assert.equal(url.pathname, new URL(PAYOUT_URL).pathname);
+    assert.equal(url.searchParams.get("limit"), "100"); assert.equal(url.searchParams.get("order"), "desc");
+    if (cursor === null) return reply(page([row("B")], "opaque+cursor/=1"), start + 180000);
+    assert.equal(cursor, "opaque+cursor/=1"); return reply(page([row("A")]), start + 180000);
+  }) as typeof fetch;
+  const result = await archiveFeed(dir, { request, now: () => start + 180000, historyFloor: floor });
+  const after = await saved(dir);
+  assert.equal(calls, 4); assert.equal(result.records.size, 2);
+  assert.equal(after.source, before.source); assert.equal(after.baselineAt, before.baselineAt);
+  assert.equal(after.historyFloor, floor); assert.equal(after.coverage.gap, null);
+  assert.ok(after.rows.some(r => JSON.stringify(r) === JSON.stringify(before.rows[0])));
+  assert.equal(after.fetchedAt, new Date(start + 180000).toISOString());
+  assert.equal(await readFile(join(dir, "collection.stop"), "utf8"), "keep stopped");
+  assert.equal(await readFile(join(dir, "wallet-journal.test"), "utf8"), "unchanged journal bytes");
+});
+
+test("redirects cannot change host, protocol, credentials, path, query or fragment", async t => {
+  const canonical = PAYOUT_URL.replace("https://www.", "https://") + "?limit=100&order=desc";
+  for (const location of [
+    "https://example.com/", canonical.replace("https:", "http:"), canonical.replace("https://", "https://user:pass@"),
+    canonical.replace("/rewards/", "/other/"), canonical.replace("limit=100", "limit=1"),
+    canonical + "#extra", undefined,
+  ]) {
+    const dir = await directory(t); await capture(dir, [row("A")]);
+    const before = await readFile(join(dir, "payout-feed.json"), "utf8"); let calls = 0;
+    await assert.rejects(archiveFeed(dir, { now: () => start + 180000, request: (async () => {
+      calls++; return new Response(null, { status: 301, headers: location ? { location } : {} });
+    }) as typeof fetch }), /Unexpected payout redirect/);
+    assert.equal(calls, 1); assert.equal(await readFile(join(dir, "payout-feed.json"), "utf8"), before);
+    await assert.rejects(assertFeedFresh(dir, { now: () => start + 180000 }), /stale/);
+    await assert.rejects(stat(join(dir, "payout-history-pending.json")), { code: "ENOENT" });
+  }
+});
+
+test("a canonical response cannot chain redirects or renew freshness with stale or non-JSON data", async t => {
+  for (const second of [
+    () => new Response(null, { status: 301, headers: { location: "https://example.com/" } }),
+    () => reply(page([row("A")]), start),
+    () => new Response("not JSON", { status: 200, headers: { "content-type": "text/html" } }),
+  ]) {
+    const dir = await directory(t); await capture(dir, [row("A")]);
+    const before = await readFile(join(dir, "payout-feed.json"), "utf8"); let calls = 0;
+    const request = (async (input: string | URL | Request, options?: RequestInit) => {
+      calls++;
+      if (calls === 1) return new Response(null, { status: 301,
+        headers: { location: String(input).replace("https://www.", "https://") } });
+      assert.equal(calls, 2); assert.equal(options?.redirect, "error"); return second();
+    }) as typeof fetch;
+    await assert.rejects(archiveFeed(dir, { request, now: () => start + 180000 }));
+    assert.equal(calls, 2); assert.equal(await readFile(join(dir, "payout-feed.json"), "utf8"), before);
+    await assert.rejects(assertFeedFresh(dir, { now: () => start + 180000 }), /stale/);
+  }
+});
 
 // v1 migration fixtures deliberately use the deployed archive layout.
 function legacy(gap: unknown = null) {
